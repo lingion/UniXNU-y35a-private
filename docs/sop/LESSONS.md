@@ -111,3 +111,13 @@
 - 证据：run `45870056186` failed in `Prepare exact native inputs` at `libcc_kext` compile with `fatal error: 'Availability.h' file not found`.
 - 自动化入口：`scripts/ci/prepare_native_inputs.py`。
 - 下一次触发：任何 compiler-rt/libcc_kext preparation。
+
+## L-2026-11-26-11 SDK cdefs include closure
+
+- 现象：`Availability.h` 已纳入 fakeroot，但 compiler-rt 的 `Libc/include/stdio.h` 仍在 `__cold` 处解析失败。
+- 根因：Libc public headers 还依赖选定 iPhoneOS SDK 的 `sys/cdefs.h`，compiler-rt 编译命令没有把 SDK `usr/include` 放入 include 搜索路径。
+- 影响：native inputs 尚未生成，native build 未执行。
+- 正确做法：将选定 SDK `usr/include` 作为显式 compiler-rt include 输入，并在实际 argv/provenance 中保留该路径。
+- 证据：run `45871371371` failed at `Prepare exact native inputs`; log reports `stdio.h:200:28: error: expected function body after function declarator` at `__cold`.
+- 自动化入口：`scripts/ci/prepare_native_inputs.py`。
+- 下一次触发：任何 Libc/compiler-rt archive preparation。

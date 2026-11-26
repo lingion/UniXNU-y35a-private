@@ -86,7 +86,8 @@ def preprocess_dispatch_headers(libdispatch: Path, fakeroot: Path, clang: str) -
     return commands
 
 
-def build_cc_kext(xnu: Path, llvm: Path, libc: Path, fakeroot: Path, clang: str) -> list[str]:
+def build_cc_kext(xnu: Path, llvm: Path, libc: Path, fakeroot: Path,
+                  iphoneos_sdk: Path, clang: str) -> list[str]:
     output = fakeroot / "usr/local/lib/kernel/libcc_kext.a"
     objects_root = fakeroot / ".ci-cc-kext-objects"
     objects_root.mkdir(parents=True, exist_ok=True)
@@ -98,6 +99,7 @@ def build_cc_kext(xnu: Path, llvm: Path, libc: Path, fakeroot: Path, clang: str)
         command = [clang, "-target", "arm64-apple-ios17.0", "-arch", "arm64",
                    "-isysroot", str(fakeroot), "-mkernel", "-DKERNEL_USE", "-O3", "-fPIC", "-w",
                    "-I", str(runtime / "include"),
+                   "-I", str(iphoneos_sdk / "usr/include"),
                    "-I", str(fakeroot / "System/Library/Frameworks/Kernel.framework/Headers"),
                    "-idirafter", str(libc / "include"), "-idirafter", str(xnu / "libsyscall/wrappers"),
                    "-c", str(runtime / f"lib/profile/{name}.c"), "-o", str(obj)]
@@ -245,7 +247,8 @@ def main() -> int:
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(target_conditions, target)
         copied_headers = copy_sdk_public_headers(args.iphoneos_sdk, fakeroot)
-        build_cc_kext(header_source, args.llvm_source, args.libc_source, fakeroot, clang)
+        build_cc_kext(header_source, args.llvm_source, args.libc_source, fakeroot,
+                      args.iphoneos_sdk, clang)
         build_firehose(header_source, args.libdispatch_source, fakeroot, clang)
         make_overlay(args.iphoneos_sdk, fakeroot, overlay)
     finally:
