@@ -49,7 +49,7 @@ def main() -> int:
     args.output.parent.mkdir(parents=True, exist_ok=True)
     command = [
         clang, "-target", "arm64-apple-ios12.4", "-isysroot", sdk,
-        "-std=gnu++17", "-fapple-kext", "-mkernel", "-nostdinc", "-nostdinc++",
+        "-std=gnu++17", "-fapple-kext", "-mkernel",
         "-fno-builtin", "-fno-common", "-fno-exceptions", "-fno-rtti",
         "-fno-strict-aliasing", "-mgeneral-regs-only", "-O2", "-Wall", "-Wextra",
         "-Werror", "-Wno-unused-parameter", "-ferror-limit=0",
