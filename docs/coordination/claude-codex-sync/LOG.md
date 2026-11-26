@@ -2875,3 +2875,11 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 
 事实: PID 90604 has been alive about 3 hours 28 minutes with no provenance or kernel artifact. Two read-only `lsof` snapshots 30 seconds apart show FD 3 moving from `sdk-overlay/usr/include/rpc/rpc_msg.h` to `sdk-overlay/usr/include/sys/_types/_timeval64.h`; CPU time moved only from 0:18.66 to 0:18.81. This is slow per-file SDK hashing, not evidence of a deadlock.
 裁决: keep the existing R207 process; do not terminate or restart it and do not start a second local builder. R208 CI offline validation is already complete, but it does not replace the pending NativeSdcard compile/link/package work.
+
+
+## 2026-11-26T12:00:00Z — R208 当前目标切换
+
+类型: DECISION / STATE
+事实: 主线当前目标切换到 R208 TF/SD 启动链和 GitHub Actions native-build。R207 v2 PID 90604 只等待终态，不再启动第二个本地 builder。R208 已通过 SD host suite、sdhc2 ADT contract、lk2nd SD_BOOT apply-check，私有仓库 manifest `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` 绑定 exact XNU ref 和六个 arm-driver patch；macOS plan-only run `45812745086` 成功。
+限制: NativeSdcard object compile、XNU link、package/probe、TF GPT/APFS、root mount、eMMC fallback 和设备证据仍未完成。
+裁决: `device_run_allowed=false`。下一步只走 GitHub Actions object compile/static gates 和离线 TF layout，不写 TF、不操作设备。

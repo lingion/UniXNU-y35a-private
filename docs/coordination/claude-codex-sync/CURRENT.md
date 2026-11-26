@@ -1331,3 +1331,8 @@ R206 build and linked guard correction passed. Kernel `9c558a26adb924ec2174ab9d4
 R206 ran once after live G0 and failed after candidate boot before candidate readback. Preclear/baseline were fresh zero controls; candidate/final raw are absent; device returned to verified unlocked fastboot; `persistent_writes=false`; do not repeat R206.
 
 Offline comparison found R204b final fresh `PEBARGRT`, proving the external carrier write/read path. R206 slot `0x52` has no duplicate writer and linked guard order is correct. The candidate disconnect is therefore not localized to the marker transport. Report `R206-vs-R204b-early-audit.json` SHA `fa32f532a75705121962280cf057c81054a4f674bd068f0076015a53ada76a1c`. Current next step is offline package/entry/early-kernel comparison; `device_run_allowed=false`.
+
+
+## 2026-11-26 R208 current target supersedes R207 queue
+
+The active target is now the R208 TF/SD offline path with GitHub Actions native-build as the compilation route. R207 v2 PID 90604 remains a background process waiting for terminal provenance and must not be restarted or duplicated. R208 has passed the SD protocol host suite, sdhc2 ADT contract and lk2nd SD_BOOT patch apply-check. Private manifest commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds the exact XNU ref and six arm-driver patches. macOS plan-only run `45812745086` passed. NativeSdcard object compilation, XNU link, package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain pending. Keep `device_run_allowed=false`.

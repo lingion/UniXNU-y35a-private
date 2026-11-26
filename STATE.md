@@ -1,6 +1,6 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-26T11:49:28Z
+Updated: 2026-11-26T12:00:00Z
 Milestone: R208 TF/SD offline CI gate passed; R207 v2 builder is still slowly scanning external SDK inputs.
 Authority: /Volumes/Mobile/unixnu-research/UniXNU-y35a; historical /Volumes/UniXNU-Workspace is stale.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
@@ -14,7 +14,7 @@ Current gates:
 - R207 v1 was rejected before make due to corrupt patch hunk. R207 v2 patch SHA `05e9822905d6187a22009d957ffa350354ff11f53bd31b846b754b41f8f88f84` passes apply-check against R206 staged source.
 - R207 v2 builder PID 90604 remains live in external preparation; two read-only lsof snapshots show FD 3 advancing through different SDK header files while CPU time barely changes. No provenance/kernel artifact yet; do not restart it.
 - R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, read-only NativeSdcard source, and lk2nd SD_BOOT patch gates are in progress; no kernel/package/device evidence yet.
-- R208 CI plan commit `9a9e3b01b5e0e2c114596e935856da806a0d7036` passed offline manifest, SD host suite, and ADT contract workflow run `45812019700`; driver compile and root mount remain pending.
+- R208 CI plan commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds exact XNU ref and six arm-driver patches; macOS plan-only run `45812745086` passed. NativeSdcard compile, kernel link, package/probe, TF image and root mount remain pending.
 
 Next:
 1. Let PID 90604 reach a terminal result; do not start another builder.

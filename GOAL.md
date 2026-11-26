@@ -52,6 +52,8 @@ Phase A 只追求 D1 和 D2。允许的 stub、绕过和硬编码必须登记为
 
 能在 GitHub Actions 上重现的 lint、contract gate、单元测试、静态分析、文档检查和主机编译必须通过 CI 运行。只有真机 USB、设备锁、私有本地输入或 CI 无法提供的工具链才留在本机。CI workflow 失败时先修 CI 或记录明确阻塞原因，不能默默退回本机编译。
 
+当前平台路线优先级：GitHub Actions native build、host test、static gate、package/probe plan 和 artifact hash closure 优先于本地外置盘编译。TF/SD 启动路线优先于继续重复已失败的 RAM-only boot-args 候选。TF 路线必须同时保留 eMMC 回退，完成 sdhc2 协议、card-detect、GPT/APFS、root selection、回退路径和完整 artifact 闭包后才允许设备写卡或启动。
+
 源码、构建输入、临时目录、日志和产物全部留在外置卷。参考仓库只读。主线只针对 Y35A，不能把其他设备或模拟器结果写成 Y35A 结论。
 
 ## 设备授权和恢复边界
