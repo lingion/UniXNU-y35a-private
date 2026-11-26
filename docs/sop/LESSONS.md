@@ -100,3 +100,14 @@
 - 证据：run `45869025831` failed at `Prepare exact native inputs`; log shows `PermissionError` for `scripts/ci/patch_xnu_host_tools.py`.
 - 自动化入口：`scripts/ci/prepare_native_inputs.py`。
 - 下一次触发：任何 CI Python helper 调用。
+
+## L-2026-11-26-10 SDK public headers missing from fakeroot
+
+- 现象：XNU installhdrs passed, but `libcc_kext` preparation failed because `Libc/include/inttypes.h` could not find `Availability.h`.
+- 根因：native fakeroot contained generated XNU headers but not the public `Availability*.h` headers from the selected iPhoneOS SDK.
+- 影响：native inputs and kernel link did not start.
+- 错误做法：把 generated XNU headers 当作完整 SDK header closure。
+- 正确做法：copy the selected iPhoneOS SDK `usr/include/Availability*.h` and `TargetConditionals.h` into fakeroot, record the copied names and tree hash.
+- 证据：run `45870056186` failed in `Prepare exact native inputs` at `libcc_kext` compile with `fatal error: 'Availability.h' file not found`.
+- 自动化入口：`scripts/ci/prepare_native_inputs.py`。
+- 下一次触发：任何 compiler-rt/libcc_kext preparation。

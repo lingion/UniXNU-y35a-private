@@ -162,6 +162,24 @@ def make_overlay(iphoneos_sdk: Path, fakeroot: Path, overlay: Path) -> None:
     copy_dir_contents(fakeroot / "usr/local", usr / "local")
 
 
+def copy_sdk_public_headers(iphoneos_sdk: Path, fakeroot: Path) -> list[str]:
+    source = iphoneos_sdk / "usr/include"
+    destination = fakeroot / "usr/include"
+    destination.mkdir(parents=True, exist_ok=True)
+    copied = []
+    for header in sorted(source.glob("Availability*.h")):
+        target = destination / header.name
+        shutil.copy2(header, target)
+        copied.append(header.name)
+    target_conditions = source / "TargetConditionals.h"
+    if target_conditions.is_file():
+        shutil.copy2(target_conditions, destination / target_conditions.name)
+        copied.append(target_conditions.name)
+    if "Availability.h" not in copied:
+        raise SystemExit(f"iPhoneOS SDK has no Availability.h: {source}")
+    return copied
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--xnu-source", type=Path, required=True)
@@ -226,6 +244,7 @@ def main() -> int:
         target = fakeroot / "usr/include/TargetConditionals.h"
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(target_conditions, target)
+        copied_headers = copy_sdk_public_headers(args.iphoneos_sdk, fakeroot)
         build_cc_kext(header_source, args.llvm_source, args.libc_source, fakeroot, clang)
         build_firehose(header_source, args.libdispatch_source, fakeroot, clang)
         make_overlay(args.iphoneos_sdk, fakeroot, overlay)
@@ -252,6 +271,7 @@ def main() -> int:
         "paths": {"fakeroot": str(fakeroot), "sdk_overlay": str(overlay), "xcrun_wrapper": str(wrapper)},
         "trees": {"fakeroot_sha256": sha256(fakeroot), "sdk_overlay_sha256": sha256(overlay),
                   "xcrun_wrapper_sha256": sha256(wrapper)},
+        "sdk_public_headers": copied_headers,
         "local_build_allowed": False,
     }
     (root / "native-inputs-manifest.json").write_text(json.dumps(manifest, indent=2, sort_keys=True) + "\n")
