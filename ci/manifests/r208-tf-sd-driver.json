@@ -47,7 +47,7 @@
     }
   },
   "expected": {
-    "driver_archive_sha256": null,
+    "driver_archive_sha256": "f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73",
     "kernel_sha256": null,
     "package_sha256": null,
     "probe_sha256": null
@@ -59,14 +59,15 @@
     }
   ],
   "latest_ci": {
-    "archive_sha256": "d29ce062965b0fdc2d6b1e72df6fd2046a076c053a8b42894c197905354bac18",
+    "archive_sha256": "f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73",
     "archive_size": 286912,
     "combined_object_sha256": "0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd",
     "combined_object_size": 250040,
-    "commit": "a4eb164947229ca53a33754f1f75325be864400f",
+    "commit": "3538cccc70e4b3490f7b65e9042713e6266b8c4e",
+    "driver_manifest_sha256": "56f12c2c1989976df237e53166a1f86faad50205926d30a043ee611a11d9aaf9",
     "native_sdcard_object_sha256": "47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e",
     "native_sdcard_object_size": 36288,
-    "run_id": 45845189179,
+    "run_id": 45852497429,
     "status": "success"
   },
   "lk2nd_patch": {
@@ -75,7 +76,7 @@
     "sha256": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc"
   },
   "manifest_revision": "deterministic-ar-archive",
-  "next_stage": "XNU kernel link against archive; package/probe and TF GPT/APFS remain pending",
+  "next_stage": "CI-only XNU kernel link; exact native fakeroot/SDK overlay/source provenance closure required; package/probe/TF GPT/APFS/root/fallback remain pending",
   "patches": [
     {
       "order": 0,

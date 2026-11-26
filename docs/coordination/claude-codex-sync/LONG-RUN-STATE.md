@@ -1099,3 +1099,7 @@ The active target is the R208 TF/SD offline path with GitHub Actions as the only
 ## 2026-11-26 机械盘本地编译已关闭
 
 用户要求取消所有本机磁盘上的 UniXNU 编译。R207 v2 builder PID 90604 已终止，未生成 provenance 或 kernel artifact。后续编译、NativeSdcard object、XNU link、package/probe 和静态门禁全部走 GitHub Actions；机械盘只保存缓存、run roots、CI 下载产物、备份和 raw。`device_run_allowed=false`。
+
+
+## 2026-11-26 R208 latest CI closure
+R208 latest CI run `45852497429` on commit `3538cccc70e4b3490f7b65e9042713e6266b8c4e` is green through root-selection contracts, NativeSdcard object compile, IOStorageFamily-191 combine and deterministic archive. Object `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`; combined `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`; archive `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`. Kernel link, package/probe, TF GPT/APFS/root/fallback and device evidence remain pending.

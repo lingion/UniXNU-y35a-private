@@ -1,7 +1,7 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-26T14:32:39Z
-Milestone: R208 TF/SD offline gates passed; NativeSdcard object compilation remains unverified because the latest CI run failed during XNU header generation. All local UniXNU compilation is disabled on every disk.
+Updated: 2026-11-26T15:52:00Z
+Milestone: R208 TF/SD host, root-selection, NativeSdcard object and IOStorageFamily archive gates passed in CI; kernel link and TF root path remain pending. All local UniXNU compilation is disabled on every disk.
 Authority: /Volumes/Mobile/unixnu-research/UniXNU-y35a; historical /Volumes/UniXNU-Workspace is stale.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
 Workspace: /Volumes/Mobile/unixnu-research stores source caches, run roots, CI artifacts, backups and raw only; no local UniXNU compilation, linking or large builds. External Git metadata restored, core.filemode=false, and fsck passed.
@@ -14,7 +14,7 @@ Current gates:
 - R207 v1 was rejected before make due to corrupt patch hunk. R207 v2 patch SHA `05e9822905d6187a22009d957ffa350354ff11f53bd31b846b754b41f8f88f84` passes apply-check against R206 staged source.
 - R207 v2 external builder PID 90604 was terminated per user instruction. It produced no provenance or kernel artifact. Do not restart it or run any local UniXNU build on any disk.
 - R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, NativeSdcard scaffold, and lk2nd SD_BOOT patch gates passed their recorded offline checks. The final NativeSdcard CI compile result and bound artifact are not yet confirmed; no verified kernel/package/device evidence is recorded.
-- R208 CI plan commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds exact XNU ref and six arm-driver patches; macOS plan-only run `45812745086` passed. NativeSdcard object and IOStorageFamily closure now pass CI run 45845189179; kernel link, package/probe, TF image and root mount remain pending.
+- R208 CI plan commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds exact XNU ref and six arm-driver patches; macOS plan-only run `45812745086` passed. NativeSdcard object and IOStorageFamily closure pass CI run 45852497429; object SHA 47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e; combined SHA 0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd; deterministic archive SHA f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73. Kernel link, package/probe, TF image and root mount remain pending.
 - Native runs `45838744656` and `45838740886` on commit `4c817f03fbd5a0611fadfd2675381c32ae995363` both passed `Generate exact XNU headers` but failed at `Compile NativeSdcard object`. This does not establish a NativeSdcard source compile result or verified object artifact.
 
 Next:

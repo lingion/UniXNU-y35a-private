@@ -2930,3 +2930,10 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 
 事实: GitHub Actions run `45845189179` on commit `a4eb164947229ca53a33754f1f75325be864400f` passed exact XNU headers, exact IOStorageFamily-191 checkout, NativeSdcard object compile and IOStorageFamily base-object combine/archive. NativeSdcard object SHA `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`, size 36,288; combined relocatable object SHA `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`, size 250,040; archive SHA `d29ce062965b0fdc2d6b1e72df6fd2046a076c053a8b42894c197905354bac18`, size 286,912. Exact XNU commit `494ffe1c29d37ca720c37328feb83069c9641b67`; IOStorageFamily commit `c95d31401f0ff950a883727f5e47d313685fde33`.
 裁决: R208 source/host/storage object closure is green. Kernel link, linked gate, package/probe, TF GPT/APFS image, root selection, eMMC fallback and device evidence remain pending. `device_run_allowed=false`; no TF write or device operation occurred.
+
+
+## L-2026-11-26T15:52:00Z-codex — R208 current artifact and root contract sync
+
+事实: CI run `45852497429` on commit `3538cccc70e4b3490f7b65e9042713e6266b8c4e` passed manifest, SD host suite, ADT, root-selection negative/positive contract, exact XNU/IOStorageFamily fetch, installhdrs, NativeSdcard compile, IOStorageFamily combine and deterministic archive. NativeSdcard object SHA `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`; combined object SHA `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`; archive SHA `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`.
+事实: Earlier runs `45831371261`, `45830700561`, `45837906898`, `45838744656`, `45838740886`, and `45840325230` remain historical failures at header/object or manifest gates and are not latest.
+裁决: R208 host/source/root-selection/storage archive closure is green. XNU kernel link still lacks CI-bound native fakeroot/SDK overlay/source provenance; package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain unverified. No local build, no TF write, `device_run_allowed=false`.
