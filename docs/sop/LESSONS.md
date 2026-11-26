@@ -78,3 +78,14 @@
 - 证据：GitHub Actions run `45866748560` failed at `Download hash-bound R208 driver archive`; log reports `HTTP 403: Resource not accessible by integration`.
 - 自动化入口：native workflow permissions 和 driver artifact hash gate。
 - 下一次触发：任何跨 run 复用 GitHub Actions artifact 的 workflow。
+
+## L-2026-11-26-08 promisor checkout copy
+
+- 现象：native workflow 成功下载 driver artifact，但 `Prepare exact native inputs` 在 `git clone --shared` 复制 XNU checkout 时失败，远端 promisor 报缺 blob。
+- 根因：GitHub Actions 的 `actions/checkout` 使用 partial/promisor clone；`--shared` 复制会向原 promisor remote 请求未缓存对象。
+- 影响：native inputs 尚未生成，后续 plan/build 未执行。
+- 错误做法：把临时 checkout 当作完整本地仓库，用 `git clone --shared` 复制。
+- 正确做法：在同一 runner 临时 checkout 上短时应用兼容补丁，完成 installhdrs 后在同一过程回滚；不复制 promisor Git metadata。
+- 证据：run `45867874002` failed at `Prepare exact native inputs`; log reports `could not fetch ... from promisor remote` during `git clone --shared`.
+- 自动化入口：`scripts/ci/prepare_native_inputs.py` 的 source staging。
+- 下一次触发：任何 partial checkout 的临时源树复制。

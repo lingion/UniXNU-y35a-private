@@ -194,9 +194,7 @@ def main() -> int:
     availability_sym = root / "availability-sym"
     fakeroot.mkdir()
 
-    header_source = root / "xnu-header-source"
-    run(["git", "clone", "--shared", str(args.xnu_source), str(header_source)])
-    run(["git", "-C", str(header_source), "checkout", "--detach", "HEAD"])
+    header_source = args.xnu_source
     patch_tool = args.repo_root / "scripts/ci/patch_xnu_host_tools.py"
     run([str(patch_tool), "--xnu-source", str(header_source)])
     availability_pl = availability_dst / "usr/local/libexec/availability.pl"
