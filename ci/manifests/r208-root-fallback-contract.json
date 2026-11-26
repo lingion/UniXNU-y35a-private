@@ -25,7 +25,13 @@
   "implementation": {
     "coordinator_symbol": "native_storage_select_root",
     "status": "unverified",
-    "reason": "SD and eMMC drivers currently register independently; no linked root coordinator is present"
+    "reason": "SD and eMMC drivers currently register independently; no linked root coordinator is present",
+    "candidate_patch": {
+      "path": "patches/xnu/native-y35a-tf-emmc-root-fallback.patch",
+      "sha256": "f886e829b94999e79af06964ee274992d975382827191912d2ab8c8a8bd291eb",
+      "feature_macro": "XNU_Y35A_STORAGE_FALLBACK",
+      "fallback_boot_arg": "emmc-boot-uuid"
+    }
   },
   "device_run_allowed": false
 }

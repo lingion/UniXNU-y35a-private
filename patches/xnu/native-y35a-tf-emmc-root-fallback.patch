@@ -1,0 +1,37 @@
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -419,6 +419,7 @@
+ 	const char *        look = 0;
+ 	int                 len;
+ 	bool                debugInfoPrintedOnce = false;
++	bool                storageFallbackAttempted = false;
+ 	const char *        uuidStr = NULL;
+ 
+ 	static int          mountAttempts = 0;
+@@ -631,6 +632,26 @@
+ 				}
+ 			}
+ 		}
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++		if (!service && !storageFallbackAttempted && mediaProperty &&
++		    !strcmp(mediaProperty, "boot-uuid-media")) {
++			storageFallbackAttempted = true;
++			char emmcUUID[kMaxBootVar];
++			if (PE_parse_boot_argn("emmc-boot-uuid", emmcUUID, kMaxBootVar)) {
++				OSString *fallbackUUID = OSString::withCString(emmcUUID);
++				if (fallbackUUID) {
++					IOService::getResourceService()->removeProperty("boot-uuid");
++					IOService::publishResource("boot-uuid", fallbackUUID);
++					fallbackUUID->release();
++					OSDictionary *fallbackMatching = IOUUIDMatching();
++					if (fallbackMatching) {
++						matching->release();
++						matching = fallbackMatching;
++					}
++				}
++			}
++		}
++#endif
+ 	} while (!service);
+ 	matching->release();
+ 

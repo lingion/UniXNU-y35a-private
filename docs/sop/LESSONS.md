@@ -171,3 +171,13 @@
 - 证据：main native run `45879966044` failed at manifest creation with `IsADirectoryError` on `fakeroot`.
 - 自动化入口：`scripts/ci/prepare_native_inputs.py`。
 - 下一次触发：任何 fakeroot/SDK overlay provenance 写入。
+
+## L-2026-11-26-18 eMMC fallback coordinator boundary
+
+- 现象：TF/eMMC fallback contract can describe the desired state matrix, but `NativeSdcard` and `NativeSdcc` currently register independently and no XNU root coordinator selects the alternate UUID.
+- 根因：root selection in XNU 4903 waits on the published `boot-uuid-media` resource; TF failure does not automatically substitute an eMMC UUID.
+- 影响：fallback implementation remains unverified and cannot be treated as a boot-ready feature.
+- 正确做法：candidate XNU patch is opt-in under `XNU_Y35A_STORAGE_FALLBACK`, requires explicit `emmc-boot-uuid`, and switches only after the TF UUID wait fails; keep it outside native build/package inputs until its source/link/package gates pass.
+- 证据：XNU 4903 `IOKitBSDInit.cpp` root wait path lines 600-650 in the pinned upstream source; candidate patch `patches/xnu/native-y35a-tf-emmc-root-fallback.patch` SHA-256 `f886e829b94999e79af06964ee274992d975382827191912d2ab8c8a8bd291eb` passes `git apply --check` against that source.
+- 自动化入口：`tests/test_y35a_tf_emmc_root_fallback_patch.py` and `ci/manifests/r208-root-fallback-contract.json`。
+- 下一次触发：before adding the candidate patch to native build/package inputs, require linked XNU and package/probe evidence.
