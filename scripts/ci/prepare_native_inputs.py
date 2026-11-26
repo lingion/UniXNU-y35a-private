@@ -135,10 +135,18 @@ def build_firehose(xnu: Path, libdispatch: Path, libplatform: Path,
     lock_target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(atomic_source, atomic_target)
     shutil.copy2(lock_source, lock_target)
-    atomic_header = fakeroot / "usr/local/include/kernel/os/atomic_private.h"
-    if not atomic_header.is_file():
-        raise SystemExit(f"XNU installhdrs did not produce {atomic_header}")
-    source = libdispatch / "src/firehose/firehose_buffer.c"
+    firehose_source = libdispatch / "src/firehose/firehose_buffer.c"
+    firehose_text = firehose_source.read_text()
+    if "#include <os/atomic_private.h>" in firehose_text:
+        atomic_header = fakeroot / "usr/local/include/kernel/os/atomic_private.h"
+        if not atomic_header.is_file():
+            raise SystemExit(f"XNU installhdrs did not produce {atomic_header}")
+    elif "#include <internal/atomic.h>" in firehose_text:
+        if not (fakeroot / "usr/local/include/os/internal/atomic.h").is_file():
+            raise SystemExit("libplatform internal atomic header was not staged")
+    else:
+        raise SystemExit(f"unsupported firehose atomic include contract: {firehose_source}")
+    source = firehose_source
     obj = objects / "firehose_buffer.o"
     command = [clang, "-target", "arm64-apple-ios17.0", "-std=gnu11", "-Os", "-g",
                "-mkernel", "-nostdinc", "-Wno-packed", "-DKERNEL=1",

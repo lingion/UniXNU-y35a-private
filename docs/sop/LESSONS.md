@@ -151,3 +151,13 @@
 - 证据：run `45876628778` failed at `Prepare exact native inputs`; `firehose_buffer.c` included `os/atomic_private.h`, absent from the XNU 4903 and libdispatch 1477 trees.
 - 自动化入口：`scripts/ci/prepare_native_inputs.py` and native input manifest.
 - 下一次触发：任何 cross-generation Darwin dependency selection.
+
+## L-2026-11-26-15 same-generation firehose header branch
+
+- 现象：切换到同代 libdispatch 913/libplatform 177 后，准备脚本仍在 firehose 编译前拒绝，声称 XNU installhdrs 缺 `os/atomic_private.h`。
+- 根因：脚本的前置检查仍写死 libdispatch 1477 的 `<os/atomic_private.h>`，没有按实际 firehose source 的 `<internal/atomic.h>` include contract 分支。
+- 影响：同代 private atomic header 已 staged，但 native inputs 仍未完成。
+- 正确做法：根据 `firehose_buffer.c` 的实际 include 选择 XNU `atomic_private.h` 或 libplatform `os/internal/atomic.h`，未知 include 直接失败。
+- 证据：run `45878934377` failed before firehose compile at the hard-coded `atomic_private.h` precheck; libdispatch 913 source uses `<internal/atomic.h>`.
+- 自动化入口：`scripts/ci/prepare_native_inputs.py`。
+- 下一次触发：任何依赖版本切换后的 firehose preparation。
