@@ -3007,3 +3007,19 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 类型: CI-STATUS / STATE
 事实: main `2b45f50b143edf19c678892dab0d768a5e378f61` includes the tracked stock DTS path correction. TF validation `45887232679` passed manifest, SD host, ADT, root-selection, fallback contract, XNU headers, NativeSdcard object and artifact upload.
 裁决: stock DTS and offline fallback contracts are green. eMMC fallback implementation remains unverified; native kernel, package/probe, TF GPT/APFS/root and device evidence remain pending; `device_run_allowed=false`。
+
+
+## L-2026-11-26T20:25:00Z-codex — R208 fallback candidate and CI dispatch failures
+
+类型: CI-STATUS / SOURCE
+事实: main `43ae09a` adds `patches/xnu/native-y35a-tf-emmc-root-fallback.patch` with SHA-256 `f886e829b94999e79af06964ee274992d975382827191912d2ab8c8a8bd291eb`; local patch contract 3/3, fallback matrix 6/6, and pinned-XNU apply-check pass. The candidate is opt-in and remains outside the native manifest.
+事实: validation attempts `45889905156`, `45889905114`, and `45889905098` failed before runner allocation with zero steps; rerun attempt 2 of `45889905156` also had `runner_name=null` and zero steps. Repository Actions permissions are enabled and the prior TF run `45887232679` completed successfully.
+裁决: the fallback source candidate is statically prepared but implementation and runtime remain unverified. Empty-step runs are CI dispatch failures, not source failures. Keep `device_run_allowed=false`; no device or local build.
+
+
+## L-2026-11-26T20:29:24Z-codex — R208 native execute source-tree cleanliness blocker
+
+类型: CI-FAILURE / INPUT-PROVENANCE
+事实: native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e378f61` failed in `Run native build` before kernel compilation. `run_native_build.py` rejected `/Users/runner/work/_temp/xnu` because the staged XNU checkout was dirty after host-tool preparation; no kernel artifact was produced.
+根因候选: `scripts/ci/patch_xnu_host_tools.py` rewrote `bsd/kern/makekdebugevents.py` in the checkout used by the native runner without a verified restore in the executed path. An isolated candidate uses a temporary context and restores the original bytes before the source snapshot; it is not yet CI-validated.
+裁决: this is a CI input-preparation blocker, not a kernel, driver, package or device result. Keep `device_run_allowed=false`; validate the restoration fix in a new execute run before packaging.

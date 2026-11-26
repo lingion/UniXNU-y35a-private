@@ -1128,3 +1128,13 @@ R208 latest CI run `45852497429` on commit `3538cccc70e4b3490f7b65e9042713e6266b
 
 ## 2026-11-27 R208 offline CI state
 R208 validation `45855811648` and Docs `45855811845` pass on commit `ba4854d4cb076388f61cb2bcdbdf9a7e8874ec5d7`. Offline source, host, root-selection, NativeSdcard, IOStorage archive and documentation gates are green. Kernel link inputs, package/probe, TF GPT/APFS/root/fallback and device evidence remain pending; device_run_allowed=false.
+
+
+## 2026-11-26 R208 fallback candidate and Actions dispatch blocker
+
+Main `43ae09a` adds the opt-in `XNU_Y35A_STORAGE_FALLBACK` candidate patch, bound to `emmc-boot-uuid`, with 3 patch tests plus 6 fallback-matrix tests passing locally and pinned-XNU `git apply --check` passing. The patch is not in the native build manifest. Push validation attempts `45889905156`, `45889905114`, and `45889905098` failed before runner allocation with zero steps; rerun attempt 2 of `45889905156` also completed with `runner_name=null` and zero steps. Keep the earlier green TF run `45887232679` as the valid code gate; classify these as CI dispatch failures, not source failures.
+
+
+## 2026-11-26 R208 native execute source-tree cleanliness blocker
+
+Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e378f61` stopped before kernel compilation because the staged XNU checkout was dirty after host-tool preparation. No kernel artifact was emitted. The next CI input revision must restore `bsd/kern/makekdebugevents.py` before the native runner snapshots the source tree, then pass a new execute run; keep package/probe and device stages pending.

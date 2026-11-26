@@ -14,10 +14,10 @@
 - R207 设计保留首次 `*args` 读取和空值分支，移除 `ARG1RD00` 写入。设计文件为 `/Volumes/Mobile/unixnu-research/reboot-checkpoints/R207-bootargs-read-no-marker-control-design-20261126-01/R207-control-plan-v2.json`。
 - R207 v1 已因损坏 patch 失败。R207 v2 外置盘 builder PID 90604 已按用户要求终止，未产生 provenance 或 kernel artifact。R207 不得重启或在任何本机磁盘重新构建。
 - 当前 `device_run_allowed=false`。R207 不再是当前主线目标，不能抢占 R208 的 CI 和 TF/SD 工作。
-- R208 已完成 SD 协议 host suite、sdhc2 ADT contract、root-selection positive/negative contract、TF/eMMC fallback contract、NativeSdcard object compile、IOStorageFamily-191 combine、确定性 archive 和 Docs CI。main 的 validation run `45884101324` 与 Docs run `45884101618` 均成功；最新 TF validation `45887232679` 全绿，绑定 main commit `425ec007c2973fc14c81f64f14898138340cca3c`; this state correction is included in main `2b45f50`. XNU kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback implementation 和设备运行仍未完成。
+- R208 已完成 SD 协议 host suite、sdhc2 ADT contract、root-selection positive/negative contract、TF/eMMC fallback contract、NativeSdcard object compile、IOStorageFamily-191 combine、确定性 archive 和 Docs CI。main 的 validation run `45884101324` 与 Docs run `45884101618` 均成功；最新 TF validation `45887232679` 全绿，绑定 main commit `425ec007c2973fc14c81f64f14898138340cca3c`; this state correction is included in main `2b45f50`. XNU kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback implementation 和设备运行仍未完成。候选 XNU fallback patch 已单独通过 pinned XNU apply-check，但尚未进入 native manifest。
 - 本轮对 `/Volumes/Mobile` 的访问返回 `Input/output error`，未对该卷继续扫描或写入。`/Volumes/Portable` 已确认可用，仅作为临时 staging 盘；它不是 canonical 工作树，也不运行 UniXNU 编译。
 - 临时 staging `/Volumes/Portable/UniXNU-staging-20261127-0042` 已按提交 `68b2cf91038fedb1ccacdc5950223ef618d8215e` 导出；manifest SHA-256 为 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`，逐文件校验 1424/1424 通过。
-- native-link 当前状态：run `45882865622` 在 commit `53966d60ea558dae8a12c795736e8418bcc8cca9` 完成 plan-only，native inputs、source provenance、driver archive binding 和 native command plan 均通过；`execute=false`，未执行 kernel build，也没有 kernel artifact。package workflow 仍等待同一 SHA 的 successful execute run artifact。
+- native-link 当前状态：plan-only run `45882865622` 在 commit `53966d60ea558dae8a12c795736e8418bcc8cca9` 通过，但 execute run `45888048634` 在 CI 输入准备后发现 XNU checkout dirty，未进入 kernel build，也没有 kernel artifact。当前必须先验证 host-tool 临时改写的恢复闭包，再对包含 package stage 的精确 SHA 执行一次 `execute=true` native build。package workflow 仍等待 successful execute run artifact。
 - TF/SD 设备路线当前只允许离线工作。TF 卡容量、sdhc2 协议、card-detect、root mount、回退到 eMMC 和真实卡绑定都没有实机证据。
 - R208 CI manifest 已绑定 exact XNU ref、六个 arm-driver patch 的 SHA 和 native build profile。NativeSdcard object SHA-256 为 `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`，combined object SHA-256 为 `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`，确定性 archive SHA-256 为 `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`。较早的 object/header 失败 runs 保留在 `LOG.md`，不再作为当前状态。
 
@@ -44,4 +44,4 @@
 
 ## 下一条可执行动作
 
-根据 R208 GitHub Actions 结果补齐 native link 输入并扩展 kernel-link/linked-gate job，直到 XNU link、package/probe 和 hash closure 都有对应 CI 证据。失败先追加 lessons，再修正 CI 或输入。NativeSdcard、TF image、root mount 和 fallback 未闭合前不写卡、不启动设备。任何本机磁盘上的 UniXNU 编译保持关闭。
+根据 R208 GitHub Actions 结果修正 native input preparation 的源树恢复闭包，再执行一次精确绑定的 native link；随后补齐 package/probe 和 hash closure。失败先追加 lessons，再修正 CI 或输入。NativeSdcard、TF image、root mount 和 fallback 未闭合前不写卡、不启动设备。任何本机磁盘上的 UniXNU 编译保持关闭。
