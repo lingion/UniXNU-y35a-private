@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import stat
 import shutil
 import subprocess
 from pathlib import Path
@@ -51,8 +52,11 @@ def sync(source: Path, mirror: Path) -> int:
         if not source_path.is_file():
             continue
         mirror_path.parent.mkdir(parents=True, exist_ok=True)
+        existing_mode = stat.S_IMODE(mirror_path.stat().st_mode) if mirror_path.exists() else None
         if not mirror_path.exists() or source_path.read_bytes() != mirror_path.read_bytes():
             shutil.copy2(source_path, mirror_path)
+            if existing_mode is not None:
+                mirror_path.chmod(existing_mode)
             changed += 1
     return changed
 
