@@ -71,7 +71,10 @@ def preprocess_dispatch_headers(libdispatch: Path, fakeroot: Path, clang: str) -
             command = [unifdef, "-DKERNEL=1", "-DOS_FIREHOSE_SPI=1",
                        "-DOS_VOUCHER_ACTIVITY_SPI_TYPES=1", "-UOS_VOUCHER_ACTIVITY_SPI",
                        str(header)]
-            result = subprocess.run(command, capture_output=True, check=True)
+            result = subprocess.run(command, capture_output=True, check=False)
+            if result.returncode not in (0, 1):
+                raise subprocess.CalledProcessError(result.returncode, command,
+                                                    output=result.stdout, stderr=result.stderr)
             target.write_bytes(result.stdout)
             commands.append(" ".join(command))
         else:

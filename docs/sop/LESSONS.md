@@ -121,3 +121,13 @@
 - 证据：run `45871371371` failed at `Prepare exact native inputs`; log reports `stdio.h:200:28: error: expected function body after function declarator` at `__cold`.
 - 自动化入口：`scripts/ci/prepare_native_inputs.py`。
 - 下一次触发：任何 Libc/compiler-rt archive preparation。
+
+## L-2026-11-26-12 unifdef exit semantics
+
+- 现象：XNU headers、SDK include、Availability headers 和 `libcc_kext.a` 均已生成，但 firehose header preparation 失败。
+- 根因：`unifdef` 返回码 1 表示输出发生变化，不表示命令失败；旧 `build-firehose.sh` 已明确接受 0/1，新 helper 使用 `check=True` 错误拒绝了 1。
+- 影响：native inputs 尚未完成，native build 未执行。
+- 正确做法：接受 `unifdef` 的 0 和 1，仅将其他返回码判为失败。
+- 证据：run `45872635784` failed at `Prepare exact native inputs`; command was `/usr/bin/unifdef ... firehose_buffer_private.h`, exit code 1.
+- 自动化入口：`scripts/ci/prepare_native_inputs.py`。
+- 下一次触发：任何 unifdef header preprocessing。
