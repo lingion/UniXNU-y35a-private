@@ -2865,3 +2865,13 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 事实: `scripts/y35a/build_arm_driver_4903.py`, `scripts/build-xnu-4903-native.py`, `scripts/build-xnu-4k-baseline.sh`, `components.toml`, and personality input now carry a `QcomSdcard`/`tf-storage` integration path. The exact personality patch applies to the pinned source snapshot; the existing R207 builder is not reused or restarted.
 验证: SD host protocol suite passed; ADT suite 10/10 passed; lk2nd SD_BOOT patch apply-check passed; Python syntax checks passed.
 限制: NativeSdcard object compile, XNU link, package/probe, TF GPT/APFS image preparation, and device run remain pending. R207 PID 90604 remains the only active builder; no second builder, device lock, SD write, or fastboot operation was started.
+
+## L-2026-11-26T11:36:49Z-codex — R208 CI offline gate passed
+
+事实: Private mirror commit `9a9e3b01b5e0e2c114596e935856da806a0d7036` contains the R208 TF manifest, lk2nd SD patch, validator and offline workflow. GitHub Actions run `45812019700` completed successfully. The offline job passed manifest validation, the SD host suite and the 10-test ADT contract.
+限制: This run did not compile NativeSdcard against XNU headers, link a kernel, produce a package/probe, create a GPT/APFS TF image, or operate the device. `device_run_allowed=false` remains. R207 PID 90604 remains the only local native builder.
+
+## L-2026-11-26T11:49:28Z-codex — R207 slow SDK scan remains active
+
+事实: PID 90604 has been alive about 3 hours 28 minutes with no provenance or kernel artifact. Two read-only `lsof` snapshots 30 seconds apart show FD 3 moving from `sdk-overlay/usr/include/rpc/rpc_msg.h` to `sdk-overlay/usr/include/sys/_types/_timeval64.h`; CPU time moved only from 0:18.66 to 0:18.81. This is slow per-file SDK hashing, not evidence of a deadlock.
+裁决: keep the existing R207 process; do not terminate or restart it and do not start a second local builder. R208 CI offline validation is already complete, but it does not replace the pending NativeSdcard compile/link/package work.
