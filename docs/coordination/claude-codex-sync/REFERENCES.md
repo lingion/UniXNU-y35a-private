@@ -29,7 +29,7 @@ Evidence basis: filesystem paths, local Git metadata, README/license files, and 
 - Remote: https://gh.qdp.qzz.io/apple-oss-distributions/xnu.git
 - License: Apple Public Source License 2.0, /Users/lingion_k/unixnu-research/UniXNU-y35a/upstream-refresh/2026-11-11/sources/xnu-ios12/repo/APPLE_LICENSE
 - Reusable entry points:
-  - Generic XNU build: make SDKROOT=<sdkroot> ARCH_CONFIGS=<arch> KERNEL_CONFIGS=<variant>
+  - Generic XNU build: `make SDKROOT=<sdkroot> ARCH_CONFIGS=<arch> KERNEL_CONFIGS=<variant>`
   - Native Y35A build contract: /Users/lingion_k/unixnu-research/UniXNU-y35a/scripts/build-xnu-4903-native.py
   - Generic/Linux-oriented builder: /Users/lingion_k/unixnu-research/UniXNU-y35a/scripts/build-xnu-4903-kernel.py
   - Source build rules: Makefile, makedefs, ARCH_CONFIGS=ARM64, MACHINE_CONFIGS=T7001, KERNEL_CONFIGS=DEVELOPMENT
@@ -105,7 +105,7 @@ All three paths below contain the same Git commit and the same upstream reposito
   - Target: msm8916
   - Build contract: top-level makefile
   - Typical form from README: make TOOLCHAIN_PREFIX=arm-none-eabi- lk2nd-msmXXXX; for this tree use the MSM8916 project target exposed by project/lk2nd-msm8916.mk.
-  - Expected outputs: build-<project>/lk.bin, lk, and lk_s.elf
+  - Expected outputs: `build-<project>/lk.bin`, `lk`, and `lk_s.elf`
   - Source areas: lk2nd/, project/, target/, platform/, scripts/
 - Reuse note: this is the only local lk2nd source tree found. The other local lk2nd matches are dated copies of the same commit, not separate revisions.
 
