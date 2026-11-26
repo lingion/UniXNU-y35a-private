@@ -109,6 +109,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NATIVE_RUN_ID: ${{ github.event.workflow_run.id || inputs.native_run_id }}
+          NATIVE_TARGET_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
+          NATIVE_TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
         run: |
           set -euo pipefail
           if [[ ! "$NATIVE_RUN_ID" =~ ^[0-9]+$ ]]; then
@@ -122,8 +124,8 @@ jobs:
             .databaseId == ($id | tonumber)
             and .workflowName == "UniXNU native build"
             and .conclusion == "success"
-            and .headBranch == strenv(GITHUB_REF_NAME)
-            and .headSha == strenv(GITHUB_SHA)
+            and .headBranch == strenv(NATIVE_TARGET_BRANCH)
+            and .headSha == strenv(NATIVE_TARGET_SHA)
             and (.headSha | test("^[0-9a-f]{40}$"))
           ' "$RUNNER_TEMP/native-run.json" > /dev/null
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN_ID/artifacts" \

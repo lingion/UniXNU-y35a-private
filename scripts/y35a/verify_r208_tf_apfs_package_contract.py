@@ -42,6 +42,13 @@ def validate_contract(contract: dict) -> list[str]:
         failures.append("device package requires stock-qcdt provenance")
     if dt.get("status") not in {"unverified", "pending"}:
         failures.append("device-tree status must remain unverified")
+    stock = dt.get("stock_qcdt_input", {})
+    if stock.get("status") not in {"available", "unavailable", "pending"}:
+        failures.append("stock-qcdt input status must be explicit")
+    if stock.get("status") == "available" and not stock.get("sha256"):
+        failures.append("available stock-qcdt input must have a SHA-256")
+    if stock.get("status") == "unavailable" and stock.get("sha256") is not None:
+        failures.append("unavailable stock-qcdt input cannot have a SHA-256")
 
     image = contract.get("tf_image", {})
     if image.get("partition_scheme") != "GPT":

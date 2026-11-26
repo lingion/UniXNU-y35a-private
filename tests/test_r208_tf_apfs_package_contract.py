@@ -31,6 +31,11 @@ class R208TfApfsPackageContractTest(unittest.TestCase):
         failures = MODULE.validate_contract(contract)
         self.assertTrue(any("first-read failure" in failure for failure in failures))
 
+    def test_unavailable_stock_qcdt_is_explicitly_non_ready(self):
+        contract = self.contract()
+        self.assertEqual(contract["device_tree"]["stock_qcdt_input"]["status"], "unavailable")
+        self.assertEqual(MODULE.validate_contract(contract), [])
+
     def test_device_permission_cannot_be_enabled_by_contract(self):
         contract = self.contract()
         contract["qualification"]["device_run_allowed"] = True

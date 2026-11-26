@@ -17,6 +17,17 @@
   "device_tree": {
     "source_type_required": "stock-qcdt",
     "derived_qcdt_allowed_for": "offline-control-only",
+    "stock_qcdt_input": {
+      "status": "unavailable",
+      "sha256": null,
+      "known_candidate_paths": [
+        "/Volumes/Mobile/unixnu-research/UniXNU-y35a/evidence/y35a-20261102/lk2nd-runtime.dtb",
+        "/Volumes/Mobile/unixnu-research/UniXNU-y35a/evidence/y35a-20261102/boot3-20261106/boot3.img",
+        "/Volumes/Mobile/unixnu-research/UniXNU-y35a/reboot-checkpoints/r326-r119-pre-bsd-split-paired-run-20261123-235/boot3.img",
+        "/Volumes/Mobile/unixnu-research/UniXNU-y35a/reboot-checkpoints/r326b-iokit-cursor-package-20261123-06/boot3.img"
+      ],
+      "read_error": "Input/output error on /Volumes/Mobile"
+    },
     "status": "unverified",
     "sha256": null
   },
