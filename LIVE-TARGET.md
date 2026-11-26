@@ -14,7 +14,7 @@
 - R207 设计保留首次 `*args` 读取和空值分支，移除 `ARG1RD00` 写入。设计文件为 `/Volumes/Mobile/unixnu-research/reboot-checkpoints/R207-bootargs-read-no-marker-control-design-20261126-01/R207-control-plan-v2.json`。
 - R207 v1 已因损坏 patch 失败。R207 v2 外置盘 builder PID 90604 已按用户要求终止，未产生 provenance 或 kernel artifact。R207 不得重启或在任何本机磁盘重新构建。
 - 当前 `device_run_allowed=false`。R207 不再是当前主线目标，不能抢占 R208 的 CI 和 TF/SD 工作。
-- R208 已完成 SD 协议 host suite、sdhc2 ADT contract、root-selection positive/negative contract、NativeSdcard object compile、IOStorageFamily-191 combine、确定性 archive 和 Docs CI。main 的最新 validation run `45879899093` 与 Docs run `45879899053` 均成功，绑定 commit `0e0a1356ab09ab6dee8fec6f4a9459ad82467d8c`。XNU kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback 和设备运行仍未完成。
+- R208 已完成 SD 协议 host suite、sdhc2 ADT contract、root-selection positive/negative contract、NativeSdcard object compile、IOStorageFamily-191 combine、确定性 archive 和 Docs CI。main 的最新 validation run `45881634929` 与 Docs run `45881634974` 均成功，绑定 commit `03bffddac32a8c7caec658a45db8533e1fc78694`。XNU kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback 和设备运行仍未完成。
 - 本轮对 `/Volumes/Mobile` 的访问返回 `Input/output error`，未对该卷继续扫描或写入。`/Volumes/Portable` 已确认可用，仅作为临时 staging 盘；它不是 canonical 工作树，也不运行 UniXNU 编译。
 - 临时 staging `/Volumes/Portable/UniXNU-staging-20261127-0042` 已按提交 `68b2cf91038fedb1ccacdc5950223ef618d8215e` 导出；manifest SHA-256 为 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`，逐文件校验 1424/1424 通过。
 - native-link 当前 blocker：main ancestor run `45879966044` 在 `Prepare exact native inputs` 失败，未执行 kernel build；同代 libdispatch 913 firehose 现在已生成到编译命令，但输入准备仍需继续闭合。`fc6a472` 的 native workflow 是 push 触发的 skipped plan，不产生 kernel artifact。package workflow 仍等待同一 SHA 的成功 native artifact。

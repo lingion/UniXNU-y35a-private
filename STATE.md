@@ -1,6 +1,6 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-26T19:08:57Z
+Updated: 2026-11-26T19:13:00Z
 Milestone: R208 TF/SD source, host, root-selection, NativeSdcard object, IOStorageFamily archive and Docs gates passed in CI; native kernel link and TF root path remain pending. All local UniXNU compilation is disabled on every disk.
 Authority: intended /Volumes/Mobile/unixnu-research/UniXNU-y35a; current writable metadata mirror /Users/lingion_k/unixnu-y35a-private-sync; /Volumes/Mobile currently returns I/O errors.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.

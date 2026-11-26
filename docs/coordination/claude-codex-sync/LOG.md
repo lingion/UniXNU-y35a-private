@@ -2970,3 +2970,9 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 事实: 私有镜像 main 当前为 `fc6a4727e74e9913d4336deb78bce3557c91c56f`。主线 validation `45879899093` 与 Docs `45879899053` 在其 ancestor `0e0a1356ab09ab6dee8fec6f4a9459ad82467d8c` 成功。native run `45879966044` 在 `Prepare exact native inputs` 失败，未执行 kernel build；`fc6a472` 的 push workflow `45880957209` 为 skipped，不是 native build 结果。失败前已验证 XNU headers、`libcc_kext.a` 和同代 firehose 编译命令，当前输入闭包仍未产出 manifest/kernel。
 事实: native workflow 已加入未来成功 run 的 `unixnu-kernel-${run_id}` artifact 合同，要求 kernel、`kernel-artifact.json` 和完整 `build-provenance.json`，并绑定 run_id、head_sha、kernel SHA/size、provenance SHA 和 static verification。当前尚无该 artifact。
 裁决: R208 离线 host/root-selection/storage/docs 范围保持已证；native kernel link、package/probe、TF GPT/APFS、root mount、eMMC fallback 和设备证据未完成。package workflow 不得消费旧 SHA 或 skipped run；`device_run_allowed=false`，无持久写入。
+
+## L-2026-11-26T19:13:00Z-codex — R208 state sync after 03bffdd
+
+类型: CI-STATUS / STATE
+事实: main commit `03bffddac32a8c7caec658a45db8533e1fc78694` 的 UniXNU validation `45881634929` 和 Docs `45881634974` 均 completed/success。该提交只同步状态摘要和 native/package blocker；没有 native kernel artifact 或设备操作。
+裁决: 以 `03bffdd`、`45881634929` 和 `45881634974` 为当前状态依据。native run `45879966044` 仍是最近有效主线失败，停在 native input preparation，未进入 kernel build；package/probe/TF/root/fallback/device 仍未完成，`device_run_allowed=false`。
