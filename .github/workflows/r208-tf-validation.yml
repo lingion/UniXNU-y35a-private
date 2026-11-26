@@ -46,6 +46,15 @@ jobs:
       - name: Generate exact XNU headers
         run: |
           python scripts/ci/patch_xnu_host_tools.py --xnu-source "$RUNNER_TEMP/xnu"
+          git -C "$RUNNER_TEMP/xnu" apply --check "$GITHUB_WORKSPACE/patches/xnu/local-availability.patch"
+          git -C "$RUNNER_TEMP/xnu" apply "$GITHUB_WORKSPACE/patches/xnu/local-availability.patch"
+          git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/AvailabilityVersions.git "$RUNNER_TEMP/AvailabilityVersions"
+          git -C "$RUNNER_TEMP/AvailabilityVersions" fetch --depth=1 origin AvailabilityVersions-33.200.7
+          git -C "$RUNNER_TEMP/AvailabilityVersions" checkout --detach AvailabilityVersions-33.200.7
+          export XNU_AVAILABILITY_PL="$RUNNER_TEMP/availability-dst/usr/local/libexec/availability.pl"
+          make -C "$RUNNER_TEMP/AvailabilityVersions" install \
+            OBJROOT="$RUNNER_TEMP/availability-obj" SYMROOT="$RUNNER_TEMP/availability-sym" \
+            DSTROOT="$RUNNER_TEMP/availability-dst" CMAKE="$(command -v cmake)" NINJA="$(command -v ninja)"
           make -C "$RUNNER_TEMP/xnu" \
             ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=DEVELOPMENT \
             SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
@@ -59,6 +68,7 @@ jobs:
             HOST_OS_VERSION="$(sw_vers -productVersion)" \
             CTFCONVERT=/usr/bin/true CTFMERGE=/usr/bin/true CTFINSERT=/usr/bin/true \
             EMBEDDED_DEVICE_MAP=/usr/bin/true TIGHTBEAMC=tightbeamc-not-supported \
+            XNU_AVAILABILITY_PL="$XNU_AVAILABILITY_PL" \
             installhdrs
       - name: Compile NativeSdcard object
         run: |
