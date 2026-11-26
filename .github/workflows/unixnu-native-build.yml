@@ -36,7 +36,7 @@ jobs:
     env:
       SOURCE_REF: ${{ inputs.source_ref }}
       BUILD_MANIFEST: ${{ inputs.manifest }}
-      RUN_ROOT: ${{ runner.temp }}/unixnu-native-build
+      RUN_ROOT: ${{ github.workspace }}/.ci-runs/unixnu-native-build
     steps:
       - uses: actions/checkout@v4
         with:
