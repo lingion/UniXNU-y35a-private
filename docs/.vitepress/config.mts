@@ -127,6 +127,9 @@ export default withMermaid(defineConfig({
   description: 'Run iOS and macOS on non-Apple ARM64 hardware through UEFI.',
   cleanUrls: true,
   lastUpdated: true,
+  // Historical audit records contain absolute host paths. They are evidence
+  // labels, not site routes; keep real internal-link checking enabled.
+  ignoreDeadLinks: [/^\/Users\//, /^\/tmp\//],
   srcExclude: ['superpowers/**'],
   locales: {
     root: {
