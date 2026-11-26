@@ -3001,3 +3001,9 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 类型: CI-STATUS / ADJUDICATION
 事实: main `425ec007c2973fc14c81f64f14898138340cca3c` binds the tracked stock DTS `evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts` with SHA-256 `4b2a7fda53ab9b4a69aa3bf9c1247feb7f767b577612914b353f076b391a8714`. TF validation `45887232679` passed manifest, SD host, ADT, root-selection, fallback contract, exact XNU headers, NativeSdcard object and artifact upload.
 裁决: offline fallback contract is green, but its source/runtime implementation remains unverified; native kernel, package/probe, TF GPT/APFS/root, eMMC fallback implementation and device evidence remain pending; device_run_allowed=false.
+
+## L-2026-11-26T20:02:00Z-codex — R208 state sync after stock DTS fix
+
+类型: CI-STATUS / STATE
+事实: main `2b45f50b143edf19c678892dab0d768a5e378f61` includes the tracked stock DTS path correction. TF validation `45887232679` passed manifest, SD host, ADT, root-selection, fallback contract, XNU headers, NativeSdcard object and artifact upload.
+裁决: stock DTS and offline fallback contracts are green. eMMC fallback implementation remains unverified; native kernel, package/probe, TF GPT/APFS/root and device evidence remain pending; `device_run_allowed=false`。
