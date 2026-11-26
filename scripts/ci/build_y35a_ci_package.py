@@ -59,6 +59,9 @@ PACKAGE_SOURCE_FILES = (
     "scripts/y35a/boot_layout.py",
     "scripts/y35a/make_adt.py",
     "scripts/y35a/package_native.py",
+    "scripts/unixnu/devicetree.py",
+    "scripts/unixnu/udif.py",
+    "scripts/unixnu/util.py",
 )
 
 
@@ -85,20 +88,69 @@ def load_json(path: Path) -> dict:
     return value
 
 
-def validate_native_artifact(directory: Path, run_id: str, head_sha: str) -> tuple[Path, dict, dict]:
+def validate_native_artifact(
+    directory: Path,
+    run_id: str,
+    head_sha: str,
+    native_manifest_path: Path,
+) -> tuple[Path, dict, dict]:
     artifact_path = directory / "kernel-artifact.json"
     provenance_path = directory / "build-provenance.json"
+    plan_path = directory / "native-build-plan.json"
     artifact = load_json(artifact_path)
     provenance = load_json(provenance_path)
+    plan = load_json(plan_path)
+    native_manifest_path = native_manifest_path.resolve(strict=True)
+    native_manifest = load_json(native_manifest_path)
 
-    if artifact.get("schema") != 1 or artifact.get("status") != "success":
-        raise ValueError("native kernel artifact manifest is not a successful schema-1 artifact")
+    if artifact.get("schema") != 2 or artifact.get("status") != "success":
+        raise ValueError("native kernel artifact manifest is not a successful schema-2 artifact")
     if str(artifact.get("run_id")) != run_id:
         raise ValueError("kernel artifact run ID does not match the selected Actions run")
     if artifact.get("head_sha") != head_sha:
         raise ValueError("kernel artifact commit does not match the selected Actions run")
     if artifact.get("build_provenance_path") != provenance_path.name:
         raise ValueError("kernel artifact does not name the expected build provenance file")
+    if artifact.get("native_build_plan_path") != plan_path.name:
+        raise ValueError("kernel artifact does not name the expected native build plan")
+    plan_hash = sha256(plan_path)
+    if artifact.get("native_build_plan_sha256") != plan_hash:
+        raise ValueError("native build plan SHA-256 does not match kernel-artifact.json")
+    expected_manifest_hash = sha256(native_manifest_path)
+    if (plan.get("ok") is not True
+            or plan.get("manifest_sha256") != expected_manifest_hash
+            or Path(plan.get("manifest", "")).name != native_manifest_path.name):
+        raise ValueError("native build plan does not bind the package's R208 build manifest")
+
+    source_identity = provenance.get("source_identity", {})
+    if source_identity.get("commit") != native_manifest.get("source_ref"):
+        raise ValueError("native provenance XNU commit does not match the R208 build manifest")
+    inputs = provenance.get("inputs", {})
+    expected_patches = [
+        (Path(item["path"]).name, item["sha256"])
+        for item in native_manifest.get("patches", [])
+    ]
+    actual_patches = [
+        (Path(item.get("path", "")).name, item.get("sha256"))
+        for item in inputs.get("source_diff", [])
+    ]
+    if actual_patches != expected_patches:
+        raise ValueError("native provenance patches do not match the ordered R208 build manifest")
+    source_provenance_ref = Path(native_manifest["source_provenance"])
+    source_provenance_path = (
+        source_provenance_ref if source_provenance_ref.is_absolute()
+        else ROOT / source_provenance_ref
+    ).resolve(strict=True)
+    if inputs.get("source_provenance", {}).get("sha256") != sha256(source_provenance_path):
+        raise ValueError("native provenance source contract does not match the R208 build manifest")
+    driver_artifact = native_manifest.get("driver_artifact", {})
+    driver_archives = inputs.get("driver_archives", [])
+    if (len(driver_archives) != 1
+            or Path(driver_archives[0].get("path", "")).name != driver_artifact.get("archive")
+            or driver_archives[0].get("sha256") != driver_artifact.get("sha256")):
+        raise ValueError("native provenance driver archive does not match the R208 build manifest")
+    if provenance.get("driver_integration", {}).get("status") != "passed":
+        raise ValueError("native provenance does not confirm the R208 driver integration")
 
     kernel_name = artifact.get("artifact_path")
     if not isinstance(kernel_name, str):
@@ -141,6 +193,8 @@ def validate_native_artifact(directory: Path, run_id: str, head_sha: str) -> tup
         "head_sha": head_sha,
         "artifact_manifest_sha256": sha256(artifact_path),
         "provenance_sha256": provenance_hash,
+        "native_build_plan_sha256": plan_hash,
+        "native_build_manifest_sha256": expected_manifest_hash,
         "kernel_path": kernel.name,
         "kernel_sha256": kernel_sha256,
         "kernel_bytes": kernel_bytes,
@@ -339,7 +393,8 @@ def build_package(args) -> dict:
     if not isinstance(expected_macho_count, int) or isinstance(expected_macho_count, bool) or expected_macho_count < 1:
         raise ValueError("package manifest has an invalid expected staged Mach-O count")
     kernel, native_binding, native_provenance = validate_native_artifact(
-        args.native_artifact_dir.resolve(strict=True), args.native_run_id, args.native_head_sha,
+        args.native_artifact_dir.resolve(strict=True), args.native_run_id,
+        args.native_head_sha, ROOT / "ci/native-build-manifest.r208.json",
     )
     output = args.output.resolve()
     if output.exists():
@@ -438,6 +493,10 @@ def build_package(args) -> dict:
         shutil.copy2(
             args.native_artifact_dir / "build-provenance.json",
             output / "native-build-provenance.json",
+        )
+        shutil.copy2(
+            args.native_artifact_dir / "native-build-plan.json",
+            output / "native-build-plan.json",
         )
         shutil.copy2(qcdt_path, output / "y35a.qcdt")
         shutil.copy2(qcdt_path.with_suffix(qcdt_path.suffix + ".json"), output / "y35a.qcdt.json")

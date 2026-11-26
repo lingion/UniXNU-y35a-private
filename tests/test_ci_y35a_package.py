@@ -138,43 +138,78 @@ class Y35aContainerValidationTest(unittest.TestCase):
 
 
 class NativeArtifactBindingTest(unittest.TestCase):
+    @staticmethod
+    def write_native_evidence(root, kernel, *, provenance_status="complete"):
+        manifest_path = root / "native-build-manifest.json"
+        source_provenance_path = root / "source-provenance.json"
+        source_provenance_path.write_text("pinned source contract\n")
+        patch_hash = hashlib.sha256(b"pinned patch").hexdigest()
+        driver_hash = hashlib.sha256(b"pinned driver archive").hexdigest()
+        native_manifest = {
+            "source_ref": "xnu-commit",
+            "source_provenance": str(source_provenance_path),
+            "driver_artifact": {"archive": "libQcomSdcard.a", "sha256": driver_hash},
+            "patches": [{"order": 0, "path": "patches/native.patch", "sha256": patch_hash}],
+        }
+        manifest_path.write_text(json.dumps(native_manifest))
+        plan_path = root / "native-build-plan.json"
+        plan_path.write_text(json.dumps({
+            "ok": True,
+            "manifest": "native-build-manifest.json",
+            "manifest_sha256": hashlib.sha256(manifest_path.read_bytes()).hexdigest(),
+            "plan_only": True,
+        }))
+        digest = hashlib.sha256(kernel.read_bytes()).hexdigest()
+        verification = {"status": "passed"}
+        provenance = {
+            "status": provenance_status,
+            "source_identity": {"commit": "xnu-commit"},
+            "inputs": {
+                "source_diff": [{"path": "/runner/patches/native.patch", "sha256": patch_hash}],
+                "source_provenance": {"sha256": hashlib.sha256(
+                    source_provenance_path.read_bytes(),
+                ).hexdigest()},
+                "driver_archives": [{"path": "/runner/libQcomSdcard.a", "sha256": driver_hash}],
+            },
+            "driver_integration": {"status": "passed"},
+            "kernel_static_verification": verification,
+            "kernel_artifact": {"sha256": digest, "bytes": kernel.stat().st_size},
+        }
+        provenance_path = root / "build-provenance.json"
+        provenance_path.write_text(json.dumps(provenance))
+        artifact = {
+            "schema": 2,
+            "status": "success",
+            "run_id": 123,
+            "head_sha": "a" * 40,
+            "artifact_path": "kernel/mach.development.t7001.unstripped",
+            "kernel_sha256": digest,
+            "kernel_size": kernel.stat().st_size,
+            "build_provenance_path": provenance_path.name,
+            "build_provenance_sha256": hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
+            "native_build_plan_path": plan_path.name,
+            "native_build_plan_sha256": hashlib.sha256(plan_path.read_bytes()).hexdigest(),
+            "kernel_static_verification": verification,
+        }
+        (root / "kernel-artifact.json").write_text(json.dumps(artifact))
+        return manifest_path
+
     def test_native_artifact_requires_successful_matching_provenance(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             kernel = root / "kernel/mach.development.t7001.unstripped"
             kernel.parent.mkdir()
             kernel.write_bytes(b"fixture kernel")
+            manifest_path = self.write_native_evidence(root, kernel)
             digest = hashlib.sha256(kernel.read_bytes()).hexdigest()
-            verification = {"status": "passed"}
-            provenance = {
-                "status": "complete",
-                "kernel_static_verification": verification,
-                "kernel_artifact": {"sha256": digest, "bytes": kernel.stat().st_size},
-            }
-            provenance_path = root / "build-provenance.json"
-            provenance_path.write_text(json.dumps(provenance))
-            artifact = {
-                "schema": 1,
-                "status": "success",
-                "run_id": 123,
-                "head_sha": "a" * 40,
-                "artifact_path": "kernel/mach.development.t7001.unstripped",
-                "kernel_sha256": digest,
-                "kernel_size": kernel.stat().st_size,
-                "build_provenance_path": "build-provenance.json",
-                "build_provenance_sha256": hashlib.sha256(
-                    provenance_path.read_bytes(),
-                ).hexdigest(),
-                "kernel_static_verification": verification,
-            }
-            (root / "kernel-artifact.json").write_text(json.dumps(artifact))
 
             found, binding, _ = package_ci.validate_native_artifact(
-                root, "123", "a" * 40,
+                root, "123", "a" * 40, manifest_path,
             )
 
         self.assertEqual(found.name, "mach.development.t7001.unstripped")
         self.assertEqual(binding["kernel_sha256"], digest)
+        self.assertIn("native_build_manifest_sha256", binding)
 
     def test_native_artifact_rejects_incomplete_build(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -182,46 +217,65 @@ class NativeArtifactBindingTest(unittest.TestCase):
             kernel = root / "kernel/mach.development.t7001.unstripped"
             kernel.parent.mkdir()
             kernel.write_bytes(b"fixture kernel")
-            digest = hashlib.sha256(kernel.read_bytes()).hexdigest()
-            verification = {"status": "passed"}
-            provenance = {
-                "status": "failed",
-                "kernel_static_verification": verification,
-                "kernel_artifact": {"sha256": digest, "bytes": kernel.stat().st_size},
-            }
-            provenance_path = root / "build-provenance.json"
-            provenance_path.write_text(json.dumps(provenance))
-            artifact = {
-                "schema": 1,
-                "status": "success",
-                "run_id": 123,
-                "head_sha": "a" * 40,
-                "artifact_path": "kernel/mach.development.t7001.unstripped",
-                "kernel_sha256": digest,
-                "kernel_size": kernel.stat().st_size,
-                "build_provenance_path": "build-provenance.json",
-                "build_provenance_sha256": hashlib.sha256(provenance_path.read_bytes()).hexdigest(),
-                "kernel_static_verification": verification,
-            }
-            (root / "kernel-artifact.json").write_text(json.dumps(artifact))
+            manifest_path = self.write_native_evidence(
+                root, kernel, provenance_status="failed",
+            )
             with self.assertRaisesRegex(ValueError, "not complete"):
-                package_ci.validate_native_artifact(root, "123", "a" * 40)
+                package_ci.validate_native_artifact(root, "123", "a" * 40, manifest_path)
 
     def test_native_artifact_rejects_path_escape(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            artifact = {
-                "schema": 1,
-                "status": "success",
-                "run_id": 123,
-                "head_sha": "a" * 40,
-                "build_provenance_path": "build-provenance.json",
-                "artifact_path": "../kernel",
-            }
-            (root / "kernel-artifact.json").write_text(json.dumps(artifact))
-            (root / "build-provenance.json").write_text("{}")
+            kernel = root / "kernel/mach.development.t7001.unstripped"
+            kernel.parent.mkdir()
+            kernel.write_bytes(b"fixture kernel")
+            manifest_path = self.write_native_evidence(root, kernel)
+            artifact_path = root / "kernel-artifact.json"
+            artifact = json.loads(artifact_path.read_text())
+            artifact["artifact_path"] = "../kernel"
+            artifact_path.write_text(json.dumps(artifact))
             with self.assertRaisesRegex(ValueError, "stay inside"):
-                package_ci.validate_native_artifact(root, "123", "a" * 40)
+                package_ci.validate_native_artifact(root, "123", "a" * 40, manifest_path)
+
+    def test_native_artifact_rejects_a_different_build_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            kernel = root / "kernel/mach.development.t7001.unstripped"
+            kernel.parent.mkdir()
+            kernel.write_bytes(b"fixture kernel")
+            manifest_path = self.write_native_evidence(root, kernel)
+            plan_path = root / "native-build-plan.json"
+            plan = json.loads(plan_path.read_text())
+            plan["manifest_sha256"] = "0" * 64
+            plan_path.write_text(json.dumps(plan))
+            artifact_path = root / "kernel-artifact.json"
+            artifact = json.loads(artifact_path.read_text())
+            artifact["native_build_plan_sha256"] = hashlib.sha256(
+                plan_path.read_bytes(),
+            ).hexdigest()
+            artifact_path.write_text(json.dumps(artifact))
+            with self.assertRaisesRegex(ValueError, "R208 build manifest"):
+                package_ci.validate_native_artifact(root, "123", "a" * 40, manifest_path)
+
+    def test_native_artifact_rejects_patch_inputs_outside_the_manifest(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            kernel = root / "kernel/mach.development.t7001.unstripped"
+            kernel.parent.mkdir()
+            kernel.write_bytes(b"fixture kernel")
+            manifest_path = self.write_native_evidence(root, kernel)
+            provenance_path = root / "build-provenance.json"
+            provenance = json.loads(provenance_path.read_text())
+            provenance["inputs"]["source_diff"][0]["sha256"] = "0" * 64
+            provenance_path.write_text(json.dumps(provenance))
+            artifact_path = root / "kernel-artifact.json"
+            artifact = json.loads(artifact_path.read_text())
+            artifact["build_provenance_sha256"] = hashlib.sha256(
+                provenance_path.read_bytes(),
+            ).hexdigest()
+            artifact_path.write_text(json.dumps(artifact))
+            with self.assertRaisesRegex(ValueError, "ordered R208 build manifest"):
+                package_ci.validate_native_artifact(root, "123", "a" * 40, manifest_path)
 
 
 class RestoreTrustCacheTest(unittest.TestCase):
@@ -308,6 +362,9 @@ class PackageSourceClosureTest(unittest.TestCase):
         self.assertIn("scripts/build-xnu-4903-native.py", package_ci.PACKAGE_SOURCE_FILES)
         self.assertIn("ci/manifests/r208-tf-sd-driver.json", package_ci.PACKAGE_SOURCE_FILES)
         self.assertIn("scripts/y35a/make_adt.py", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("scripts/unixnu/devicetree.py", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("scripts/unixnu/udif.py", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("scripts/unixnu/util.py", package_ci.PACKAGE_SOURCE_FILES)
 
 
 class PackageComponentClosureTest(unittest.TestCase):
