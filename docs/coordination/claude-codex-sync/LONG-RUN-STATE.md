@@ -1143,3 +1143,8 @@ Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e37
 ## 2026-11-26 R208 package candidate rebased; CI billing blocker
 
 The package candidate is now based on current main at commits `1cdc077`, `ac28710` and `73f1756` on branch `codex/unixnu-ci-package-v2`. It binds the native build plan, exact native manifest, source provenance, package components, derived QCDT, TrustCache coverage and complete package input trigger paths. Status is `WAITING_FOR_CI`: package run `45896319737` did not start because account payments/spending limit blocked runner allocation. Keep native execute, package/probe, TF image and device stages pending; local fallback is forbidden.
+
+
+## 2026-11-26 R208 TF/APFS package contract split
+
+Package commit `f694b4f` adds a design-only TF/APFS device-package contract. It separates the existing launchd diagnostic RAM package from the future TF/APFS deliverable and requires schema-2 native plan/artifact binding, stock QCDT, GPT/APFS/card binding, linked root selection, first-read TF failure fallback to eMMC, and package/probe closure. No device-ready or runtime-qualified claim is allowed.

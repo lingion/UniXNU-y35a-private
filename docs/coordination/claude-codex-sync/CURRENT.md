@@ -1385,3 +1385,8 @@ Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e37
 ## 2026-11-26 R208 package candidate rebased; CI billing blocker
 
 Package candidate commits `1cdc077`, `ac28710` and `73f1756` are based on current main and pushed as `codex/unixnu-ci-package-v2`. They add hash-bound package consumption, native build plan binding, derived QCDT provenance, iOS 12.4.1 root staging, combined TrustCache coverage and complete package input trigger paths. Status is `WAITING_FOR_CI`: package run `45896319737` also failed before steps because the GitHub account has failed recent payments or reached its Actions spending limit. No kernel or package artifact exists; `device_run_allowed=false`.
+
+
+## 2026-11-26 R208 TF/APFS package contract split
+
+Commit `f694b4f` adds a design-only TF/APFS device-package contract to `codex/unixnu-ci-package-v2`. It requires a schema-2 native artifact and build plan, stock QCDT provenance, GPT/APFS image with exact card binding, linked `native_storage_select_root`, first-read TF failure coverage in the eMMC fallback, and package/probe hashes. The existing RAM package remains `launchd-diagnostic-ramboot` with `runtime_qualified=false`; `device_ready=false` and `device_run_allowed=false` remain fixed. Billing/spending-limit recovery is still required before CI execution.

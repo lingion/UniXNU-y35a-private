@@ -3033,6 +3033,13 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 裁决: status is `WAITING_FOR_CI`. This is an account-level Actions runner blocker, not a workflow or source result. No kernel/package artifact exists; after Billing & plans is restored, rerun CI on the exact v2 branch. Keep `device_run_allowed=false` and do not fall back to local build.
 
 
+## L-2026-11-26T22:49:47Z-codex — R208 TF/APFS package contract split
+
+类型: PACKAGE-DESIGN / CI-BLOCKER
+事实: package commit `f694b4f` adds `ci/manifests/r208-tf-apfs-package-contract.json`, its verifier and contract tests. The contract requires schema-2 native plan/artifact binding, stock QCDT provenance, GPT/APFS with exact card binding, linked root coordination, TF card absence/init/first-read fallback to eMMC, and package/probe hashes. Offline validation returned `ok=true`, `device_ready=false`, `device_run_allowed=false`.
+裁决: the current RAM package remains a separate `launchd-diagnostic-ramboot` candidate and cannot be promoted to a TF/APFS device package. Keep the TF/APFS contract design-only until CI billing is restored and all linked/package/probe gates produce artifacts.
+
+
 ## L-2026-11-26T21:10:57Z-codex — package trigger-path closure
 
 类型: CI-STATUS / PACKAGE-PROVENANCE
