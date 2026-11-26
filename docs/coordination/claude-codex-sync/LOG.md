@@ -2982,3 +2982,9 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 类型: CI-STATUS / STATE
 事实: main commit `53966d60ea558dae8a12c795736e8418bcc8cca9` 的 validation `45882596692` 和 Docs `45882596678` 均成功。native plan-only run `45882865622` 也成功，完成 XNU header generation、Darwin 18 native input preparation、hash-bound R208 driver artifact download、source provenance 和 native command plan；其 `execute=false`，因此没有运行 kernel build。
 裁决: native input/plan gate 已闭合，native kernel、kernel artifact、package/probe、TF GPT/APFS、root mount、eMMC fallback 和设备证据仍未完成。等待 package stage 提交后，才对同一 SHA 执行一次 `execute=true` native build；`device_run_allowed=false`。
+
+## L-2026-11-26T19:34:00Z-codex — R208 latest main state
+
+类型: CI-STATUS / STATE
+事实: main commit `49ecec4c59964644d4bbbab09db3488e54fa63bf4` 的 validation `45884101324` 和 Docs `45884101618` 均 completed/success。Native plan-only `45882865622` remains the latest successful native workflow and used `execute=false`; no kernel artifact was emitted. Package branch `codex/unixnu-ci-package` has no commits beyond the synchronized state handoff.
+裁决: 以 `49ecec4`、`45884101324`、`45884101618` 和 `45882865622` 为当前状态依据。package stage、execute=true native link、kernel artifact、package/probe、TF/root/fallback 和设备证据仍未完成；`device_run_allowed=false`。
