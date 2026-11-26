@@ -53,7 +53,7 @@
     "path": "patches/lk2nd/msm8916-sd-boot.patch",
     "sha256": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc"
   },
-  "manifest_revision": "xnu-installhdrs-ctf-and-python-host-tool-compat",
+  "manifest_revision": "xnu-installhdrs-host-tool-python3-compat",
   "patches": [
     {
       "order": 0,
@@ -78,7 +78,7 @@
     "scripts/build-xnu-4903-native.py": "684312fe12799519adaef13b73d08353015e128994eee5ab51ee074269e1535a",
     "scripts/build-xnu-4k-baseline.sh": "ac959683bf4e9f792f261aa02a729a012b8704b75261c8599ced7ef37d25fc2b",
     "scripts/ci/compile_r208_sdcard.py": "40919ad6bde732290e8c90083377be2f573b8ca0010a5a6199335370ff7c182c",
-    "scripts/ci/patch_xnu_host_tools.py": "3b3948864623f50bef52ee82a66a38db997d960498a0bb4d399c73bbaceceaf4",
+    "scripts/ci/patch_xnu_host_tools.py": "a626197ff726a6c5a091be59b5bf775db8168c34e9ae9eccf6e23818c45e078e",
     "scripts/y35a/build_arm_driver_4903.py": "993dee39fc4a1b3a12b1c966a54b995e2ddb64d2f80e8977f253da6e642d56b9",
     "scripts/y35a/make_adt.py": "72bcafc305f3a1cc1cbe9899e5df3e326da91c42a76595cde9f376a5936f4847",
     "scripts/y35a/test_board_adt.py": "02b5a58e74df2c2308d6b4ee81b241821533484147b2328ded2e9c477ec9fbce"
