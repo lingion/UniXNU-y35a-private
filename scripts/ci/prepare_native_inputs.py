@@ -122,6 +122,9 @@ def build_firehose(xnu: Path, libdispatch: Path, fakeroot: Path, clang: str) -> 
     private_header = fakeroot / "usr/local/include/kernel/os/firehose_buffer_private.h"
     private_header.parent.mkdir(parents=True, exist_ok=True)
     commands = preprocess_dispatch_headers(libdispatch, fakeroot, clang)
+    atomic_header = fakeroot / "usr/local/include/kernel/os/atomic_private.h"
+    if not atomic_header.is_file():
+        raise SystemExit(f"XNU installhdrs did not produce {atomic_header}")
     source = libdispatch / "src/firehose/firehose_buffer.c"
     obj = objects / "firehose_buffer.o"
     command = [clang, "-target", "arm64-apple-ios17.0", "-std=gnu11", "-Os", "-g",
@@ -132,6 +135,7 @@ def build_firehose(xnu: Path, libdispatch: Path, fakeroot: Path, clang: str) -> 
                "-I", str(fakeroot / "System/Library/Frameworks/Kernel.framework/Headers"),
                "-I", str(fakeroot / "usr/local/include/os"),
                "-I", str(fakeroot / "usr/local/include/firehose"),
+               "-I", str(fakeroot / "usr/local/include/kernel"),
                "-I", str(fakeroot / "usr/include"), "-I", str(fakeroot / "usr/local/include"),
                "-I", str(xnu / "EXTERNAL_HEADERS"), "-c", str(source), "-o", str(obj)]
     run(command)

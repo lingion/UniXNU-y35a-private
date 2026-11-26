@@ -131,3 +131,13 @@
 - 证据：run `45872635784` failed at `Prepare exact native inputs`; command was `/usr/bin/unifdef ... firehose_buffer_private.h`, exit code 1.
 - 自动化入口：`scripts/ci/prepare_native_inputs.py`。
 - 下一次触发：任何 unifdef header preprocessing。
+
+## L-2026-11-26-13 XNU kernel private include root
+
+- 现象：`libcc_kext.a` 成功生成，firehose 编译失败，找不到 `<os/atomic_private.h>`。
+- 根因：XNU installhdrs 将该头放在 `usr/local/include/kernel/os`，firehose argv 没有把 `usr/local/include/kernel` 作为 include root。
+- 影响：native inputs 尚未完成，native build 未执行。
+- 正确做法：在 firehose 编译中显式加入 `fakeroot/usr/local/include/kernel`，并在编译前检查 `atomic_private.h` 存在。
+- 证据：run `45873852552` failed at `Prepare exact native inputs`; log reports `firehose_buffer.c:21:10: fatal error: 'os/atomic_private.h' file not found`.
+- 自动化入口：`scripts/ci/prepare_native_inputs.py`。
+- 下一次触发：任何 XNU kernel private header consumer。
