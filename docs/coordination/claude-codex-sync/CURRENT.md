@@ -18,6 +18,10 @@ R208 validation `45855811648` (`host-validation`) and Docs `45855811845` (`build
 
 The local process check found no UniXNU build, link or large-build process. `/Volumes/Mobile` returned `Input/output error` during a shallow read, so no further scan or write was attempted. `/Volumes/Portable` is permitted as temporary staging only; it is not the canonical tree and must not be used for local UniXNU compilation. `device_run_allowed=false`; persistent writes remain none.
 Staging is `/Volumes/Portable/UniXNU-staging-20261127-0042`, exported from private-mirror commit `68b2cf91038fedb1ccacdc5950223ef618d8215e`; manifest SHA-256 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`; 1424/1424 files verified.
+
+## 2026-11-26 R208 remote validation after staging sync
+
+Private mirror commit `9a98ce2480220da4e663688dd730beb62b004bb7` is on remote main. UniXNU validation run `45862410871` (`host-validation`) and Docs run `45862410942` (`build`) both completed successfully. This verifies the documented offline gates and staging policy only; kernel link, package/probe, TF image, root mount, eMMC fallback and device evidence remain pending.
 ## 2026-11-25 R204b adjudication
 
 R204b used the required maximum contiguous memory profile (`owned_memory=0x5fe00000`, `memory_profile=max-contiguous-measured`) and completed one four-stage RAM-only paired MVE. The device returned to verified `efff9d92 / lk2nd-msm8916` unlocked fastboot with `persistent_writes=false`. Fresh final contains `PEBARGRT` immediately after `args = PE_boot_args()` inside `PE_parse_boot_argn_internal`, but not `ARMDFPAR` after the caller returns. The strongest boundary is after `PE_boot_args()` returns and before the first command-line dereference / parser return, at or before `if (*args == '\0')`.

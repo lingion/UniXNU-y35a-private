@@ -14,7 +14,7 @@
 - R207 设计保留首次 `*args` 读取和空值分支，移除 `ARG1RD00` 写入。设计文件为 `/Volumes/Mobile/unixnu-research/reboot-checkpoints/R207-bootargs-read-no-marker-control-design-20261126-01/R207-control-plan-v2.json`。
 - R207 v1 已因损坏 patch 失败。R207 v2 外置盘 builder PID 90604 已按用户要求终止，未产生 provenance 或 kernel artifact。R207 不得重启或在任何本机磁盘重新构建。
 - 当前 `device_run_allowed=false`。R207 不再是当前主线目标，不能抢占 R208 的 CI 和 TF/SD 工作。
-- R208 已完成 SD 协议 host suite、sdhc2 ADT contract、root-selection positive/negative contract、NativeSdcard object compile、IOStorageFamily-191 combine、确定性 archive 和 Docs CI。最新 validation run `45855811648` 的 `host-validation` job 成功；Docs run `45855811845` 的 `build` job 成功，二者绑定 commit `ba4854d4cb076388f61cb2bcdbdf13efb8404dc5`。XNU kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback 和设备运行仍未完成。
+- R208 已完成 SD 协议 host suite、sdhc2 ADT contract、root-selection positive/negative contract、NativeSdcard object compile、IOStorageFamily-191 combine、确定性 archive 和 Docs CI。最新 validation run `45862410871` 的 `host-validation` job 与 Docs run `45862410942` 的 `build` job 均成功，绑定 commit `9a98ce2480220da4e663688dd730beb62b004bb7`。XNU kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback 和设备运行仍未完成。
 - 本轮对 `/Volumes/Mobile` 的访问返回 `Input/output error`，未对该卷继续扫描或写入。`/Volumes/Portable` 已确认可用，仅作为临时 staging 盘；它不是 canonical 工作树，也不运行 UniXNU 编译。
 - 临时 staging `/Volumes/Portable/UniXNU-staging-20261127-0042` 已按提交 `68b2cf91038fedb1ccacdc5950223ef618d8215e` 导出；manifest SHA-256 为 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`，逐文件校验 1424/1424 通过。
 - TF/SD 设备路线当前只允许离线工作。TF 卡容量、sdhc2 协议、card-detect、root mount、回退到 eMMC 和真实卡绑定都没有实机证据。

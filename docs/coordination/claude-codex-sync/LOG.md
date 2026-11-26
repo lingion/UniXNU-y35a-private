@@ -2957,3 +2957,9 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 类型: DECISION / EVIDENCE
 事实: `/Volumes/Mobile` 仍未继续扫描或写入，因为浅层访问返回 `Input/output error`。临时 staging `/Volumes/Portable/UniXNU-staging-20261127-0042` 来自私有镜像提交 `68b2cf91038fedb1ccacdc5950223ef618d8215e`，manifest SHA-256 为 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`。逐文件复核 1424/1424 项，missing=0、mismatch=0；manifest 标记 `canonical=false`、`local_build_allowed=false`、`device_run_allowed=false`。
 裁决: `/Volumes/Portable` 仅作为临时 staging，不是 Git 真源，不运行 UniXNU compile/link/large build，不操作设备或持久存储。
+
+## L-2026-11-26T16:52:17Z-codex — R208 remote validation after staging sync
+
+类型: CI-STATUS / ADJUDICATION
+事实: 私有镜像提交 `9a98ce2480220da4e663688dd730beb62b004bb7` 已推送到 remote main。GitHub Actions UniXNU validation run `45862410871` 的 `host-validation` job 和 Docs run `45862410942` 的 `build` job 均 completed/success。两条 run 都绑定该提交。
+裁决: R208 已验证的范围仍是离线 source/host/root-selection/storage/archive/docs gates 及文档中的 CI-only/staging 规则。native kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback 和设备证据仍未完成；`device_run_allowed=false`，无持久写入。
