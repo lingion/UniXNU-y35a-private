@@ -1,0 +1,540 @@
+--- a/ArmCpu/ArmCpu.cpp
++++ b/ArmCpu/ArmCpu.cpp
+@@ -1,5 +1,6 @@
+ // SPDX-License-Identifier: BSD-2-Clause-Patent
+ #include <IOKit/IOCPU.h>
++#include <IOKit/IOLib.h>
+ #include <IOKit/IODeviceTreeSupport.h>
+ #include <IOKit/IOMemoryDescriptor.h>
+ #include <libkern/c++/OSData.h>
+@@ -7,21 +8,21 @@
+ #include <machine/machine_routines.h>
+ #include <pexpert/pexpert.h>
+ #include "GicV2.h"
+-
+-// Exact private entry from Darwin 23 arm/rtclock.h. Its full data header is
+-// not exported to IOKit; the IRQ path calls the real kernel implementation.
++#include "ArmCpu4903Support.h"
++
++#if !defined(ARMCPU_4903_BOOT_CPU_ONLY) || ARMCPU_4903_BOOT_CPU_ONLY != 1
++#error "ArmCpu 4903 requires explicit ARMCPU_4903_BOOT_CPU_ONLY=1"
++#endif
++
++// Exact private entry from XNU 4903 osfmk/arm/rtclock.h.
+ extern "C" void rtclock_intr (unsigned int);
+-// Kernel-internal entries used for secondary CPU startup (Darwin 23 osfmk).
+-extern "C" vm_offset_t ml_static_vtop (vm_offset_t);
+-extern "C" char LowResetVectorBase[], LowResetVectorEnd[], ResetHandlerData[], const_boot_args[];
+-extern "C" kern_return_t processor_start (processor_t);
+-extern "C" kern_return_t kernel_thread_start (void (*) (void *, wait_result_t), void *, thread_t *);
+-extern "C" void thread_deallocate (thread_t);
+-extern "C" thread_t current_thread (void);
+-extern "C" kern_return_t thread_terminate (thread_t);
+ 
+ extern "C" {
+ volatile uint32_t armcpu_registered = 0;
++volatile uint32_t armcpu_4903_boot_only = 1;
++volatile uint32_t armcpu_4903_rejected_cpus = 0;
++volatile uint32_t armcpu_4903_rejected_starts = 0;
++volatile uint32_t armcpu_4903_last_rejection = 0;
+ volatile uint32_t armcpu_gic_ready = 0;
+ volatile uint32_t armcpu_timer_intid = 27; // Legacy/QEMU default; /timer overrides it.
+ volatile uint64_t armcpu_timer_interrupts = 0;
+@@ -49,8 +50,11 @@
+ 
+ class ArmCpu : public IOCPU {
+   OSDeclareDefaultStructors (ArmCpu)
+-  OSSharedPtr<IOMemoryMap> distributor;
+-  OSSharedPtr<IOMemoryMap> redistributors;
++  IOMemoryMap *distributor = nullptr;
++  IOMemoryMap *redistributors = nullptr;
++  bool registered = false;
++  bool validateBootCPU (IOService *provider, uint32_t *physical);
++  void releaseMappings (void);
+   IOCPUInterruptController *controller = nullptr;
+   const OSSymbol *cpuName = nullptr;
+   uintptr_t dist = 0;
+@@ -60,22 +64,19 @@
+   uint64_t redistSize = 0;
+   bool skipGic = false;
+   bool diagnosePower = false;
+-  bool secondary = false;
+   uint32_t logicalId = 0;
+   bool mapGic (void);
+   bool initDistributor (void);
+   bool wakeRedistributor (bool local);
+-  bool finishSecondary (void);
+-  static void drainPending (void);
+   bool prepareGic (void);
+-  void startSecondary (void);
+-  static void startThread (void *argument, wait_result_t);
+   void enableGic (void);
+   void interrupt (void);
+   static void dispatch (void *target, void *, void *, int);
+ public:
+   IOService *probe (IOService *provider, SInt32 *score) override;
+   bool start (IOService *provider) override;
++  void free (void) override;
++  void stop (IOService *provider) override;
+   void initCPU (bool boot) override;
+   void quiesceCPU (void) override;
+   void haltCPU (void) override;
+@@ -144,21 +145,12 @@
+   return true;
+ }
+ 
+-// GIC state shared by all CPU nubs. The boot CPU maps the distributor and redistributor frames; a secondary core
+-// only needs the virtual addresses and its own redistributor frame.
+-static OSSharedPtr<IOMemoryMap> gDistMap, gRedistMap;
++// Only the boot object owns maps. Global addresses borrow that object's lifetime.
++static ArmCpu *gBootOwner = nullptr; // Atomic claim prevents duplicate CPU nubs from sharing maps.
+ static uintptr_t gDist = 0, gFrames = 0;
+ static uint64_t gFramesSize = 0;
+-static IOCPUInterruptController *gController = nullptr;
+-static volatile uint32_t gGicShared = 0;
+-static uint64_t gRedistStride = 0; // DT redistributor-stride; 0 = infer from GICR_TYPER.VLPIS
++static uint64_t gRedistStride = 0;
+ volatile uint32_t armcpu_gic_stride = 0, armcpu_gic_typer_probe[2];
+-static bool gSmpWanted = false;
+-// Secondary nubs never wait for the boot CPU (IOSleep needs the timer that only the boot nub enables): they queue here and
+-// the boot nub, or a late secondary once the boot CPU is registered, finishes them.
+-static class ArmCpu *volatile gPending[ARMCPU_SMP_SLOTS];
+-static volatile uint32_t gBootRegistered = 0;
+-static bool gRemoteGic = false; // sheng-smp-gic=1: the boot CPU prepares a new core's redistributor before CPU_ON
+ 
+ // Shared peripheral interrupts (GICv3 SPIs, INTID 32..1019). A driver attaches a handler for one INTID; the line is set to
+ // Group 1 non-secure, priority 0xa0, the given trigger and routed to the boot CPU (GICD_IROUTER, affinity routing is on),
+@@ -184,25 +176,67 @@
+ volatile uint32_t armcpu_spi_unhandled_id = 0;
+ }
+ 
+-IOService *ArmCpu::probe (IOService *provider, SInt32 *score)
++void ArmCpu::releaseMappings (void)
++{
++  if (dist != 0 && gDist == dist) {
++    gDist = gFrames = gCpuIf = 0;
++    gFramesSize = 0;
++    armcpu_gic_ready = 0;
++  }
++  armcpu4903ReleaseMaps (distributor, redistributors);
++  dist = redist = redistBase = 0;
++  redistSize = 0;
++}
++
++void ArmCpu::free (void)
++{
++  // XNU cpu_data and the IRQ controller retain raw callbacks into a registered CPU.
++  if (registered) { panic ("ArmCpu 4903: registered boot CPU cannot be freed"); }
++  releaseMappings ();
++  if (cpuName != nullptr) { cpuName->release (); cpuName = nullptr; }
++  IOCPU::free ();
++}
++
++void ArmCpu::stop (IOService *provider)
++{
++  if (registered) { panic ("ArmCpu 4903: boot CPU unload is unsupported"); }
++  IOCPU::stop (provider);
++}
++
++bool ArmCpu::validateBootCPU (IOService *provider, uint32_t *physical)
+ {
+   OSData *type = OSDynamicCast (OSData, provider->getProperty ("device_type"));
+   OSData *reg = OSDynamicCast (OSData, provider->getProperty ("reg"));
+-  uint32_t id;
+-  if ((type == nullptr) || (type->getLength () != 4) ||
+-      (memcmp (type->getBytesNoCopy (), "cpu", 4) != 0) ||
+-      (reg == nullptr) || (reg->getLength () < sizeof (id))) {
+-    return nullptr;
+-  }
+-  memcpy (&id, reg->getBytesNoCopy (), sizeof (id));
+-  if (ml_get_cpu_number (id) != ml_get_boot_cpu_number ()) {
+-    if (gGicV2) { return nullptr; }
+-    unsigned smp = 0;
+-    PE_parse_boot_argn ("sheng-smp", &smp, sizeof (smp));
+-    if (smp == 0 || ml_get_cpu_number (id) < 0 || ml_get_cpu_number (id) >= ARMCPU_SMP_SLOTS) {
+-      return nullptr; // Secondary startup is opt-in (sheng-smp=1).
+-    }
+-  }
++  if (type == nullptr || type->getLength () != 4 ||
++      memcmp (type->getBytesNoCopy (), "cpu", 4) != 0 ||
++      reg == nullptr || reg->getLength () != sizeof (*physical)) {
++    return false;
++  }
++  memcpy (physical, reg->getBytesNoCopy (), sizeof (*physical));
++  unsigned smp = 0, remote = 0, requestedCPUs = 0;
++  PE_parse_boot_argn ("cpus", &requestedCPUs, sizeof (requestedCPUs));
++  PE_parse_boot_argn ("sheng-smp", &smp, sizeof (smp));
++  PE_parse_boot_argn ("sheng-smp-gic", &remote, sizeof (remote));
++  armcpu_smp_requested = smp != 0 || remote != 0;
++  uint64_t mpidr;
++  __asm__ volatile ("mrs %0, mpidr_el1" : "=r" (mpidr));
++  const ArmCpu4903BootResult result = armcpu4903BootPolicy (
++      *physical, ml_get_cpu_number (*physical), ml_get_boot_cpu_number (),
++      ml_get_cpu_count (), ml_get_max_cpu_number (), mpidr, smp, remote, requestedCPUs);
++  if (result != ArmCpu4903BootOK) {
++    armcpu_4903_rejected_cpus = armcpu_4903_rejected_cpus + 1;
++    armcpu_4903_last_rejection = static_cast<uint32_t> (result);
++    IOLog ("ArmCpu 4903: refusing CPU %u reason %u; boot-only mode requires cpus=1 and no SMP request\n",
++           *physical, static_cast<unsigned> (result));
++    return false;
++  }
++  return true;
++}
++
++IOService *ArmCpu::probe (IOService *provider, SInt32 *score)
++{
++  uint32_t physical;
++  if (!validateBootCPU (provider, &physical)) { return nullptr; }
+   return IOCPU::probe (provider, score);
+ }
+ 
+@@ -267,16 +301,10 @@
+       return false;
+     }
+   }
+-  OSSharedPtr<IOMemoryDescriptor> distMemory (IOMemoryDescriptor::withPhysicalAddress (
+-      bus[1] + regions[0] - bus[0], regions[1], kIODirectionInOut), OSNoRetain);
+-  OSSharedPtr<IOMemoryDescriptor> rdMemory (IOMemoryDescriptor::withPhysicalAddress (
+-      bus[1] + regions[2] - bus[0], regions[3], kIODirectionInOut), OSNoRetain);
+-  if (!distMemory || !rdMemory) {
+-    return false;
+-  }
+-  distributor = OSSharedPtr<IOMemoryMap> (distMemory->map (kIOMapAnywhere | kIOMapInhibitCache), OSNoRetain);
+-  redistributors = OSSharedPtr<IOMemoryMap> (rdMemory->map (kIOMapAnywhere | kIOMapInhibitCache), OSNoRetain);
+-  if (!distributor || !redistributors) {
++  if (!armcpu4903MapPair<IOMemoryDescriptor> (
++      bus[1] + regions[0] - bus[0], regions[1],
++      bus[1] + regions[2] - bus[0], regions[3], kIODirectionInOut,
++      static_cast<IOOptionBits> (kIOMapAnywhere | kIOMapInhibitCache), distributor, redistributors)) {
+     return false;
+   }
+   dist = static_cast<uintptr_t> (distributor->getVirtualAddress ());
+@@ -285,8 +313,6 @@
+   }
+   redistBase = static_cast<uintptr_t> (redistributors->getVirtualAddress ());
+   redistSize = regions[3];
+-  gDistMap = distributor;
+-  gRedistMap = redistributors;
+   gDist = dist;
+   if (gGicV2) { gCpuIf = redistBase; } // second reg pair is GICC, never a redistributor
+   gFrames = gGicV2 ? 0 : redistBase;
+@@ -352,7 +378,6 @@
+     gBootAffinity = affinity & 0xff00ffffffULL;
+     if ((gBootAffinity & 0xff) >= 8 || !gicV2 ().initialize ()) { return false; }
+   } else if (!initDistributor () || !wakeRedistributor (true)) { return false; }
+-  gGicShared = 1;
+   return true;
+ }
+ 
+@@ -384,14 +409,14 @@
+   __asm__ volatile ("msr icc_pmr_el1, %0" :: "r" (value) : "memory");
+   value = 0;
+   __asm__ volatile ("msr icc_bpr1_el1, %0" :: "r" (value) : "memory");
+-  if (!secondary) { gBootAffinity = affinity & 0xff00ffffffULL; }
+-  if (!secondary || !gRemoteGic) {
++  gBootAffinity = affinity & 0xff00ffffffULL;
++  {
+     write32 (redist + 0x10000, 0x100, kSgiPpiEnable);
+     write32 (dist, 0, read32 (dist, 0) | 0x12U);
+   }
+   value = 1;
+   __asm__ volatile ("msr icc_igrpen1_el1, %0; dsb sy; isb" :: "r" (value) : "memory");
+-  if (!secondary) {
++  {
+     uint64_t pmr, ig, sre;
+     __asm__ volatile ("mrs %0, icc_pmr_el1" : "=r" (pmr));
+     __asm__ volatile ("mrs %0, icc_igrpen1_el1" : "=r" (ig));
+@@ -411,191 +436,76 @@
+ 
+ bool ArmCpu::start (IOService *provider)
+ {
+-  unsigned skip = 0;
++  uint32_t physical;
++  if (!validateBootCPU (provider, &physical)) { return false; }
++  ArmCpu *expected = nullptr;
++  if (!__atomic_compare_exchange_n (&gBootOwner, &expected, this, false, __ATOMIC_ACQ_REL, __ATOMIC_ACQUIRE)) {
++    IOLog ("ArmCpu 4903: duplicate boot CPU start refused\n");
++    return false;
++  }
++  logicalId = static_cast<uint32_t> (ml_get_cpu_number (physical));
++  __asm__ volatile ("mrs %0, mpidr_el1" : "=r" (affinity));
++  armcpu_boot_mpidr = static_cast<uint32_t> (affinity);
++  unsigned skip = 0, selfIpi = 0, spiIpi = 0, diagnostic = 0;
+   PE_parse_boot_argn ("armcpu-skip-gic", &skip, sizeof (skip));
+   skipGic = skip != 0;
+-  unsigned selfIpi = 0;
+   PE_parse_boot_argn ("armcpu-self-ipi", &selfIpi, sizeof (selfIpi));
+   gSelfIpi = selfIpi == 1;
+-  unsigned spiIpi = 0;
+   PE_parse_boot_argn ("armcpu-spi-ipi", &spiIpi, sizeof (spiIpi));
++  PE_parse_boot_argn ("armcpu-diagnostics", &diagnostic, sizeof (diagnostic));
++  diagnosePower = diagnostic == 1;
++  cpuName = OSSymbol::withCStringNoCopy ("ARM architectural boot CPU (XNU 4903 boot-only)");
++  if (cpuName == nullptr) {
++    __atomic_store_n (&gBootOwner, static_cast<ArmCpu *> (nullptr), __ATOMIC_RELEASE);
++    return false;
++  }
++  if ((!skipGic && !prepareGic ()) || !IOCPU::start (provider)) {
++    releaseMappings ();
++    cpuName->release (); cpuName = nullptr;
++    __atomic_store_n (&gBootOwner, static_cast<ArmCpu *> (nullptr), __ATOMIC_RELEASE);
++    return false;
++  }
++  // IOCPU::start publishes this in gIOCPUs. There is no verified deregistration
++  // path in this bring-up port. Pin the successful CPU for kernel lifetime.
++  retain ();
++  registered = true;
+   gSpiIpi = spiIpi == 1 && !gGicV2;
+-  unsigned diagnostic = 0;
+-  PE_parse_boot_argn("armcpu-diagnostics", &diagnostic, sizeof(diagnostic));
+-  diagnosePower=diagnostic==1;
+-  uint32_t physical;
+-  OSData *reg = OSDynamicCast (OSData, provider->getProperty ("reg"));
+-  memcpy (&physical, reg->getBytesNoCopy (), sizeof (physical));
+-  logicalId = static_cast<uint32_t> (ml_get_cpu_number (physical));
+-  secondary = logicalId != static_cast<uint32_t> (ml_get_boot_cpu_number ());
+-  if (secondary) {
+-    if (!IOCPU::start (provider)) { return false; }
+-    armcpu_smp_step[logicalId] = 1;
+-    affinity = physical;
+-    armcpu_smp_mpidr[logicalId] = physical;
+-    cpuName = OSSymbol::withCStringNoCopy ("ARM architectural secondary CPU");
+-    if (cpuName == nullptr) { return false; }
+-    retain ();
+-    __atomic_store_n (&gPending[logicalId], this, __ATOMIC_RELEASE);
+-    if (gBootRegistered != 0) { drainPending (); }
+-    return true;
+-  } else {
+-    uint64_t bootMpidr;
+-    __asm__ volatile ("mrs %0, mpidr_el1" : "=r" (bootMpidr));
+-    armcpu_boot_mpidr = static_cast<uint32_t> (bootMpidr);
+-    if ((!skipGic && !prepareGic ()) || !IOCPU::start (provider)) { return false; }
+-    if (gGicV2) { gSpiIpi = false; } // v3 software-SPI IPI experiment is not a v2 path
+-  }
+-  cpuName = OSSymbol::withCStringNoCopy ("ARM architectural boot CPU");
+-  if (cpuName == nullptr) { return false; }
+   ml_processor_info_t info = {};
+   info.cpu_id = this;
+   info.phys_id = physical;
+   info.log_id = logicalId;
+-  info.cluster_id = static_cast<uint32_t> (ml_get_cluster_number (physical));
+-  info.cluster_type = ml_get_boot_cluster_type ();
++  // Y35A's tested single cluster, with only physical/logical CPU 0 accepted.
++  // This is not a replacement ml_get_cluster_number() topology implementation.
++  info.cluster_id = 0;
++  info.cluster_type = ml_get_boot_cluster ();
+   perfmon_interrupt_handler_func pmi = nullptr;
+   kern_return_t status = ml_processor_register (&info, &machProcessor, &ipi_handler, &pmi);
+-  if (status != KERN_SUCCESS) { panic ("ArmCpu: CPU %u registration failed: %d", logicalId, status); }
++  if (status != KERN_SUCCESS) { panic ("ArmCpu 4903: boot registration failed: %d", status); }
+   setCPUNumber (info.log_id);
+   armcpu_registered = 1;
+-  unsigned smp = 0;
+-  PE_parse_boot_argn ("sheng-smp", &smp, sizeof (smp));
+-  gSmpWanted = smp != 0 && !gGicV2; // v2 port deliberately supports only the boot CPU
+-  unsigned remote = 0;
+-  PE_parse_boot_argn ("sheng-smp-gic", &remote, sizeof (remote));
+-  gRemoteGic = remote != 0;
+-  armcpu_smp_requested = gSmpWanted ? 1 : 0;
+-  unsigned cpuCount = static_cast<unsigned> (ml_get_max_cpu_number ()) + 1;
+   controller = new IOCPUInterruptController;
+-  if ((controller == nullptr) || (controller->initCPUInterruptController (cpuCount, 1) != kIOReturnSuccess)) {
+-    panic ("ArmCpu: CPU interrupt controller allocation failed");
+-  }
++  if (controller == nullptr || controller->initCPUInterruptController (1, 1) != kIOReturnSuccess) {
++    panic ("ArmCpu 4903: CPU interrupt controller allocation failed");
++  }
++  // Controller, maps and symbol stay owned by the pinned CPU. Installation is
++  // irreversible here; a failure after publication is fatal rather than false success.
+   controller->registerCPUInterruptController ();
+   controller->enableCPUInterrupt (this);
+-  if (controller->registerInterrupt (provider, logicalId, this, &ArmCpu::dispatch, nullptr) != kIOReturnSuccess) {
+-    panic ("ArmCpu: CPU IRQ action registration failed");
+-  }
+-  gController = controller;
++  if (controller->registerInterrupt (provider, 0, this, &ArmCpu::dispatch, nullptr) != kIOReturnSuccess) {
++    panic ("ArmCpu 4903: CPU IRQ action registration failed");
++  }
+   initCPU (true);
+   registerService ();
+-  __atomic_store_n (&gBootRegistered, 1U, __ATOMIC_RELEASE);
+-  drainPending ();
+   return true;
+ }
+ 
+-void ArmCpu::drainPending (void)
+-{
+-  for (unsigned id = 1; id < ARMCPU_SMP_SLOTS; id++) {
+-    ArmCpu *cpu = __atomic_exchange_n (&gPending[id], static_cast<ArmCpu *> (nullptr), __ATOMIC_ACQ_REL);
+-    if (cpu != nullptr) { cpu->finishSecondary (); }
+-  }
+-}
+-
+-bool ArmCpu::finishSecondary (void)
+-{
+-  if (gGicV2) { return false; }
+-  dist = gDist;
+-  redistBase = gFrames;
+-  redistSize = gFramesSize;
+-  if (gRemoteGic && !wakeRedistributor (false)) { armcpu_smp_fail[logicalId] = 3; return false; }
+-  ml_processor_info_t info = {};
+-  info.cpu_id = this;
+-  info.phys_id = static_cast<uint32_t> (affinity);
+-  info.log_id = logicalId;
+-  info.cluster_id = static_cast<uint32_t> (ml_get_cluster_number (static_cast<uint32_t> (affinity)));
+-  info.cluster_type = ml_get_boot_cluster_type ();
+-  perfmon_interrupt_handler_func pmi = nullptr;
+-  kern_return_t status = ml_processor_register (&info, &machProcessor, &ipi_handler, &pmi);
+-  if (status != KERN_SUCCESS) { armcpu_smp_fail[logicalId] = 4; return false; }
+-  setCPUNumber (info.log_id);
+-  armcpu_smp_step[logicalId] = 2;
+-  setCPUState (kIOCPUStateUninitalized);
+-  registerService ();
+-  startSecondary ();
+-  return true;
+-}
+-
+-// PSCI conduit comes from the /psci node of the device tree ("smc" or "hvc"); no default is assumed.
+-static bool psciConduit (bool *hvc)
+-{
+-  IORegistryEntry *psci = IORegistryEntry::fromPath ("/psci", gIODTPlane);
+-  if (psci == nullptr) { return false; }
+-  OSData *method = OSDynamicCast (OSData, psci->getProperty ("method"));
+-  bool ok = false;
+-  if (method != nullptr && method->getLength () == 4 && memcmp (method->getBytesNoCopy (), "smc", 4) == 0) {
+-    *hvc = false; ok = true;
+-  } else if (method != nullptr && method->getLength () == 4 && memcmp (method->getBytesNoCopy (), "hvc", 4) == 0) {
+-    *hvc = true; ok = true;
+-  }
+-  psci->release ();
+-  return ok;
+-}
+-
+-static int64_t psciCall (bool hvc, uint64_t function, uint64_t a, uint64_t b, uint64_t c)
+-{
+-  register uint64_t x0 __asm__ ("x0") = function;
+-  register uint64_t x1 __asm__ ("x1") = a;
+-  register uint64_t x2 __asm__ ("x2") = b;
+-  register uint64_t x3 __asm__ ("x3") = c;
+-  if (hvc) {
+-    __asm__ volatile ("hvc #0" : "+r" (x0) : "r" (x1), "r" (x2), "r" (x3) : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "memory");
+-  } else {
+-    __asm__ volatile ("smc #0" : "+r" (x0) : "r" (x1), "r" (x2), "r" (x3) : "x4", "x5", "x6", "x7", "x8", "x9", "x10", "x11", "x12", "x13", "x14", "x15", "x16", "x17", "memory");
+-  }
+-  return static_cast<int64_t> (x0);
+-}
+-
+-void ArmCpu::startThread (void *argument, wait_result_t)
+-{
+-  ArmCpu *self = static_cast<ArmCpu *> (argument);
+-  armcpu_smp_step[self->logicalId] = 3;
+-  // Blocks until the new core reaches the scheduler; a core that never arrives only stalls this helper thread.
+-  processor_start (self->machProcessor);
+-  thread_terminate (current_thread ());
+-}
+-
+-void ArmCpu::startSecondary (void)
+-{
+-  thread_t thread;
+-  if (kernel_thread_start (&ArmCpu::startThread, this, &thread) != KERN_SUCCESS) {
+-    armcpu_smp_psci_rc[logicalId] = -1000;
+-    return;
+-  }
+-  thread_deallocate (thread);
+-}
+-
+ void ArmCpu::initCPU (bool boot)
+ {
+-  if (gGicV2 && secondary) { panic ("ArmCpu: GICv2 secondary startup is unsupported"); }
+-  if (secondary) {
+-    if (!boot) { panic ("ArmCpu: secondary resume is unsupported"); }
+-    armcpu_smp_step[logicalId] = 5;
+-    uint64_t mpidr;
+-    __asm__ volatile ("mrs %0, mpidr_el1" : "=r" (mpidr));
+-    armcpu_smp_seen_mpidr[logicalId] = static_cast<uint32_t> (mpidr);
+-    // A failure is recorded and the core parked (rather than a panic that hides the other cores' state).
+-    if ((mpidr & 0xffff) != (affinity & 0xffff)) { armcpu_smp_fail[logicalId] = 1; for (;;) { __asm__ volatile ("wfe"); } }
+-    if (!gRemoteGic && !wakeRedistributor (true)) { armcpu_smp_fail[logicalId] = 2; for (;;) { __asm__ volatile ("wfe"); } }
+-    armcpu_smp_step[logicalId] = 6;
+-    enableGic ();
+-    if (gSpiIpi) { spiIpiConfigure (gDist, logicalId, affinity); }
+-    // The shared IOCPUInterruptController blocks registrations until every core is enabled, so the secondary cores
+-    // install their handler directly. ml_install_interrupt_handler() records it in the calling core's cpu_data.
+-    ml_install_interrupt_handler (this, static_cast<int> (logicalId), this, reinterpret_cast<IOInterruptHandler> (&ArmCpu::dispatch), nullptr);
+-    enableCPUTimeBase (true);
+-    setCPUState (kIOCPUStateRunning);
+-    armcpu_smp_step[logicalId] = 7;
+-    armcpu_smp_running = armcpu_smp_running + 1;
+-    // XNU clears SIGPdisabled for a core the first time that core takes an IPI, and cpu_signal() silently skips a core until then; Apple's
+-    // CPU driver provokes it with a self-IPI from initCPU (osfmk/kern/machine.c, processor_up).
+-    if (gSelfIpi) { signalCPU (this); }
+-    return;
+-  }
+-  if (!boot) { panic ("ArmCpu: secondary/resume CPU startup is unsupported"); }
++  if (!boot || !registered || logicalId != 0) {
++    panic ("ArmCpu 4903: secondary/resume CPU startup is unsupported");
++  }
+   if (skipGic) {
+-    // Explicit A/B hardware diagnostic: do not touch GIC MMIO or enable an
+-    // interrupt source. CPU registration still happens; the timer is left off.
++    // Diagnostic registration only: this does not claim working interrupts.
+     setCPUState (kIOCPUStateRunning);
+     return;
+   }
+@@ -668,6 +578,7 @@
+ 
+ void ArmCpu::signalCPU (IOCPU *target)
+ {
++  if (target != this) { panic ("ArmCpu 4903: remote CPU signal is unsupported"); }
+   if (skipGic) { return; }
+   ArmCpu *peer = OSDynamicCast (ArmCpu, target);
+   if (peer == nullptr || (peer->signalTarget () & 0xff) >= 16) {
+@@ -786,6 +697,9 @@
+ 
+ extern "C" void armcpu_ipi_selftest (uint64_t aff)
+ {
++  if ((aff & 0xff00ffffffULL) != gBootAffinity) {
++    panic ("ArmCpu 4903: remote IPI diagnostic is unsupported");
++  }
+   if (armcpu_gic_ready == 0) { return; }
+   if (gGicV2) {
+     if (gicV2 ().sendSelfSgi (aff, gBootAffinity)) { armcpu_ipi_selftest_sent = armcpu_ipi_selftest_sent + 1; }
+@@ -823,35 +737,11 @@
+   for (;;) { __asm__ volatile ("wfi"); }
+ }
+ 
+-// The new core runs with its MMU and caches off until start_cpu enables them, so it reads the reset vector, ResetHandlerData
+-// and the boot arguments from memory. Write those lines back to the point of coherency first: on this SoC the boot CPU's
+-// dirty cache lines are not guaranteed to be visible to a core with caches off (XNU only flushes the per-CPU data).
+-static void cleanToMemory (const void *start, size_t length)
+-{
+-  uint64_t ctr;
+-  __asm__ volatile ("mrs %0, ctr_el0" : "=r" (ctr));
+-  uintptr_t line = static_cast<uintptr_t> (4) << ((ctr >> 16) & 15);
+-  uintptr_t address = reinterpret_cast<uintptr_t> (start) & ~(line - 1), end = reinterpret_cast<uintptr_t> (start) + length;
+-  for (; address < end; address += line) { __asm__ volatile ("dc civac, %0" :: "r" (address) : "memory"); }
+-  __asm__ volatile ("dsb sy; isb" ::: "memory");
+-}
+-
+ kern_return_t ArmCpu::startCPU (vm_offset_t, vm_offset_t)
+ {
+-  if (gGicV2 || !secondary) { return KERN_NOT_SUPPORTED; }
+-  bool hvc = false;
+-  if (!psciConduit (&hvc)) { armcpu_smp_psci_rc[logicalId] = -1001; return KERN_NOT_SUPPORTED; }
+-  armcpu_smp_conduit = hvc ? 2 : 1;
+-  // PSCI 0.2 CPU_ON (SMC64 function id); the entry point is the kernel's physical reset vector page, whose reset
+-  // code selects this core's cpu_data entry by MPIDR affinity. The context id is unused by that code.
+-  uint64_t entry = static_cast<uint64_t> (ml_static_vtop (reinterpret_cast<vm_offset_t> (LowResetVectorBase)));
+-  cleanToMemory (LowResetVectorBase, 0x10000);   // reset vector, start_cpu and the code up to the MMU enable
+-  cleanToMemory (ResetHandlerData, 0x1000);
+-  cleanToMemory (const_boot_args, 0x1000);
+-  armcpu_smp_step[logicalId] = 4;
+-  int64_t result = psciCall (hvc, 0xc4000003ULL, affinity & 0xff00ffffffULL, entry, 0);
+-  armcpu_smp_psci_rc[logicalId] = static_cast<int32_t> (result);
+-  return result == 0 ? KERN_SUCCESS : KERN_FAILURE;
++  armcpu_4903_rejected_starts = armcpu_4903_rejected_starts + 1;
++  IOLog ("ArmCpu 4903: startCPU refused; secondary startup is unsupported\n");
++  return KERN_NOT_SUPPORTED;
+ }
+ 
+ const OSSymbol *ArmCpu::getCPUName (void)

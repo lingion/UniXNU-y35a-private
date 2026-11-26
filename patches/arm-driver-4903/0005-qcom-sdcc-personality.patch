@@ -1,0 +1,18 @@
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -45,6 +45,14 @@
+     "     'IOProviderClass' = IOPlatformExpertDevice;"
+     "     'IONameMatch'     = 'device-tree';"
+     "     'IOProbeScore'    = 5000:32;"
+     "   },"
++#if defined(XNU_NATIVE_SDCC) && XNU_NATIVE_SDCC
++    "   {"
++    "     'IOClass'         = NativeSdcc;"
++    "     'IOProviderClass' = IOPlatformDevice;"
++    "     'IONameMatch'     = 'qcom,sdhci-msm';"
++    "     'IOProbeScore'    = 1000:32;"
++    "   },"
++#endif
+     "   {"
+     "     'IOClass'         = IOPanicPlatform;"
+     "     'IOProviderClass' = IOPlatformExpertDevice;"

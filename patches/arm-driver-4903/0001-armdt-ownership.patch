@@ -1,0 +1,64 @@
+--- a/ArmDTPlatform/ArmDTPlatform.cpp
++++ b/ArmDTPlatform/ArmDTPlatform.cpp
+@@ -35,6 +35,7 @@
+   OSDeclareDefaultStructors (ArmDTPlatform)
+ public:
+   bool configure (IOService *provider) override;
++  void free (void) override;
+   int haltRestart (unsigned int type) override;
+   const char *deleteList (void) override;
+   const char *excludeList (void) override;
+@@ -42,10 +43,20 @@
+   bool hasNVRAMProxy (IOService *provider);
+   bool createDeviceNubs (IOService *provider);
+   bool prepareWarmReset (IOService *provider);
+-  OSSharedPtr<IOMemoryMap> resetRegister;
++  IOMemoryMap *resetRegister = nullptr;
+ };
+ 
+ OSDefineMetaClassAndStructors (ArmDTPlatform, IODTPlatformExpert)
++
++// XNU 4903 returns owned raw pointers. Match the map lifetime to this object.
++void ArmDTPlatform::free (void)
++{
++  if (resetRegister != nullptr) {
++    resetRegister->release ();
++    resetRegister = nullptr;
++  }
++  IODTPlatformExpert::free ();
++}
+ 
+ // A PS_HOLD write inherits the PMIC action. Enable this path only when the
+ // bootloader has explicitly verified warm-reset configuration. It cannot
+@@ -70,11 +81,15 @@
+   entry->release ();
+   if (!valid || mode != 1 || range[0] == 0 || (range[0] & 3) != 0 || range[1] != 4 ||
+       range[0] > UINT64_MAX - range[1]) { return false; }
+-  OSSharedPtr<IOMemoryDescriptor> memory (IOMemoryDescriptor::withPhysicalAddress (
+-    range[0], range[1], kIODirectionInOut), OSNoRetain);
+-  if (!memory) { return false; }
+-  resetRegister = OSSharedPtr<IOMemoryMap> (memory->map (kIOMapAnywhere | kIOMapInhibitCache), OSNoRetain);
+-  return static_cast<bool> (resetRegister);
++  IOMemoryDescriptor *memory = IOMemoryDescriptor::withPhysicalAddress (
++    range[0], range[1], kIODirectionInOut);
++  if (memory == nullptr) { return false; }
++  IOMemoryMap *mapping = memory->map (kIOMapAnywhere | kIOMapInhibitCache);
++  memory->release ();
++  if (mapping == nullptr) { return false; }
++  if (resetRegister != nullptr) { resetRegister->release (); }
++  resetRegister = mapping;
++  return true;
+ }
+ 
+ int ArmDTPlatform::haltRestart (unsigned int type)
+@@ -195,8 +210,8 @@
+     platformStageReset ();
+   }
+ 
+-  // The inherited implementation publishes real IODTNVRAM from /chosen,
+-  // then attaches the CPU and top-level nubs. No identity or resource is
++  // XNU 4903 publishes IODTNVRAM from /options; IODTNVRAM reads the proxy
++  // from /chosen. The platform then attaches the CPU and top-level nubs. No identity or resource is
+   // invented here; failure is returned instead of replaced with a stub.
+   if (!IODTPlatformExpert::configure (provider)) {
+     return false;

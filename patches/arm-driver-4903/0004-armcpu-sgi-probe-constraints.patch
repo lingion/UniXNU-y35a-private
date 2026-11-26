@@ -1,0 +1,11 @@
+--- a/ArmCpu/ArmCpu.cpp
++++ b/ArmCpu/ArmCpu.cpp
+@@ -661,7 +661,7 @@
+     for (uint64_t intid = 0; intid < 16; intid++) {
+       const uint64_t sgi = base | (intid << 24);
+       uint64_t h = 1023, ta, tb;
+       __asm__ volatile ("dsb ishst; isb; mrs %0, cntvct_el0; isb" : "=r" (ta) :: "memory");
+-      __asm__ volatile ("msr icc_sgi1r_el1, %0; isb; mrs %1, cntvct_el0" : "=r" (tb) : "r" (sgi) : "memory");
++      __asm__ volatile ("msr icc_sgi1r_el1, %1; isb; mrs %0, cntvct_el0" : "=r" (tb) : "r" (sgi) : "memory");
+       if (intid == 0) { out[8] = tb - ta; }
+       for (unsigned polls = 0; polls < 400; polls++) {
