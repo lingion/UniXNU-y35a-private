@@ -1103,3 +1103,7 @@ The active target is the R208 TF/SD offline path with GitHub Actions as the only
 
 ## 2026-11-26 R208 latest CI closure
 R208 latest CI run `45852497429` on commit `3538cccc70e4b3490f7b65e9042713e6266b8c4e` is green through root-selection contracts, NativeSdcard object compile, IOStorageFamily-191 combine and deterministic archive. Object `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`; combined `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`; archive `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`. Kernel link, package/probe, TF GPT/APFS/root/fallback and device evidence remain pending.
+
+
+## 2026-11-27 R208 offline CI state
+R208 validation `45855811648` and Docs `45855811845` pass on commit `ba4854d4cb076388f61cb2bcdbdf9a7e8874ec5d7`. Offline source, host, root-selection, NativeSdcard, IOStorage archive and documentation gates are green. Kernel link inputs, package/probe, TF GPT/APFS/root/fallback and device evidence remain pending; device_run_allowed=false.

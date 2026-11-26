@@ -2937,3 +2937,9 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 事实: CI run `45852497429` on commit `3538cccc70e4b3490f7b65e9042713e6266b8c4e` passed manifest, SD host suite, ADT, root-selection negative/positive contract, exact XNU/IOStorageFamily fetch, installhdrs, NativeSdcard compile, IOStorageFamily combine and deterministic archive. NativeSdcard object SHA `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`; combined object SHA `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`; archive SHA `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`.
 事实: Earlier runs `45831371261`, `45830700561`, `45837906898`, `45838744656`, `45838740886`, and `45840325230` remain historical failures at header/object or manifest gates and are not latest.
 裁决: R208 host/source/root-selection/storage archive closure is green. XNU kernel link still lacks CI-bound native fakeroot/SDK overlay/source provenance; package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain unverified. No local build, no TF write, `device_run_allowed=false`.
+
+
+## L-2026-11-27T00:05:00Z-codex — R208 CI/docs final offline state
+
+事实: R208 TF validation run `45855811648` and Docs run `45855811845`, both on commit `ba4854d4cb076388f61cb2bcdbdf13efb8404dc5`, completed successfully. R208 validation covers manifest, SD host suite, ADT, root-selection contract, exact XNU and IOStorageFamily inputs, installhdrs, NativeSdcard object and deterministic IOStorage archive. Docs covers the historical absolute-path dead-link handling.
+裁决: Offline R208 source/host/root-selection/storage/archive/docs gates are green. Kernel link still lacks CI-bound native fakeroot/SDK overlay/source provenance; package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain unverified. No local build or device operation occurred; `device_run_allowed=false`.
