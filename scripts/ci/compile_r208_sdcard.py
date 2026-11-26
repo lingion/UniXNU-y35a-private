@@ -65,13 +65,19 @@ def main() -> int:
         xnu / "iokit", xnu / "osfmk", xnu / "bsd", xnu / "libkern",
         xnu / "pexpert", xnu / "EXTERNAL_HEADERS", xnu / "config",
     ]
-    include_roots += [
+    generated_roots = [
         generated / "System/Library/Frameworks/Kernel.framework/Headers",
         generated / "System/Library/Frameworks/Kernel.framework/PrivateHeaders",
         generated / "System/Library/Frameworks/IOKit.framework/Headers",
         generated / "System/Library/Frameworks/IOKit.framework/PrivateHeaders",
         generated / "usr/include", generated / "usr/local/include",
     ]
+    missing_generated = [str(path) for path in generated_roots
+                         if path.name == "Headers" and "Kernel.framework/Headers" in str(path)
+                         and not path.is_dir()]
+    if missing_generated:
+        raise SystemExit("missing required generated Kernel headers: " + ", ".join(missing_generated))
+    include_roots += [path for path in generated_roots if path.is_dir()]
     for include in include_roots:
         if not include.is_dir():
             raise SystemExit(f"missing XNU include root: {include}")
