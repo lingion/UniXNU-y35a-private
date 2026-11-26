@@ -10,7 +10,7 @@ from pathlib import Path
 import argparse,os,struct,sys
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from unixnu.devicetree import node,empty_nvram_proxy
-RAM_RANGES=((0x80000000,0x86000000),(0x8c300000,0x9ff00000),(0xa0000000,0xfffff000))
+RAM_RANGES=((0x80000000,0x83000000),(0x84400000,0x86000000),(0x8c300000,0x9ff00000),(0xa0000000,0xfffff000))
 # XNU treats a zero SoC base as a missing bus and skips clock discovery.
 # Describe the real UART/GIC window with relative child addresses instead.
 SOC_BASE=0x07800000
@@ -75,6 +75,22 @@ def make_tree(*,random_seed,physical_base=0xa0000000,memory_size=0x10000000,warm
                 ('qcom,bus-width',struct.pack('<I',8)),
                 ('qcom,clk-rates',struct.pack('<5I',400000,25000000,50000000,100000000,192000000)),
                 ('qcom,bus-speed-mode',b'HS200_1p8v\0DDR_1p8v\0'),
+                ('vdd-always-on',struct.pack('<I',1)),
+                ('vdd-io-always-on',struct.pack('<I',1)),
+                ('unixnu,handoff',struct.pack('<I',1))]),
+            # Stock PD1502A exposes the removable TF controller as sdhc2:
+            # 4-bit bus and active-low card detect on TLMM GPIO38. The first
+            # SD adapter is polling-only; card detect is retained as board
+            # metadata until a TLMM consumer is linked into XNU.
+            node('sdhc2',[('compatible',b'qcom,sdhci-msm\0'),
+                ('reg',struct.pack('<4Q',0x07864900-SOC_BASE,0x11c,0x07864000-SOC_BASE,0x800)),
+                ('reg-names',b'hc_mem\0core_mem\0'),
+                ('qcom,bus-width',struct.pack('<I',4)),
+                ('qcom,clk-rates',struct.pack('<4I',400000,25000000,50000000,100000000)),
+                ('qcom,card-detect-gpio',struct.pack('<I',38)),
+                ('qcom,card-detect-active-low',struct.pack('<I',1)),
+                ('unixnu,slot',struct.pack('<I',2)),
+                ('unixnu,poll-only',struct.pack('<I',1)),
                 ('vdd-always-on',struct.pack('<I',1)),
                 ('vdd-io-always-on',struct.pack('<I',1)),
                 ('unixnu,handoff',struct.pack('<I',1))]),

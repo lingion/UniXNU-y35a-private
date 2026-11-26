@@ -5,6 +5,14 @@ from pathlib import Path
 OBJ = 'build/xnu/ios-obj/DEVELOPMENT_ARM64_BCM2837'
 
 
+def host_path(root, value):
+    value = str(value)
+    prefix = '/work/UniXNU-y35a'
+    if value == prefix or value.startswith(prefix + '/'):
+        return str(root) + value[len(prefix):]
+    return value
+
+
 def defined_names(paths, global_only):
     """Defined symbol names of Mach-O files and archives."""
     names = set()
@@ -26,7 +34,10 @@ def kernel_names(root, global_only=True):
     filelist = root / OBJ / 'link.filelist'
     if not filelist.is_file():
         raise SystemExit('No XNU symbol names: run a kernel pass first (it writes link.filelist)')
-    names = defined_names([line.strip() for line in filelist.read_text().splitlines() if line.strip()], global_only)
+    names = defined_names(
+        [host_path(root, line.strip()) for line in filelist.read_text().splitlines() if line.strip()],
+        global_only,
+    )
     # The link also exports aliases (all-alias.exp: "_real _alias") that no object defines under that name.
     aliases = root / OBJ / 'all-alias.exp'
     if aliases.is_file():

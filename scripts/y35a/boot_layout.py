@@ -4,7 +4,7 @@ RAM ranges are the physical Y35A's /proc/iomem recorded in evidence/y35a-2026110
 No peripheral firmware or user data is read or written by this offline module.
 """
 import struct
-RAM_RANGES=((0x80000000,0x86000000),(0x8c300000,0x9ff00000),(0xa0000000,0xfffff000))
+RAM_RANGES=((0x80000000,0x83000000),(0x84400000,0x86000000),(0x8c300000,0x9ff00000),(0xa0000000,0xfffff000))
 def physical_base_for(virtual_base,window_start=0xa0000000):
  if window_start%0x200000:raise ValueError('Allocation start must be 2 MiB aligned')
  return window_start+(virtual_base&0x1fffff)

@@ -76,5 +76,21 @@
     "step 7: DeviceTree staged to out/y35a/ios12-kc/ (out/ is gitignored — evidence JSONs are the committed record, artifacts re-derivable from the IPSW).",
     "step 8: CLOSURE.json lives under gitignored out/; the committed evidence file is scripts/data/ios12-root-staging-evidence.json (this file) — repo convention for evidence JSONs.",
     "mdns.conf does not exist on the iOS 12 system volume (brief listed it among minimal /etc candidates); staged /private/etc is passwd/group/master.passwd/hosts/ttys/protocols/services/networks."
-  ]
+  ],
+  "superseding_observation_2026_11_15": {
+    "scope": "Current R152 package and current out/y35a/ios12-root files; preserves the generated 2026-11-04 staged-tree observations above as historical.",
+    "r152": {
+      "boot3_sha256": "96ea5dbaf1fdabeee01fb64f498be3205a3b114d7c6d165768fa99524500e1c3",
+      "ramdisk_second_sha256": "4690a936fd6845a967f79916e735d37f3376969a9778264c8841d5558278a07a",
+      "packaged_trustcache": {"bytes": 3852, "entries": 174, "sha256": "099a621d60e0333eef68d11c2820f99aea0e0e3674d1873d7a52193877a44ba0", "kind": "native v1 RestoreTrustCache inner payload"}
+    },
+    "current_host_sidecar": {"path": "out/y35a/ios12-root/.trustcache", "bytes": 3875, "sha256": "695f912e494cbfe15fab46d424e7c7e3711b32bc1794d8d6d4e4503787ec7f6e", "im4p_prefix_bytes": 23, "inner_payload_equals_r152": true},
+    "ipsw_caches": {
+      "restore": {"path": "dl/Firmware/048-78047-096.dmg.trustcache", "bytes": 3875, "sha256": "695f912e494cbfe15fab46d424e7c7e3711b32bc1794d8d6d4e4503787ec7f6e", "inner_entries": 174, "inner_sha256": "099a621d60e0333eef68d11c2820f99aea0e0e3674d1873d7a52193877a44ba0"},
+      "static": {"path": "dl/Firmware/048-78033-095.dmg.trustcache", "bytes": 38261, "sha256": "06836b6f7d83ee3a4300580e2790581c38dc466521b52dbd8a21727c82535216", "inner_entries": 1737, "inner_sha256": "038e52dde819694d731ae7a3d86be394f936df64743d255a867b8c7ee3d3eb0b", "included_in_r152_boot3": false}
+    },
+    "current_mixed_root_cdhash_coverage": {"macho_files": 58, "restore_only": 49, "static_only": 2, "both": 7, "union": 58, "neither": 0, "missing_from_r152_packaged_restore_cache": ["bin/df", "bin/ps"], "launchd_and_dyld_in_r152_restore_cache": true},
+    "method": "Match each current mixed-root Mach-O CodeDirectory CDHash and hash type against parsed v1 TrustCache entries; spot-check actual files with codesign.",
+    "interpretation": "This identifies later cache coverage requirements only. It does not establish that the R152 amfi_check_dyld_policy_self failure was caused by a TrustCache miss; the failed CDHash is not in the capture."
+  }
 }

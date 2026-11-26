@@ -12,7 +12,7 @@ from make_adt import make_tree
 PAGE=2048
 LOAD=0x80080000
 OWNED_BASE=0xa0000000
-OWNED_SIZE=0x10000000
+DEFAULT_OWNED_SIZE=0x10000000
 align=lambda x,n:(x+n-1)//n*n
 
 def select_device_dt(table):
@@ -50,8 +50,33 @@ def generate_entry_source(*,segments,kernel_data_name,physical_base,memory_end,
     # The shim reproduces the owned-memory and boot_args handoff ABI. rootfs
     # rides the container's second domain at SCRATCH+second_off (no incbin),
     # everything else keeps the boot1-proven copy logic byte-for-byte.
-    segment_table='\n'.join(f" .quad {o}, {a}, {s}" for o,a,s in segments)
-    tc_copy=f" ldr x0,=sidecar_0\n ldr x1,={trustcache['physical']:#x}\n ldr x2,={trustcache['size']:#x}\n bl copy_bytes" if trustcache else ""
+    segment_rows = []
+    for segment in segments:
+        if len(segment) == 3:
+            o, a, file_size = segment
+            zero_size = 0
+        else:
+            o, a, file_size, vm_size = segment
+            zero_size = align(max(vm_size - file_size, 0), 64)
+        segment_rows.append(f" .quad {o}, {a}, {file_size}, {zero_size}")
+    segment_table='\n'.join(segment_rows)
+    tc_copy=f" adr x0,sidecar_0\n ldr x1,={trustcache['physical']:#x}\n ldr x2,={trustcache['size']:#x}\n bl copy_bytes" if trustcache else ""
+    tc_clean=''
+    if trustcache:
+        clean_bytes=align(trustcache['size'],64)
+        tc_clean=(f"\n // Clean the TrustCache sidecar to PoC before XNU remaps it.\n"
+                  f" ldr x0,={trustcache['physical']:#x}\n"
+                  f" mov x2, #{clean_bytes:#x}\n"
+                  f"trustcache_clean:\n"
+                  f" dc cvac, x0\n"
+                  f" add x0, x0, #64\n"
+                  f" subs x2, x2, #64\n"
+                  f" b.ne trustcache_clean\n"
+                  f" dsb sy")
+    tc_probe=(f" ldr x9,={trustcache['physical']:#x}\n"
+              f" ldr w10, [x9]\n"
+              f" ldr x9,=0x859f0000\n"
+              f" str w10, [x9,#32]") if trustcache else ''
     tc_data=f' .balign 16\nsidecar_0:\n .incbin "{trustcache["name"]}"' if trustcache else ""
     rootfs_copy=''
     if rootfs:
@@ -95,15 +120,31 @@ zero_loop:
  stp xzr,xzr,[x0],#16
  subs x2,x2,#16
  b.ne zero_loop
- adrp x19,kernel_data
- add x19,x19,:lo12:kernel_data
+ // The raw Android image is loaded at 0x80080000 after its ELF/Mach-O
+ // section headers are stripped. Anchor to the executing _start and add a
+ // link-time delta so __text section prefixes cannot skew the source pointer.
+ adr x19,_start
+ ldr x9,=kernel_data-_start
+ add x19,x19,x9
  adr x20,segment_table
  mov x21,#{len(segments)}
 segment_loop:
- ldp x0,x1,[x20],#16
+ ldr x0,[x20],#8
+ ldr x1,[x20],#8
  ldr x2,[x20],#8
+ ldr x3,[x20],#8
+ mov x6,x1
+ mov x5,x3
+ mov x7,x2
  add x0,x19,x0
  bl copy_bytes
+ add x6,x6,x7
+ mov x0,x6
+ mov x2,x5
+ bl zero_segment_tail
+ mov x0,x6
+ mov x2,x5
+ bl clean_segment_tail
  subs x21,x21,#1
  b.ne segment_loop
  adr x0,args_data
@@ -112,17 +153,34 @@ segment_loop:
  bl copy_bytes
  // Reserved diagnostic bytes in the remainder of the boot-args page.
  ldr x0,={args_pa+0x800:#x}
- mov x2,#24
+ mov x2,#32
 zero_diagnostic:
  stp xzr,xzr,[x0],#16
  subs x2,x2,#1
  b.ne zero_diagnostic
+ // R260: publish the copied kernel entry and its first two instructions in
+ // the reserved boot-args tail. XNU start_first_cpu overwrites +0xa00 with
+ // R84FS00, so this distinguishes shim copy completion from XNU entry.
+ ldr x10,={args_pa+0xa00:#x}
+ ldr x11,={int.from_bytes(b'R260CPY0','little'):#x}
+ str x11,[x10,#8]
+ ldr x11,={entry:#x}
+ str x11,[x10]
+ ldr x12,[x11]
+ ldr x13,[x11,#8]
+ str x12,[x10,#16]
+ str x13,[x10,#24]
+ dsb sy
+ dc civac,x10
+ dsb sy
  adr x0,tree_data
  ldr x1,={tree_pa:#x}
  ldr x2,={tree_len:#x}
  bl copy_bytes
 {rootfs_copy}
 {tc_copy}
+{tc_clean}
+{tc_probe}
  // The firmware handoff already disabled caches, as verified by SCTLR in the register probe.
  dsb sy
  ic iallu
@@ -133,6 +191,18 @@ zero_diagnostic:
  str x11,[x10]
  ldr x11,={entry:#x}
  str x11,[x10,#24]
+ // R260 retained carrier: boot-args memory is reused by the resident loader
+ // before the matching readback probe, so keep the copy witness in the
+ // report-page gap that the probe preserves (0x859f0080..0x859f009f).
+ ldr x10,=0x859f0080
+ ldr x11,={int.from_bytes(b'R260CPY0','little'):#x}
+ str x11,[x10]
+ ldr x11,={entry:#x}
+ str x11,[x10,#8]
+ ldr x12,[x11]
+ ldr x13,[x11,#8]
+ str x12,[x10,#16]
+ str x13,[x10,#24]
  dsb sy
  ldr x0,={args_pa:#x}
  ldr x1,={entry:#x}
@@ -154,6 +224,24 @@ copy_loop:
  subs x2,x2,#1
  b.ne copy_loop
 copy_done:
+ ret
+zero_segment_tail:
+ cbz x2,zero_segment_done
+zero_segment_loop:
+ stp xzr,xzr,[x0],#16
+ subs x2,x2,#16
+ b.ne zero_segment_loop
+zero_segment_done:
+ ret
+clean_segment_tail:
+ cbz x2,clean_segment_done
+clean_segment_loop:
+ dc cvac,x0
+ add x0,x0,#64
+ subs x2,x2,#64
+ b.ne clean_segment_loop
+ dsb sy
+clean_segment_done:
  ret
 halt:
  wfe
@@ -220,7 +308,8 @@ def assemble_entry(source,directory,compiler,objcopy):
 def build(args):
     image=args.kernel.read_bytes();layout=parse_macho(image)
     physical_base=physical_base_for(layout['base'],OWNED_BASE)
-    validate_window(physical_base,OWNED_SIZE)
+    owned_size=args.owned_memory_size
+    validate_window(physical_base,owned_size)
     if args.directory.exists() and any(args.directory.iterdir()):raise ValueError('Use an empty output directory')
     args.directory.mkdir(parents=True,exist_ok=True)
     memory_end=layout['end']-layout['base']
@@ -253,18 +342,18 @@ def build(args):
     placements=[]
     if rootfs:rootfs['physical']=cursor;placements.append(rootfs);cursor=align(cursor+rootfs['size'],16384)
     if trustcache:trustcache['physical']=cursor;placements.append(trustcache);cursor=align(cursor+trustcache['size'],16384)
-    tree=make_tree(random_seed=seed,physical_base=physical_base,memory_size=OWNED_SIZE,
+    tree=make_tree(random_seed=seed,physical_base=physical_base,memory_size=owned_size,
         warm_reset_prepared=args.warm_reset_prepared,
         memory_map={p['name']:(p['physical'],p['size']) for p in placements})
     if len(tree)>16384:raise ValueError('Device tree exceeds its reserved allocation')
     top=cursor if placements else align(tree_pa+len(tree),16384)
-    bootargs=make_boot_args(virtual_base=layout['base'],physical_base=physical_base,memory_size=OWNED_SIZE,
+    bootargs=make_boot_args(virtual_base=layout['base'],physical_base=physical_base,memory_size=owned_size,
         top=top,tree_physical=tree_pa,tree_size=len(tree),command_line=args.command_line)
     (args.directory/'kernel-packed.macho').write_bytes(image)
     (args.directory/'boot-args.bin').write_bytes(bootargs)
     (args.directory/'board.adt').write_bytes(tree)
     entry=physical_base+layout['entry']-layout['base']
-    segments=[(s['offset'],physical_base+s['address']-layout['base'],s['file_size']) for s in layout['segments']]
+    segments=[(s['offset'],physical_base+s['address']-layout['base'],s['file_size'],s['size']) for s in layout['segments']]
     tc_out=dict(physical=trustcache['physical'],size=trustcache['size'],name='trustcache.bin') if trustcache else None
     def emit(second_off):
         root=dict(scratch=SCRATCH+second_off,physical=rootfs['physical'],size=rootfs['size']) if rootfs else None
@@ -295,8 +384,20 @@ def build(args):
                    scratch=(hex(p['scratch']) if p.get('scratch') else None)) for p in placements]
     record={'kernel_sha256':hashlib.sha256(image).hexdigest(),'boot_image_sha256':hashlib.sha256(packed).hexdigest(),
         'kernel_physical_base':hex(physical_base),'kernel_entry_physical':hex(entry),'args_physical':hex(args_pa),
-        'tree_physical':hex(tree_pa),'top_of_kernel_data':hex(top),'owned_memory':hex(OWNED_SIZE),
+        'tree_physical':hex(tree_pa),'top_of_kernel_data':hex(top),'owned_memory':hex(owned_size),
+        'memory_profile':('max-contiguous-measured' if owned_size > DEFAULT_OWNED_SIZE else 'restricted-diagnostic'),
+        'memory_range':{'base':hex(physical_base),'end':hex(physical_base+owned_size),
+                        'measured_source':(
+                            'evidence/y35a-20261102/PROGRESS.md:11 recorded /proc/iomem windows; '
+                            'evidence/y35a-20261102/lk2nd-runtime.dtb '
+                            'sha256=36555c5e66b4a09cd38506706b0a301c2c8b8d6b883de51c51b89971825e9709 '
+                            '(staged prior-loader 2GiB identity only); '
+                            'docs/board/y35a-facts.md:19-21'
+                        ),
+                        'multi_bank_supported':False,
+                        'multi_bank_note':'XNU-4903 arm_vm_init consumes one boot_args physBase/memSize span; lower banks are not represented as contiguous memory'},
         'early_fault_record_physical':hex(args_pa+0x800),'early_fault_record_bytes':384,
+        'diagnostic_carrier_bytes':512,
         'second_offset':hex(second_off) if rootfs else None,
         'entry_bytes':len(entry_bin),
         'sidecars':sidecars,
@@ -308,6 +409,7 @@ def main():
     p.add_argument('--kernel',required=True,type=Path);p.add_argument('--stock-boot',required=True,type=Path)
     p.add_argument('--directory',required=True,type=Path);p.add_argument('--compiler',default='clang');p.add_argument('--objcopy',default='llvm-objcopy')
     p.add_argument('--command-line',default='-v serial=3 cpus=1 debug=0x8 rd=md0')
+    p.add_argument('--owned-memory-size',type=lambda x:int(x,0),default=DEFAULT_OWNED_SIZE, help='Contiguous measured RAM span exposed to XNU')
     p.add_argument('--ramdisk',type=Path,help='Explicit RAM root bytes; copied into reserved owned memory')
     p.add_argument('--trust-cache',type=Path,help='Explicit boot-owner trust cache bundle for the supplied code')
     p.add_argument('--warm-reset-prepared',action='store_true',help='Requires PMIC warm-reset readback immediately before RAM boot')

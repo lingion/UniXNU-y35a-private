@@ -30,30 +30,62 @@ record = json.loads(recipe.read_text().strip().rstrip(','))
 sdk = subprocess.check_output(['xcrun', '--sdk', 'iphoneos', '--show-sdk-path'], text=True).strip()
 
 
+def host_path(value):
+    """Translate compile-record paths emitted inside the Linux build container."""
+    value = str(value)
+    prefix = '/work/UniXNU-y35a'
+    if value == prefix or value.startswith(prefix + '/'):
+        return str(ROOT) + value[len(prefix):]
+    return value
+
+
+record['directory'] = host_path(record['directory'])
+record['file'] = host_path(record['file'])
+record['arguments'] = [host_path(value) for value in record['arguments']]
+
+
 def compile_one(source, destination, namespace=None):
     if source.name == 'source_pthread_bootstrap.c':
-        command = []
-        arguments = record['arguments']
-        index = 0
-        while index < len(arguments):
-            value = arguments[index]
-            if value == record['file']:
-                command.append(str(source))
-            elif value == '-o':
-                command.extend(['-o', str(destination)])
-                index += 1
-            else:
-                command.append(value)
-            index += 1
+        framework = ROOT / '.cache/fakeroot/System/Library/Frameworks/Kernel.framework/Versions/A'
+        export_headers = ROOT / 'build/xnu/ios-obj/EXPORT_HDRS'
+        xnu_source = ROOT / '.cache/xnu-work'
+        command = ['xcrun', '--sdk', 'iphoneos', 'clang', '-target', 'arm64-apple-ios17.0',
+                   '-isysroot', sdk, '-mkernel', '-ffreestanding', '-fno-builtin', '-fno-stack-check',
+                   '-std=gnu11', '-fblocks', '-O2', '-mno-implicit-float',
+                   '-Darm64=1', '-DARM64=1', '-D__arm64__=1', '-D__ARM64__=1', '-DLP64=1',
+                   '-DBCM2837=1',
+                   '-DPAGE_SIZE_FIXED=1', '-DVM_KERNEL_LINK_ADDRESS=0xfffffff007004000',
+                   '-DAPPLE=1', '-DXNU_TARGET_OS_IOS=1', '-DXNU_PLATFORM_iPhoneOS=1', '-DPRIVATE=1',
+                   '-DKERNEL=1', '-DKERNEL_PRIVATE=1', '-DXNU_KERNEL_PRIVATE=1',
+                   '-DMACH_ASSERT=1', '-DDEBUG=1',
+                   '-D__PTHREAD_EXPOSE_INTERNALS__=1', '-DABSOLUTETIME_SCALAR_TYPE=1', '-DNEEDS_SCHED_CALL_T=1',
+                   '-I', str(xnu_source / 'osfmk'), '-I', str(xnu_source / 'bsd'),
+                   '-I', str(xnu_source), '-I', str(export_headers / 'osfmk'),
+                   '-I', str(export_headers / 'bsd'), '-I', str(export_headers / 'libkern'),
+                   '-I', str(export_headers / 'mach'), '-I', str(export_headers / 'pexpert'),
+                   '-I', str(export_headers / 'bsd' / 'sys'),
+                   '-I', str(export_headers / 'bsd' / 'machine'),
+                   '-I', str(export_headers / 'bsd' / 'arm'),
+                   '-I', str(framework / 'PrivateHeaders'), '-I', str(framework / 'Headers'),
+                   '-Wno-deprecated-declarations', '-c', str(source), '-o', str(destination)]
     else:
         framework = ROOT / '.cache/fakeroot/System/Library/Frameworks/Kernel.framework/Versions/A'
+        xnu_source = ROOT / '.cache/xnu-work'
+        export_headers = ROOT / 'build/xnu/ios-obj/EXPORT_HDRS'
         command = ['xcrun', '--sdk', 'iphoneos', 'clang', '-target', 'arm64-apple-ios17.0',
                    '-isysroot', sdk, '-mkernel', '-ffreestanding', '-fno-builtin', '-fno-stack-check',
                    '-std=gnu11', '-fblocks', '-O2', '-mno-implicit-float',
                    '-DKERNEL=1', '-DKERNEL_PRIVATE=1', '-DXNU_KERNEL_PRIVATE=1',
-                   '-DMACH_KERNEL_PRIVATE=1', '-DMACH_ASSERT=1', '-DDEBUG=1',
+                   '-DMACH_ASSERT=1', '-DDEBUG=1', '-DPRIVATE=1',
                    '-D__PTHREAD_EXPOSE_INTERNALS__=1', '-DABSOLUTETIME_SCALAR_TYPE=1', '-DNEEDS_SCHED_CALL_T=1',
                    '-I', str(SOURCE / 'private'), '-I', str(SOURCE / 'include'), '-I', str(SOURCE),
+                   '-I', str(xnu_source / 'osfmk'), '-I', str(xnu_source / 'bsd'),
+                   '-I', str(xnu_source), '-I', str(export_headers / 'osfmk'),
+                   '-I', str(export_headers / 'bsd'), '-I', str(export_headers / 'libkern'),
+                   '-I', str(export_headers / 'pexpert'), '-I', str(export_headers / 'mach'),
+                   '-I', str(export_headers / 'bsd' / 'sys'),
+                   '-I', str(export_headers / 'bsd' / 'machine'),
+                   '-I', str(export_headers / 'bsd' / 'arm'),
                    '-I', str(framework / 'PrivateHeaders'), '-I', str(framework / 'Headers'),
                    '-Wno-deprecated-declarations', '-c', str(source), '-o', str(destination)]
     if namespace:

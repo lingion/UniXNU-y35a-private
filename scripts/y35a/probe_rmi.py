@@ -37,7 +37,7 @@ lives in CURRENT.md Next-Work #0, not in this build script — an
 offline build must stay reproducible.
 """
 from pathlib import Path
-import argparse, hashlib, json, re, struct, subprocess, sys
+import argparse, hashlib, json, os, re, struct, subprocess, sys
 from package_native import android_container, select_device_dt, align
 
 HERE = Path(__file__).resolve().parent
@@ -47,7 +47,9 @@ REPO = HERE.parents[1]
 # (report must live between pram end and the LK stage extent), this
 # side mirrors the field offsets into the manifest. The compile is the
 # authority — if either drifts, re-derive from clang, not from here.
-REPORT_BYTES = 0xbc4
+# Report layout is derived from rmi_probe.cpp. The corrected collector keeps
+# only the exact TLMM/QUP5 windows needed for the handoff decision.
+REPORT_BYTES = 0x124
 
 def _literal(path, name):
     m = re.search(rf'^{name} = (0x[0-9a-fA-F]+)', path.read_text(), re.M)
@@ -133,6 +135,11 @@ halt:
         '.text : { *(.text.entry) *(.text*) } .rodata : { *(.rodata*) } '
         '.data : { *(.data*) } .bss : { *(.bss*) *(COMMON) } '
         'image_end = .; /DISCARD/ : { *(.comment) *(.eh_frame*) } }\n')
+    # The XNU build exports CCC_OVERRIDE_OPTIONS globally to inject Apple-clang
+    # warning suppressions. Ubuntu clang rejects those options under -Werror;
+    # keep this standalone probe build independent of the parent kernel build.
+    build_env = dict(os.environ)
+    build_env.pop('CCC_OVERRIDE_OPTIONS', None)
     subprocess.run([
         '/usr/bin/clang++', '--target=aarch64-none-elf', '-O2', '-nostdlib',
         '-ffreestanding', '-fno-exceptions', '-fno-rtti', '-fno-builtin',
@@ -140,7 +147,7 @@ halt:
         f'-DY35A_REPORT_BASE={rb}UL', f'-DY35A_PRAM_BASE={pb}UL',
         f'-I{HERE}', f'-I{REPO / "drivers/QcomQupI2c"}',
         '-fuse-ld=lld', '-Wl,-T,layout.ld', 'entry.S', str(HERE / 'rmi_probe.cpp'),
-        '-o', 'probe.elf'], cwd=a.directory, check=True)
+        '-o', 'probe.elf'], cwd=a.directory, check=True, env=build_env)
     subprocess.run(['/usr/bin/llvm-objcopy', '-O', 'binary', 'probe.elf', 'probe.bin'],
                    cwd=a.directory, check=True)
     stock = a.stock_boot.read_bytes()
@@ -234,7 +241,8 @@ def struct_layout():
         'status': 0x18, 'err': 0x1c, 'se_dump': 0x20,
         't_xfer0': 0x50, 't_xfer1': 0x58, 't_end': 0x60,
         'clkctl_after': 0x68, 'err2': 0x6c, 'page0': 0x70, 'f01': 0x78,
-        'attn': 0x90, 'gpio': 0xa4, 'gcc': 0x3c4,
+        'attn_input': 0x90, 'attn_status': 0xa0,
+        'tlmm_target': 0xb0, 'gcc_q5': 0xf0,
     }
 
 if __name__ == '__main__':

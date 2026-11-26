@@ -147,7 +147,7 @@ template <class IO> class SdciController {
         if (!(io.read32(0x24) & (1U << 11))) { recover(index); error = 6; return false; }
         for (unsigned i = 0; i < blocks * 512; i += 4) {
           uint32_t value = io.read32(0x20);
-          for (unsigned b = 0; b < 4; ++b) data[i + b] = value >> (8 * b);
+        for (unsigned b = 0; b < 4; ++b) data[i + b] = static_cast<uint8_t>(value >> (8 * b));
         }
         io.write32(0x30, 0x20);
         if (!waitStatus(2)) { recover(index); return false; }
@@ -310,7 +310,8 @@ template <class IO> class SdciController {
   static bool entryNameIs(const uint8_t *entry, const char *name) {
     unsigned i = 0;
     for (;; ++i) {
-      uint16_t unit = uint16_t(entry[56 + 2 * i]) | uint16_t(entry[56 + 2 * i + 1]) << 8;
+      uint16_t unit = static_cast<uint16_t>(uint16_t(entry[56 + 2 * i]) |
+                                            (uint16_t(entry[56 + 2 * i + 1]) << 8));
       if (unit != (uint16_t)name[i]) return false;
       if (!name[i]) return true;
     }

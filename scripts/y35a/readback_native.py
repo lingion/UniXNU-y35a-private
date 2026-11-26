@@ -15,10 +15,15 @@ import struct
 import subprocess
 from boot_layout import parse_macho, physical_base_for
 from package_native import select_device_dt, android_container, align
+import macho_field_widths
 
 NAMES = ('_BootArgs', '_const_boot_args', '_gPanicBase', '_gPanicSize',
          '_debugger_panic_str', '_panicDebugging', '_debug_buf_base',
          '_debug_buf_ptr', '_debug_buf_size',
+         '_y35a_prng_bootstrap_entered', '_y35a_prng_bootstrap_returned',
+         '_y35a_prng_registration_started', '_y35a_prng_initialized',
+         '_y35a_prng_lock_pointer', '_y35a_bootstrap_phase',
+         '_native_read_random_lock_after_marker_direct',
          '_armdt_platform_configured', '_armcpu_registered',
          '_armcpu_timer_interrupts', '_armcpu_gic_boot', '_native_entry_trace',
          '_original_faulting_state', '_native_early_fault_address', '_excepstack', '_intstack',
@@ -84,7 +89,14 @@ PANIC_WINDOW_CARRIERS = ('_gPanicBase', '_gPanicSize')
 BOUNDARY_NAMES = REQUIRED + ('_const_boot_args', '_armdt_platform_configured',
                              '_armcpu_registered', '_armcpu_timer_interrupts',
                              '_armcpu_gic_boot', '_native_entry_trace',
-                             '_native_crypto_emulations')
+                             '_native_crypto_emulations',
+                             '_y35a_prng_bootstrap_entered',
+                             '_y35a_prng_bootstrap_returned',
+                             '_y35a_prng_registration_started',
+                             '_y35a_prng_initialized',
+                             '_y35a_prng_lock_pointer',
+                             '_y35a_bootstrap_phase',
+                             '_native_read_random_lock_after_marker_direct')
 
 
 def validate_required_symbols(symbols):
@@ -99,9 +111,16 @@ def validate_required_symbols(symbols):
 # citations). Windows in copy tables stay 16-aligned via _record_size; the
 # manifest publishes field_bytes so the host never reads neighbors as field.
 FIELD_BYTES = {
+    '_y35a_prng_bootstrap_entered': 4,
+    '_y35a_prng_bootstrap_returned': 4,
+    '_y35a_prng_registration_started': 4,
+    '_y35a_prng_initialized': 4,
+    '_y35a_prng_lock_pointer': 8,
+    '_y35a_bootstrap_phase': 8,
+    '_native_read_random_lock_after_marker_direct': 8,
     '_panicDebugging': 4, '_gPanicSize': 4, '_debug_buf_size': 4,
     '_armdt_platform_configured': 4, '_armcpu_registered': 4,
-    '_native_crypto_emulations': 4,
+    '_native_crypto_emulations': 8,
     '_gPanicBase': 8, '_debug_buf_base': 8, '_debug_buf_ptr': 8,
     '_debugger_panic_str': 8, '_BootArgs': 8,
     '_native_early_fault_address': 8, '_armcpu_timer_interrupts': 8,
@@ -174,19 +193,12 @@ def _dsym_offset_die(dsym_path, offset):
 
 
 def _dsym_field_bytes(dsym_path, name):
-    # DWARF lookup: variable -> DW_AT_type -> size, with one array element
-    # round and typedef deref; any gap answers None and the table rules.
-    try:
-        out = subprocess.check_output(
-            [_tool_path('llvm-dwarfdump'), '--name', name, str(dsym_path)],
-            text=True, stderr=subprocess.DEVNULL)
-    except (subprocess.CalledProcessError, FileNotFoundError, OSError):
-        return None
-    m = re.search(r'DW_AT_type\s+.*<0x([0-9a-f]+)>', out)
-    if not m:
-        return None
-    size = _resolve_dsym_offset(dsym_path, int(m.group(1), 16), 0)
-    return size
+    # The standalone parser is the production source of truth. Aggregate
+    # values deliberately return None here so the XNU source-type table keeps
+    # control of declared struct/array extents; scalar DWARF widths override
+    # the table. Tool or object failures are raised, never treated as zero.
+    value = macho_field_widths.dwarf_field_widths(dsym_path).get(name)
+    return value if isinstance(value, int) else None
 
 
 def _resolve_dsym_offset(dsym_path, offset, depth):
@@ -441,6 +453,10 @@ fault_invalid:
 fault_done:
 '''
     kernel_stamp = int.from_bytes(bytes.fromhex(kernel_sha256)[:8], 'little')
+    clr_marker = int.from_bytes(b'CLR3IDLE', 'little')
+    progress_marker = int.from_bytes(b'CYPRUN0\0', 'little')
+    postcopy_marker = int.from_bytes(b'POSTOR00', 'little')
+    completion_marker = int.from_bytes(b'PSTCOPY0', 'little')
     return f'''.section .text
 .global _start
 _start:
@@ -542,7 +558,122 @@ def minimal_boundary_records(payload):
     return records
 
 
-def minimal_boundary_entry_source(*, records, kernel_sha256):
+def annotate_fault_pointer_window(records, symbols, layout, physical_base):
+    """Bind the raw pointer window to the linked symbol when requested."""
+    for record in records:
+        if record.get('name') != 'fault-pointer-window':
+            continue
+        symbol_va = symbols.get('_native_early_fault_address')
+        if symbol_va is None:
+            raise ValueError('fault-pointer-window requires _native_early_fault_address')
+        symbol_physical = physical_base + symbol_va - layout['base']
+        record_physical = int(record['physical'], 0)
+        record_size = int(record['size'])
+        symbol_offset = symbol_physical - record_physical
+        if record_size != 16 or symbol_offset < 0 or symbol_offset + 8 > record_size:
+            raise ValueError('fault-pointer-window does not contain _native_early_fault_address')
+        record['symbol_physical'] = hex(symbol_physical)
+        record['symbol_offset'] = symbol_offset
+
+
+def annotate_minimal_symbol_windows(records, symbols, layout, physical_base, dsym_path=None):
+    """Align 16-byte symbol copy windows down and bind the logical field."""
+    for record in records:
+        name = record.get('name')
+        symbol_va = symbols.get(name)
+        if symbol_va is None or name in ('early-fault-record', 'fault-pointer-window'):
+            continue
+        symbol_physical = physical_base + symbol_va - layout['base']
+        size = int(record['size'])
+        field_width = read_field_bytes(name, symbols, dsym_path=dsym_path)
+        if field_width is None:
+            continue
+        if size == 16:
+            window_physical = symbol_physical & ~0xf
+            record['physical'] = hex(window_physical)
+        else:
+            window_physical = int(record['physical'], 0)
+        symbol_offset = symbol_physical - window_physical
+        if symbol_offset < 0 or symbol_offset + field_width > size:
+            raise ValueError(f'{name} logical field does not fit its aligned readback window')
+        record['symbol_physical'] = hex(symbol_physical)
+        record['symbol_offset'] = symbol_offset
+        record['field_bytes'] = field_width
+
+
+def minimal_boundary_runtime_manifest(records):
+    """Declare only report markers emitted by the minimal-boundary payload.
+
+    POSTOR00 is tied to the actual copied external record when present. A
+    generic probe without that record still reports progress/completion but
+    does not claim a checksum over an unrelated hard-coded report range.
+    """
+    result = dict(
+        probe_progress_marker=dict(
+            ascii='CYPRUN0\\0', u64=hex(int.from_bytes(b'CYPRUN0\0', 'little')),
+            report_offset='0xe0', count_offset='0xe8', updated_after_each_record=True),
+        probe_completion_marker=dict(
+            ascii='PSTCOPY0', u64=hex(int.from_bytes(b'PSTCOPY0', 'little')),
+            report_offset='0xe0', record_count_offset='0xe8',
+            expected_record_count=len(records)),
+    )
+    checksum_record = next((r for r in records if r.get('name') == 'precpudata-external'), None)
+    if checksum_record is not None:
+        result['postcopy_integrity'] = dict(
+            ascii='POSTOR00', u64=hex(int.from_bytes(b'POSTOR00', 'little')),
+            data_report_offset=hex(int(checksum_record['report_offset']),),
+            bytes=int(checksum_record['size']), marker_offset='0xd0', checksum_offset='0xd8')
+    return result
+
+
+def minimal_preclear_runtime_manifest(records, extra_record_names=()):
+    """Describe all generation-owned preclear targets from record geometry."""
+    target = next((r for r in records if r.get('name') == 'precpudata-external'), None)
+    if target is None:
+        raise ValueError('preclear manifest requires precpudata-external')
+    names = tuple(extra_record_names)
+    if len(names) != len(set(names)):
+        raise ValueError('preclear extra record names must be unique')
+    by_name = {r.get('name'): r for r in records}
+    if any(name not in by_name for name in names):
+        missing = sorted(set(names) - set(by_name))
+        raise ValueError('preclear extra record is absent from manifest: ' + ', '.join(missing))
+    targets = [target] + [by_name[name] for name in names]
+    seen = set()
+    for record in targets:
+        physical = int(record['physical'], 0)
+        size = int(record['size'])
+        if physical % 16 or size <= 0 or size % 16:
+            raise ValueError('preclear targets must be 16-byte aligned and sized')
+        if record is target and (physical % 64 or size % 64):
+            raise ValueError('precpudata-external must be cache-line aligned and sized')
+        if physical + size < physical:
+            raise ValueError('preclear target address overflows')
+        key = (physical, size)
+        if key in seen:
+            raise ValueError('duplicate preclear physical window')
+        seen.add(key)
+    serialized = [dict(name=r['name'], physical=r['physical'], bytes=int(r['size']))
+                  for r in targets]
+    return dict(
+        preclear_target_physical=target['physical'],
+        preclear_target_bytes=int(target['size']),
+        preclear_targets=serialized,
+        preclear_sequence=[
+            f'STP XZR over {sum(item["bytes"] for item in serialized)} target bytes',
+            'DC CIVAC over cache lines covering each declared target',
+            'DSB SY',
+            'OR-read every declared target window',
+            'write CLR3IDLE and aggregate source checksum',
+            'copy all manifest records and count',
+            'OR-read copied external report',
+            'write POSTOR00 and PSTCOPY0',
+        ],
+    )
+
+
+def minimal_boundary_entry_source(*, records, kernel_sha256, preclear=False,
+                                  preclear_extra_records=()):
     """Snapshot pram to scratch FIRST, write everything into the report page
     above pram, restore pram before the forced reset. Report head 0x40 bytes
     stay untouched (boot3 Y35AXNU2 stamp); probe marker starts at +0x40."""
@@ -552,6 +683,112 @@ def minimal_boundary_entry_source(*, records, kernel_sha256):
         for r in records
     )
     kernel_stamp = int.from_bytes(bytes.fromhex(kernel_sha256)[:8], 'little')
+    clr_marker = int.from_bytes(b'CLR3IDLE', 'little')
+    progress_marker = int.from_bytes(b'CYPRUN0\0', 'little')
+    postcopy_marker = int.from_bytes(b'POSTOR00', 'little')
+    completion_marker = int.from_bytes(b'PSTCOPY0', 'little')
+    if preclear:
+        target = next(r for r in records if r.get('name') == 'precpudata-external')
+        names = tuple(preclear_extra_records)
+        if len(names) != len(set(names)):
+            raise ValueError('preclear extra record names must be unique')
+        by_name = {r.get('name'): r for r in records}
+        if any(name not in by_name for name in names):
+            missing = sorted(set(names) - set(by_name))
+            raise ValueError('preclear extra record is absent from manifest: ' + ', '.join(missing))
+        targets = [target] + [by_name[name] for name in names]
+        seen = set()
+        clear_parts = [' // Generation-owned preclear of declared physical records.',
+                       ' mov x12,#0']
+        for index, record in enumerate(targets):
+            pa = int(record['physical'], 0)
+            size = int(record['size'])
+            if pa % 16 or size <= 0 or size % 16:
+                raise ValueError('preclear targets must be 16-byte aligned and sized')
+            if record is target and (pa % 64 or size % 64):
+                raise ValueError('precpudata-external must be cache-line aligned and sized')
+            if (pa, size) in seen:
+                raise ValueError('duplicate preclear physical window')
+            seen.add((pa, size))
+            suffix = '' if index == 0 else f'_{index}'
+            clear_start = pa & ~0x3f
+            clear_end = (pa + size + 63) & ~0x3f
+            clear_lines = (clear_end - clear_start) // 64
+            clear_parts.extend((
+                f" ldr x10,={pa:#x}",
+                f" mov x11,#{size // 16}",
+                f"preclear_record{suffix}:",
+                " stp xzr,xzr,[x10],#16",
+                " subs x11,x11,#1",
+                f" b.ne preclear_record{suffix}",
+                f" ldr x10,={clear_start:#x}",
+                f" mov x11,#{clear_lines}",
+                f"preclear_clean{suffix}:",
+                " dc civac,x10",
+                " add x10,x10,#64",
+                " subs x11,x11,#1",
+                f" b.ne preclear_clean{suffix}",
+                " dsb sy",
+                f" ldr x10,={pa:#x}",
+                f" mov x11,#{size // 8}",
+                f"preclear_verify{suffix}:",
+                " ldr x13,[x10],#8",
+                " orr x12,x12,x13",
+                " subs x11,x11,#1",
+                f" b.ne preclear_verify{suffix}",
+            ))
+        clear_parts.extend((
+            f" ldr x10,={REPORT_BASE + 0xc0:#x}",
+            f" ldr x9,={clr_marker:#x}",
+            " str x9,[x10]",
+            " str x12,[x10,#8]",
+            " dc cvac,x10",
+            " dsb sy",
+        ))
+        preclear_code = '\n'.join(clear_parts) + '\n'
+    else:
+        if preclear_extra_records:
+            raise ValueError('preclear extra records require --preclear')
+        preclear_code = ''
+    progress_code = f''' // Generation-owned copy progress and count.
+ ldr x10,={REPORT_BASE + 0xe0:#x}
+ ldr x11,={progress_marker:#x}
+ str x11,[x10]
+ str xzr,[x10,#8]
+ dc cvac,x10
+ dsb sy
+'''
+    checksum_record = next((r for r in records if r.get('name') == 'precpudata-external'), None)
+    if checksum_record is None:
+        checksum_code = ''
+    else:
+        checksum_offset = int(checksum_record['report_offset'])
+        checksum_words = int(checksum_record['size']) // 8
+        checksum_code = f''' // Generation-owned OR checksum for the bound external record.
+ ldr x10,={REPORT_BASE + checksum_offset:#x}
+ mov x11,#{checksum_words}
+ mov x12,#0
+postcopy_verify:
+ ldr x13,[x10],#8
+ orr x12,x12,x13
+ subs x11,x11,#1
+ b.ne postcopy_verify
+ ldr x10,={REPORT_BASE + 0xd0:#x}
+ ldr x9,={postcopy_marker:#x}
+ str x9,[x10]
+ str x12,[x10,#8]
+ dc cvac,x10
+ dsb sy
+'''
+    postcopy_code = checksum_code + f''' // Generation-owned completion marker.
+ ldr x10,={REPORT_BASE + 0xe0:#x}
+ ldr x11,={completion_marker:#x}
+ str x11,[x10]
+ mov x11,#{len(records)}
+ str x11,[x10,#8]
+ dc cvac,x10
+ dsb sy
+'''
     return f'''.section .text
 .global _start
 _start:
@@ -574,6 +811,7 @@ pram_snapshot:
  stp x13,x14,[x11],#16
  subs x12,x12,#16
  b.ne pram_snapshot
+{preclear_code}
  // report header at +0x40: the head keeps the boot3 Y35AXNU2 stamp
  ldr x10,={REPORT_BASE:#x}
  ldr x11,={int.from_bytes(b'Y35ARD02','little'):#x}
@@ -591,8 +829,10 @@ pram_snapshot:
  mrs x11,midr_el1
  str x11,[x10,#120]
  dsb sy
+{progress_code}
  adr x19,table
  mov x20,#{len(records)}
+ mov x21,#0
 next:
  ldp x0,x1,[x19],#16
  ldr x2,[x19],#8
@@ -601,9 +841,15 @@ copy:
  stp x3,x4,[x1],#16
  subs x2,x2,#1
  b.ne copy
+ add x21,x21,#1
+ ldr x10,={REPORT_BASE + 0xe8:#x}
+ str x21,[x10]
+ dc cvac,x10
+ dsb sy
  subs x20,x20,#1
  b.ne next
  dsb sy
+{postcopy_code}
  // restore pram from the pre-write snapshot, then reset
  ldr x10,={SCRATCH_PRAM_BACKUP:#x}
  ldr x11,={PRAM_PHYS:#x}
@@ -661,6 +907,10 @@ def main():
     p.add_argument('--dsym', type=Path, default=None,
                    help='Optional .dsym bundle: when present, DWARF type sizes take '
                         'priority over the source-type table for field widths')
+    p.add_argument('--preclear', action='store_true',
+                   help='Clear the precpudata-external target before copying; regular probes preserve it')
+    p.add_argument('--preclear-extra-record', action='append', default=[],
+                   help='Also zero and verify this declared record in a --preclear diagnostic')
     a = p.parse_args()
     a.directory.mkdir(parents=True, exist_ok=False)
     kernel = a.kernel.read_bytes()
@@ -697,7 +947,13 @@ def main():
             extra = parse_extra_pa(spec)
             payload.append((extra['name'], int(extra['physical'], 16), extra['size']))
         records = minimal_boundary_records(payload)
-        entry_source = minimal_boundary_entry_source(records=records, kernel_sha256=kernel_sha256)
+        annotate_minimal_symbol_windows(records, symbols, layout, base, dsym_path=a.dsym)
+        annotate_fault_pointer_window(records, symbols, layout, base)
+        if a.preclear_extra_record and not a.preclear:
+            raise ValueError('--preclear-extra-record requires --preclear')
+        entry_source = minimal_boundary_entry_source(records=records, kernel_sha256=kernel_sha256,
+                                                     preclear=a.preclear,
+                                                     preclear_extra_records=a.preclear_extra_record)
         (a.directory / 'entry.S').write_text(entry_source)
         subprocess.run([_compiler_path(), '--target=aarch64-none-elf', '-nostdlib', '-fuse-ld=lld',
                         '-Wl,-Ttext=0x80080000', '-Wl,-e,_start', '-o', 'entry.elf', 'entry.S'],
@@ -720,8 +976,17 @@ def main():
                         snapshot_base=hex(SCRATCH_PRAM_BACKUP),
                         snapshot_bytes=SCRATCH_PRAM_BACKUP_BYTES,
                         report_records_offset=REPORT_RECORDS_OFFSET,
+                        kernel_virtual_base=hex(layout['base']),
+                        kernel_physical_base=hex(base),
+                        entry_sha256=hashlib.sha256((a.directory / 'entry.bin').read_bytes()).hexdigest(),
                         cpu_registers={'ID_AA64ISAR0_EL1': 96, 'ID_AA64PFR0_EL1': 104,
                                        'CPACR_EL1': 112, 'MIDR_EL1': 120})
+        manifest.update(minimal_boundary_runtime_manifest(records))
+        if a.preclear:
+            manifest.update(
+                purpose='paired preclear diagnostic: generation-owned clear, copy progress, OR checksum and completion markers; not XNU',
+                variant='preclear-only external-record scrub',
+                **minimal_preclear_runtime_manifest(records, a.preclear_extra_record))
         write_manifest(a.directory / 'readback.json', manifest)
         print(json.dumps(manifest, indent=2))
         return

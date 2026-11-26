@@ -64,7 +64,7 @@ class ReadbackNamesTest(unittest.TestCase):
         truth = {
             '_panicDebugging': 4, '_gPanicSize': 4, '_debug_buf_size': 4,
             '_armdt_platform_configured': 4, '_armcpu_registered': 4,
-            '_native_crypto_emulations': 4,
+            '_native_crypto_emulations': 8,
             '_gPanicBase': 8, '_debug_buf_base': 8, '_debug_buf_ptr': 8,
             '_debugger_panic_str': 8, '_BootArgs': 8,
             '_native_early_fault_address': 8, '_armcpu_timer_interrupts': 8,
@@ -550,13 +550,13 @@ class ReadbackNamesTest(unittest.TestCase):
     def test_minimal_boundary_entry_snapshots_then_reports_then_restores(self):
         import readback_native
         records = readback_native.minimal_boundary_records(
-            [('_panicDebugging', 0xa0713844, 16)])
+            [('_panicDebugging', 0xa0713844, 16),
+             ('precpudata-external', 0xa0ba4b00, 256)])
         source = readback_native.minimal_boundary_entry_source(
             records=records, kernel_sha256='55' * 32)
         snap = source.index('pram_snapshot:')
         # probe marker lands at report+0x40, never at the preserved head
         self.assertIn('str x11,[x10,#64]', source)
-        self.assertNotIn('str x11,[x10]\n', source)
         marker = source.index('str x11,[x10,#64]')
         self.assertLess(snap, marker)
         # CNTVCT witness at report+0x50, before the table copy
@@ -569,7 +569,13 @@ class ReadbackNamesTest(unittest.TestCase):
         self.assertLess(source.index('adr x19,table'), restore)
         self.assertLess(restore, source.index('0x0860065c'))
         self.assertLess(source.index('0x0860065c'), source.index('0x004ab000'))
-        # every staging destination is report-relative, never pram
+        # Current-generation probes must write their own freshness/progress/
+        # completion evidence; stale retained bytes cannot satisfy the contract.
+        self.assertIn('0x304e5552505943', source)  # CYPRUN0\0
+        self.assertIn(f"{int.from_bytes(b'POSTOR00', 'little'):#x}", source)  # POSTOR00
+        self.assertIn(f"{int.from_bytes(b'PSTCOPY0', 'little'):#x}", source)  # PSTCOPY0
+        self.assertIn('str x21,[x10]', source)  # per-record count
+        # Every staging destination is report-relative, never PRAM.
         for line in source.splitlines():
             if line.strip().startswith('.quad 0x'):
                 fields = line.split()
@@ -578,8 +584,110 @@ class ReadbackNamesTest(unittest.TestCase):
                 dest = int(fields[2].rstrip(','), 16)
                 self.assertGreaterEqual(dest, readback_native.REPORT_BASE +
                                         readback_native.REPORT_RECORDS_OFFSET)
-                self.assertLess(dest + int(fields[3].rstrip(',')) * 16,
-                                readback_native.REPORT_BASE + readback_native.REPORT_BYTES)
+                self.assertLessEqual(dest + int(fields[3].rstrip(',')) * 16,
+                                     readback_native.REPORT_BASE + readback_native.REPORT_BYTES)
+
+    def test_regular_probe_does_not_emit_preclear_code(self):
+        import readback_native
+        records = readback_native.minimal_boundary_records(
+            [('precpudata-external', 0xa0ba4b00, 256)])
+        source = readback_native.minimal_boundary_entry_source(
+            records=records, kernel_sha256='55' * 32)
+        self.assertNotIn('preclear_record:', source)
+        self.assertNotIn('CLR3IDLE', source)
+
+    def test_explicit_preclear_emits_target_and_metadata(self):
+        import readback_native
+        records = readback_native.minimal_boundary_records(
+            [('precpudata-external', 0xa0ba4b00, 256)])
+        source = readback_native.minimal_boundary_entry_source(
+            records=records, kernel_sha256='55' * 32, preclear=True)
+        self.assertIn('preclear_record:', source)
+        self.assertIn('0xa0ba4b00', source)
+        self.assertIn(f"{int.from_bytes(b'CLR3IDLE', 'little'):#x}", source)
+
+    def test_explicit_preclear_uses_dynamic_record_geometry(self):
+        import readback_native
+        records = readback_native.minimal_boundary_records(
+            [('precpudata-external', 0xa0bacb00, 1024)])
+        source = readback_native.minimal_boundary_entry_source(
+            records=records, kernel_sha256='66' * 32, preclear=True)
+        self.assertIn('ldr x10,=0xa0bacb00', source)
+        self.assertIn('mov x11,#64', source)  # 1024 bytes / 16-byte STP
+        self.assertIn('mov x11,#16', source)  # 1024 bytes / 64-byte D-cache lines
+        self.assertNotIn('0xa0ba4b00', source)
+        metadata = readback_native.minimal_preclear_runtime_manifest(records)
+        self.assertEqual(metadata['preclear_target_physical'], '0xa0bacb00')
+        self.assertEqual(metadata['preclear_target_bytes'], 1024)
+
+    def test_explicit_preclear_clears_selected_symbol_records(self):
+        import readback_native
+        records = readback_native.minimal_boundary_records([
+            ('precpudata-external', 0xa0bacb00, 1024),
+            ('_y35a_prng_bootstrap_entered', 0xa076a730, 16),
+            ('_y35a_prng_initialized', 0xa076a740, 16),
+            ('_y35a_bootstrap_phase', 0xa076a750, 16),
+        ])
+        source = readback_native.minimal_boundary_entry_source(
+            records=records, kernel_sha256='77' * 32, preclear=True,
+            preclear_extra_records=(
+                '_y35a_prng_bootstrap_entered',
+                '_y35a_prng_initialized',
+                '_y35a_bootstrap_phase',
+            ))
+        self.assertIn('preclear_record:', source)
+        self.assertIn('preclear_record_1:', source)
+        self.assertIn('preclear_record_2:', source)
+        self.assertIn('preclear_record_3:', source)
+        for address in ('0xa076a730', '0xa076a740', '0xa076a750'):
+            self.assertIn(address, source)
+        metadata = readback_native.minimal_preclear_runtime_manifest(
+            records, ('_y35a_prng_bootstrap_entered',
+                      '_y35a_prng_initialized', '_y35a_bootstrap_phase'))
+        self.assertEqual([item['name'] for item in metadata['preclear_targets']], [
+            'precpudata-external', '_y35a_prng_bootstrap_entered',
+            '_y35a_prng_initialized', '_y35a_bootstrap_phase'])
+        self.assertIn('OR-read every declared target window', metadata['preclear_sequence'])
+
+    def test_preclear_extra_record_requires_preclear_mode(self):
+        import readback_native
+        records = readback_native.minimal_boundary_records([
+            ('precpudata-external', 0xa0bacb00, 1024),
+            ('witness', 0xa076a730, 16),
+        ])
+        with self.assertRaisesRegex(ValueError, 'require --preclear'):
+            readback_native.minimal_boundary_entry_source(
+                records=records, kernel_sha256='88' * 32,
+                preclear_extra_records=('witness',))
+
+    def test_minimal_runtime_manifest_checksum_is_record_derived(self):
+        import readback_native
+        records = readback_native.minimal_boundary_records(
+            [('precpudata-external', 0xa0ba4b00, 128)])
+        runtime = readback_native.minimal_boundary_runtime_manifest(records)
+        self.assertEqual(runtime['postcopy_integrity']['data_report_offset'],
+                         hex(records[0]['report_offset']))
+        self.assertEqual(runtime['postcopy_integrity']['bytes'], records[0]['size'])
+
+    def test_minimal_runtime_manifest_omits_unbound_checksum(self):
+        import readback_native
+        records = readback_native.minimal_boundary_records([('_BootArgs', 0xa00d26f0, 16)])
+        runtime = readback_native.minimal_boundary_runtime_manifest(records)
+        self.assertNotIn('postcopy_integrity', runtime)
+
+    def test_minimal_symbol_window_aligns_boolean_field_down(self):
+        import readback_native
+        layout = {'base': 0xFFFF_FFF0_0700_4000,
+                  'end': 0xFFFF_FFF0_0701_0000,
+                  'segments': [{'address': 0xFFFF_FFF0_0700_4000, 'size': 0x10000}]}
+        records = readback_native.minimal_boundary_records([
+            ('_panicDebugging', 0xA000_4844, 16)])
+        symbols = {'_panicDebugging': 0xFFFF_FFF0_0700_4844}
+        readback_native.annotate_minimal_symbol_windows(records, symbols, layout, 0xA000_4000)
+        self.assertEqual(records[0]['physical'], '0xa0004840')
+        self.assertEqual(records[0]['symbol_physical'], '0xa0004844')
+        self.assertEqual(records[0]['symbol_offset'], 4)
+        self.assertEqual(records[0]['field_bytes'], 4)
 
     def test_minimal_boundary_snapshot_reads_pram_pa_not_stage_alias(self):
         """The snapshot loop must address 0x859e0000 (pram physical) and

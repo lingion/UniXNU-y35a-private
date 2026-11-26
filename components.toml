@@ -310,6 +310,11 @@ build_stage = "kernel"
 build = ["build-arm-driver.py", "QcomSdcc"]
 outputs = ["build/qcom-sdcc/libQcomSdcc.a"]
 legacy_name = "NativeSdcc"
+integration_role = "userdata-window"
+force_load = true
+build_4903 = ["scripts/build_arm_driver_4903.py", "--component", "QcomSdcc"]
+consumer_4903 = "scripts/build-xnu-4903-native.py"
+integration_outputs_4903 = ["libQcomSdcc.a", "manifest.json"]
 
 [[component]]
 id = "VirtioMmioBlock"

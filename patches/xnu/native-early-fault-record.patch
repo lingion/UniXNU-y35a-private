@@ -40,17 +40,19 @@
 +
 --- a/osfmk/arm64/start.s
 +++ b/osfmk/arm64/start.s
-@@ -499,6 +499,16 @@
+@@ -499,5 +499,17 @@
  	// Load address to the C init routine into link register
  	adrp	lr, EXT(arm_init)@page
  	add		lr, lr, EXT(arm_init)@pageoff
 +#if defined(XNU_NATIVE_EARLY_FAULT) && XNU_NATIVE_EARLY_FAULT
 +	adrp x16, EXT(native_early_fault_address)@page
 +	add x16, x16, EXT(native_early_fault_address)@pageoff
-+	ldr x17, [x0, BA_VIRT_BASE]
-+	ldr x15, [x0, BA_PHYS_BASE]
-+	add x17, x17, x0
-+	sub x17, x17, x15
++	// x20 still holds the physical boot_args pointer saved at entry;
++	// x0 was repurposed for the interrupt stack above.
++	sub x16, x16, x22
++	add x16, x16, x23
++	add x17, x20, x22
++	sub x17, x17, x23
 +	add x17, x17, #0x800
 +	str x17, [x16]
 +#endif

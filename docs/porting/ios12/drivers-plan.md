@@ -32,7 +32,7 @@ facts: `docs/board/y35a-facts.md` (95 lines). Cache offsets: `out/y35a/ios12-kc/
 | WCN SDIO host | `sdhci@07864000` L5467 | hc 0x7864900+0x11c, core 0x7864000+0x800 | hc 9, pwr 221, card-detect TLMM GPIO 38 | GCC iface+core | vdd 8916_l11 (0x0b,L6012), vdd-io 8916_l12 (0x0c,L6033) | pmx_sdc2_* L1043ff; bus-width 4; 100k/400k/25M/50M |
 | BT UART | `uart@78af000` L5264 | core 0x78af000+0x200, BAM 0x7884000+0x23000 | core 107, bam 238, wake TLMM GPIO 1 level | GCC core+iface; blsp1_uart1 | (none) | pinctrl 0xb9/0xba L5287-88; BAM TX0/RX1, master-id 0x56 |
 | Touch I2C | `i2c@78b9000` L6834 | QUP 0x78b9000+0x600, BAM 0x7884000+0x23000 | qup 99, bam 238 | GCC iface+core; 400kHz out (0x61a80), 19.2MHz in | — | pmx_i2c_5 L1236: GPIO 19 SDA + 18 SCL func 2 |
-| Touch device | `rmi_i2c@20` L6857 (addr 0x20) | props L6858-6881 | attn TLMM GPIO 13 falling/level0 (parent 0x48 msm_gpio; TLMM `pinctrl@1000000` reg 0x1000000+0x300000 L751, GIC SPI 208 L752) | — | vdd_ana 8916_l16 (0xe3,L6113), vcc_i2c 8916_l6 (0x49,L5887) | ts_int GPIO13 drive16mA pull-up (0xe4 L2151), ts_reset GPIO12 (0xe5 L2177) |
+| Touch device | `rmi_i2c@20` L6857 (addr 0x20) | props L6858-6881 | attn GPIO 13 in TLMM's `msm_gpio` child IRQ domain (parent phandle 0x48); TLMM's GIC SPI 208 is its aggregate parent IRQ, not a direct GPIO13 mapping | — | vdd_ana 8916_l16 (0xe3,L6113), vcc_i2c 8916_l6 (0x49,L5887) | ts_int GPIO13 drive16mA pull-up (0xe4 L2151), ts_reset GPIO12 (0xe5 L2177) |
 | GPU core | `qcom,kgsl-3d0@01c00000` L3346 | regbase 0x1c00000+0x10000, shader 0x1c10000+0x10000, qfprom 0x5c000+0x204 | 33 edge | GCC 0x42 ×6 (core/iface/mem/mem_iface/alt_mem_iface/gtcu_iface) | vdd 0x57 = gdsc_oxili_gx (0x185901c L3096-3104) — GDSC not PMIC rail | pwrlevels 400/307.2/200/19.2 MHz (L3382-3404); top 467.2; chipid 0x3000600 (A3xx CP3) |
 | GPU IOMMU | `qcom,iommu@1f00000` L3121 (gfx_iommu, MMU-500) | 0x1f00000+0x10000; ctx gfx3d_user 0x1f09000, gfx3d_priv 0x1f0a000 | global NS 43 / S 42; ctx 241 (SID 0) / 242 (SID 1) | iface+core | GPU iommu=<0x58> L3136 | — |
 | MDSS MDP | `qcom,mdss_mdp@1a00000` L3446 | 0x1a00000+0x90000, 0x1ac8000+0x3000 | (not extracted — unknown) | gcc-mdss `@1a98300` L5177 | — | — |
@@ -56,7 +56,11 @@ SPI multitouch — provider `AppleARMSPIDevice`, IOClass `AppleMultitouchN1SPI`;
 IC; R3). Two stages: (1) QUPv2 I2C master for `qcom,i2c-msm-v2` @0x78b9000 (SE 0x600, BAM
 0x7884000, qup SPI 99, bam 238, pipes 12/13, GPIO 18/19 func 2); publishes an `IOPlatformDevice`
 nub with a `compatible` our device driver matches. (2) RMI4 function driver for S3202 at 7-bit
-0x20: reset GPIO 12, attn GPIO 13 falling, attn_polarity 0, rails 8916_l16 + 8916_l6 over
+0x20: reset GPIO 12, attn GPIO 13 through the TLMM GPIO IRQ domain (the stock node has
+`interrupt-parent = <0x48>` and `interrupts = <13 0>`). The TLMM node's GIC SPI 208 is an aggregate
+parent interrupt; the MSM TLMM handler dispatches per-pin status from that parent. Treat the
+GPIO13-to-XNU interrupt path as unresolved until the TLMM dispatch is implemented or independently
+measured. Do not substitute a direct GIC SPI for GPIO13. `attn_polarity = 0`, rails 8916_l16 + 8916_l6 over
 RPM-SMD; F00/F01/F13 page addressing (RMI4 spec, no local copy). Map ts 1266x2220 → lcd 720x1280
 (L6858-6881), vivo virtual-key table, dclick x[160:1106] y[160:2060] (R3).
 IOKit: subclass **IOHIDEventService** (prelinked; IOHIDEventService+UserClient/Queue ×14,

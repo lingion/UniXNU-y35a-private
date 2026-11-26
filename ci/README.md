@@ -11,7 +11,3 @@ XNU native build 需要精确绑定以下输入才能进入 CI。
 - build profile、jobs、run root 和 expected kernel SHA
 
 这些输入目前仍有一部分只存在移动硬盘的 R207 外置 run root 中。它们进入私有仓库前，不能把本机编译伪装成可复现 CI 编译。目标是先把 `experiment.json` 和有序 patch manifest 同步，再添加 manifest 驱动的 macOS workflow。启用 native build 后，本机只执行真机专属和 CI 无法访问的步骤。
-
-## Private mirror sync
-
-Run `scripts/sync_private_mirror.py` from the internal mirror with the external worktree as input. It copies tracked source and metadata, excludes device raw, build trees, external source caches and checkpoints, validates the diff, commits and optionally pushes `main`.

@@ -36,7 +36,9 @@ def excluded(path: Path) -> bool:
 
 
 def source_files(source: Path) -> list[Path]:
-    raw = run("git", "ls-files", "-co", "--exclude-standard", "-z", cwd=source)
+    raw = subprocess.check_output(
+        ["git", "ls-files", "-c", "-z"], cwd=source, text=False
+    ).decode("utf-8", "surrogateescape")
     tracked = [Path(item) for item in raw.split("\0") if item]
     return [path for path in tracked if not excluded(path)]
 

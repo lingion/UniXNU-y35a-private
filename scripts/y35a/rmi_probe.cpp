@@ -12,12 +12,11 @@
 //    is a legitimate verdict, not a probe bug.
 //  - The DT clock cells (clocks=<0x42 0x8caa5b4f 0x42 0xacae5604>,
 //    evidence dtb10-stock.dts:6843) are Linux clock NAME hashes, not GCC
-//    register indices. So this probe performs no GDSCR index arithmetic:
-//    it dumps the raw GCC window (0x01800000+0x0..0x800) and the raw
-//    TLMM window (0x01000000+0x0..0x2000; pin bank stride 4, facts
-//    y35a-facts.md:62) for offline mapping against the GCC8916/Linux
-//    pinctrl-msm register knowledge. lk2nd hw/gpio/tlmm.c uses a
-//    different (supplier-level) bit layout — not assumed here either.
+//    register indices. This corrected collector therefore reads only the
+//    source-pinned target windows: TLMM GPIO12/13/18/19 ctl/io/intr_cfg/
+//    intr_status at base + pin*0x1000 + {0,4,8,c}, and GCC+0x6000..0x6024
+//    plus GCC+0x45000..0x45008 for the QUP5/BLSP1-AHB controls. The old
+//    broad +4 TLMM and GCC+0x800 dumps are not hardware evidence.
 //  - Pin identities come from the stock DT verbatim: SDA/SCL = TLMM
 //    19/18 (pmx_i2c_5 qcom,pins=<0x3f 0x13 0x3f 0x12>), reset = 12
 //    (synaptics,reset-gpio=<0x48 0x0c 0x00>), attn irq = 13
@@ -126,12 +125,14 @@ struct Report {
                                   //     F01 basic query IF F01 sits at the
                                   //     boot-state default — recorded as raw
                                   //     evidence, never asserted here)
-  volatile uint32_t attn[4];      // 0x90 TLMM pin-13 word, 4 samples
-  volatile uint32_t pad;          // 0xa0
-  volatile uint32_t gpio[200];    // 0xa4 raw TLMM bank pins 0..199 (words
-                                  //     0x000..0x31c of the controller; the
-                                  //     four touch pins are 12,13,18,19)
-  volatile uint32_t gcc[512];     // 0x3c4 raw GCC 0x000..0x7fc of gcc@1800000
+  volatile uint32_t attn_input[4];  // 0x90 GPIO13 input, four samples
+  volatile uint32_t attn_status[4]; // 0xa0 GPIO13 interrupt status, four samples
+  // 0xb0: ctl/io/intr_cfg/intr_status for GPIO12,13,18,19. The TLMM
+  // per-pin window stride is 0x1000; a +4 loop samples only GPIO0.
+  volatile uint32_t tlmm_target[16];
+  // 0xf0: GCC+0x6000..0x6024 (QUP5 RCG/branch/reset) followed by
+  // GCC+0x45000..0x45008 (BLSP1 AHB vote window).
+  volatile uint32_t gcc_q5[13];
 };
 static_assert(sizeof(Report) <= 0x1000,
               "report must fit between the end of pram (0x859f0000) and "
@@ -173,15 +174,28 @@ extern "C" void probe_main() {
   for (unsigned i = 0; i < sizeof(offsets) / sizeof(offsets[0]); ++i)
     rep->se_dump[i] = io.read32(offsets[i]);
 
-  // 2) Raw register windows (evidence for T0.3, zero interpretation).
-  for (unsigned i = 0; i < 200; ++i) rep->gpio[i] = rawRead(0x01000000 + i * 4);
-  for (unsigned i = 0; i < 512; ++i) rep->gcc[i] = rawRead(0x01800000 + i * 4);
+  // 2) Exact target register windows. These are reads only; the old broad
+  // dumps used the wrong TLMM stride and stopped before the QUP5 GCC gates.
+  static constexpr uint32_t pins[] = {12, 13, 18, 19};
+  static constexpr uint32_t tlmm_offsets[] = {0x0, 0x4, 0x8, 0xc};
+  unsigned tlmm_index = 0;
+  for (unsigned p = 0; p < sizeof(pins) / sizeof(pins[0]); ++p)
+    for (unsigned r = 0; r < sizeof(tlmm_offsets) / sizeof(tlmm_offsets[0]); ++r)
+      rep->tlmm_target[tlmm_index++] =
+          rawRead(0x01000000 + pins[p] * 0x1000 + tlmm_offsets[r]);
+
+  static constexpr uint32_t gcc_offsets[] = {
+      0x06000, 0x06004, 0x06008, 0x0600c, 0x06010, 0x06014,
+      0x06018, 0x0601c, 0x06020, 0x06024, 0x45000, 0x45004, 0x45008};
+  for (unsigned i = 0; i < sizeof(gcc_offsets) / sizeof(gcc_offsets[0]); ++i)
+    rep->gcc_q5[i] = rawRead(0x01800000 + gcc_offsets[i]);
 
   // attn line, 4 samples (~tens of ms apart at the recorded cntfrq):
   // if anything toggles the input buffer we see it; polarity stays a
   // T0.3 offline interpretation.
   for (unsigned i = 0; i < 4; ++i) {
-    rep->attn[i] = rawRead(0x01000000 + 13 * 4);
+    rep->attn_input[i] = rawRead(0x01000000 + 13 * 0x1000 + 0x4);
+    rep->attn_status[i] = rawRead(0x01000000 + 13 * 0x1000 + 0xc);
     io.delay();
   }
 

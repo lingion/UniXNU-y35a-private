@@ -146,6 +146,25 @@ def run(command, env, *, cwd=None, log=None, check=True):
     return result
 
 
+def apply_required_patch(work, patch_path, marker_name, env):
+    """Apply one instrumentation patch with exact context and a content digest sentinel."""
+    if not patch_path.is_file():
+        raise SystemExit(f'required Y35A patch is missing: {patch_path}')
+    digest = hashlib.sha256(patch_path.read_bytes()).hexdigest()
+    marker = work / marker_name
+    if marker.is_file():
+        recorded = marker.read_text().strip()
+        if recorded != digest:
+            raise SystemExit(
+                f'{marker_name} does not match {patch_path.name}; use a fresh XNU work tree'
+            )
+        return
+    run(['git', 'apply', '--check', str(patch_path)], env, cwd=work)
+    run(['git', 'apply', str(patch_path)], env, cwd=work)
+    marker.write_text(digest + '\n')
+    info(f'applied {patch_path.name}')
+
+
 def ensure_source(src, env):
     if (src / 'makedefs' / 'MakeInc.def').is_file():
         head = subprocess.run(['git', '-C', str(src), 'describe', '--tags'], capture_output=True, text=True)
@@ -171,7 +190,7 @@ def sync_tree(src, work):
     (work / '.synced-from').write_text(str(src) + '\n')
 
 
-def fix_source(work, fakeroot):
+def fix_source(work, fakeroot, env):
     """Idempotent Linux-host source fixes; each checks whether it is still needed."""
     script = work / 'bsd/kern/makesyscalls.sh'
     text = script.read_text()
@@ -278,24 +297,132 @@ def fix_source(work, fakeroot):
     else:
         raise SystemExit(f'{genassym}: DECLARE() constraint line not found; re-derive the genassym fix')
 
-    # The early-fault patch is part of the Y35A bring-up contract. Without it,
-    # a panic before PE_create_console/panic_init leaves no phase marker and
-    # the retained EPH fields remain indistinguishable from a blank reset.
-    early_patch = ROOT / 'patches/xnu/native-early-fault-record.patch'
-    if early_patch.is_file():
-        marker = work / '.native-early-fault-applied'
-        if not marker.is_file():
-            run(['patch', '-p1', '--forward', '--input', str(early_patch)], os.environ, cwd=work)
-            marker.write_text(str(early_patch) + '\n')
-            info('applied native-early-fault-record.patch for Y35A phase diagnostics')
-
-    phase_patch = ROOT / 'patches/xnu/native-phase-markers.patch'
-    if phase_patch.is_file():
-        marker = work / '.native-phase-markers-applied'
-        if not marker.is_file():
-            run(['patch', '-p1', '--forward', '--input', str(phase_patch)], os.environ, cwd=work)
-            marker.write_text(str(phase_patch) + '\n')
-            info('applied native-phase-markers.patch for Y35A startup phase diagnostics')
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-early-fault-record.patch',
+        '.native-early-fault-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-entry-witness.patch',
+        '.native-entry-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-phase-markers.patch',
+        '.native-phase-markers-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-phase-kva-carrier.patch',
+        '.native-phase-kva-carrier-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-phase-c-entry-markers.patch',
+        '.native-phase-c-entry-markers-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-phase-console-marker.patch',
+        '.native-phase-console-marker-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-phase-c-enable.patch',
+        '.native-phase-c-enable-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-handoff-witness.patch',
+        '.native-handoff-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-pre-mmu-witness.patch',
+        '.native-pre-mmu-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-startup-witness.patch',
+        '.native-startup-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-bootargs-witness.patch',
+        '.native-bootargs-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-kva-calc-witness.patch',
+        '.native-kva-calc-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-args-physical-witness.patch',
+        '.native-args-physical-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-stack-link-witness.patch',
+        '.native-stack-link-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-stack-link-physical.patch',
+        '.native-stack-link-physical-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-fault-publish-witness.patch',
+        '.native-fault-publish-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-invalidation-witness.patch',
+        '.native-invalidation-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-invalidation-setup-witness.patch',
+        '.native-invalidation-setup-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-invalidation-loop-state.patch',
+        '.native-invalidation-loop-state-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-mapping-witness.patch',
+        '.native-mapping-witness-applied',
+        env,
+    )
+    apply_required_patch(
+        work,
+        ROOT / 'patches/xnu/native-header-adjust-witness.patch',
+        '.native-header-adjust-witness-applied',
+        env,
+    )
 
     # config/MASTER.arm64 references the config bundle MONOTONIC_BASE inside PERF_DBG_BASE (line 47)
     # but the published tag never defines that bundle — Apple's internal device MASTER fragments do.
@@ -430,7 +557,11 @@ def build(work, env, jobs, machine, log, fakeroot):
          f'MACHINE_CONFIGS={machine}', 'KERNEL_CONFIGS=DEVELOPMENT',
          'ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64', 'SDKVERSION=12.4',
          'INCFLAGS_SDK+=-I$(SDKROOT)/usr/local/include',
-         'arm_init.o_CFLAGS_ADD=-DXNU_NATIVE_EARLY_FAULT=1',
+         # The phase and early-fault patches guard both C and assembly sources.
+         # Per-object CFLAGS do not reach locore.s/start.s in this make system;
+         # export the feature through the global C and ARM64 assembler flags.
+         'CFLAGS_EXTRA=-DXNU_NATIVE_EARLY_FAULT=1',
+         'SFLAGS_ARM64+=-DXNU_NATIVE_EARLY_FAULT=1',
          f'RC_PROJECT_CONFIG=RELEASE_ARM64_{machine}',
          'BUILD_LTO=0', 'BOUND_CHECKS=0', 'BUILD_WERROR=0', f'MAKEJOBS=-j{jobs}',
          f'OBJROOT={work}/BUILD/obj', f'SYMROOT={work}/BUILD/sym', f'DSTROOT={work}/BUILD/dst',
@@ -526,12 +657,14 @@ def main():
     env['UNIXNU_SDKROOT'] = str(fakeroot)
     env['UNIXNU_PLATFORM_PATH'] = str(fakeroot / 'Platforms/iPhoneOS.platform')
     jobs = os.environ.get('JOBS', '4')
-    work = ROOT / '.cache/xnu4903-work'
+    # Allow an isolated rebuild when an earlier instrumented tree has already
+    # recorded applied-patch sentinels. The default keeps the established path.
+    work = ROOT / os.environ.get('XNU4903_WORK', '.cache/xnu4903-work')
 
     log = (output / 'build.log').open('w')
     ensure_source(args.src, env)
     sync_tree(args.src, work)
-    fix_source(work, fakeroot)
+    fix_source(work, fakeroot, env)
     installhdrs(work, env, jobs, log, fakeroot, args.machine)
 
     build(work, env, jobs, args.machine, log, str(fakeroot))

@@ -82,6 +82,19 @@ class BoardADT(unittest.TestCase):
         # GICv2 legacy accounting: SPI n maps to INTID n + 32.
         self.assertEqual([cells[1] + 32, cells[4] + 32], [155, 170])
 
+    def test_sdhc2_removable_tf_contract(self):
+        root, _ = decode(make_tree(random_seed=bytes(64)))
+        props = root[1]['arm-io'][1]['sdhc2'][0]
+        hc_rel, hc_len, core_rel, core_len = struct.unpack('<4Q', props['reg'])
+        io_ranges = struct.unpack('<QQQ', root[1]['arm-io'][0]['ranges'])[1]
+        self.assertEqual((io_ranges + hc_rel, hc_len), (0x07864900, 0x11c))
+        self.assertEqual((io_ranges + core_rel, core_len), (0x07864000, 0x800))
+        self.assertEqual(struct.unpack('<I', props['qcom,bus-width'])[0], 4)
+        self.assertEqual(struct.unpack('<I', props['qcom,card-detect-gpio'])[0], 38)
+        self.assertEqual(struct.unpack('<I', props['qcom,card-detect-active-low'])[0], 1)
+        self.assertEqual(struct.unpack('<I', props['unixnu,slot'])[0], 2)
+        self.assertEqual(struct.unpack('<I', props['unixnu,poll-only'])[0], 1)
+
     def test_touch_i2c_bus_node_encodes_measured_windows_and_irqs(self):
         # facts 49-60: BLSP1 QUP5 SE at 0x78b9000 len 0x600, qup_irq SPI 99
         # (INTID 131), bam_irq SPI 238 (INTID 270), 400 kHz out / 19.2 MHz in.

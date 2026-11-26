@@ -1,6 +1,6 @@
 --- a/osfmk/arm/arm_init.c
 +++ b/osfmk/arm/arm_init.c
-@@ -88,10 +88,11 @@
+@@ -88,10 +88,13 @@
  extern uint64_t native_early_fault_address;
 -static void native_phase_marker(uint32_t slot, uint64_t value)
 +static boot_args *native_phase_args;
@@ -15,22 +15,24 @@
 +	record = (volatile uint64_t *)((uintptr_t)native_phase_args + 0x800);
  	if (slot >= 11) return;
  	record[slot] = value;
++	/* Preserve the marker in RAM for the retained-memory readback probe. */
++	__asm__ volatile("dc civac, %0\n\tdsb sy" : : "r"(&record[slot]) : "memory");
  }
-@@ -226,1 +227,1 @@
--	native_phase_marker(5, 0x41524d494e495445ULL);
-+	native_phase_marker(args, 5, 0x41524d494e495445ULL);
-@@ -244,1 +245,1 @@
--	native_phase_marker(6, 0x5045494e4954454eULL);
-+	native_phase_marker(args, 6, 0x5045494e4954454eULL);
-@@ -248,1 +249,1 @@
--	native_phase_marker(7, 0x5045494e49545254ULL);
-+	native_phase_marker(args, 7, 0x5045494e49545254ULL);
-@@ -409,1 +410,1 @@
+@@ -401,8 +402,8 @@
+ #endif  /* __ARM_PAN_AVAILABLE__ */
+ 
+ 	arm_vm_init(xmaxmem, args);
+ #if defined(XNU_NATIVE_EARLY_FAULT) && XNU_NATIVE_EARLY_FAULT
 -	native_phase_marker(8, 0x41524d564d494e49ULL);
 +	native_phase_marker(args, 8, 0x41524d564d494e49ULL);
-@@ -421,1 +422,1 @@
+ #endif
+ 
+ 	uint32_t debugmode;
+@@ -411,6 +411,6 @@
+ 	printf_init();
+ 	panic_init();
+ #if defined(XNU_NATIVE_EARLY_FAULT) && XNU_NATIVE_EARLY_FAULT
 -	native_phase_marker(9, 0x50414e4943494e49ULL);
 +	native_phase_marker(args, 9, 0x50414e4943494e49ULL);
-@@ -464,1 +465,1 @@
--	native_phase_marker(10, 0x434f4e534f4c45ULL);
-+	native_phase_marker(args, 10, 0x434f4e534f4c45ULL);
+ #endif
+ #if __arm64__

@@ -3,6 +3,11 @@
 Decision record for the pivot: `docs/board/pivot-ios12.md`. Board register facts:
 `docs/board/y35a-facts.md`. 4570 audit findings: `docs/board/audit-4570-findings.md`.
 
+Baseline note: these design documents were synthesized on 2026-11-04 against xnu-4570. The
+active target is XNU-4903, as recorded in `GOAL.md` and `docs/board/pivot-ios12.md`. Treat
+kernel API, source-location, ABI, and build-integration details here as historical until
+verified against the active XNU-4903 source. Board facts remain tied to their cited captures.
+
 | Document | Scope |
 | --- | --- |
 | [boot-chain.md](boot-chain.md) | How xnu-4570 boots on non-Apple arm64 (ADT-only device tree, polled console, generic-timer fallback, WT kernel integrity, packed `_PrelinkLinkKASLROffsets`); what the format-1 pipeline (build_native → emit_prelink → package_native → EL1 shim) carries over; delta list D1-D9; boot prerequisites checklist; evidence corrections |
