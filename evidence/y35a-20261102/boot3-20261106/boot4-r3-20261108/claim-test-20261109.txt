@@ -1,0 +1,29 @@
+=== claim-test 03:24:31
+efff9d92	 fastboot
+getvar[1]: (eval):9: command not found: timeout
+getvar[2]: (eval):9: command not found: timeout
+getvar[3]: (eval):9: command not found: timeout
+=== getvar-under-claim 2026-11-09 03:44:24
+* daemon not running; starting now at tcp:5037
+elapsed 0.0s rc=0
+product: lk2nd-msm8916
+Finished. Total time: 0.003s
+--- 无争用对照 (adb kill 后):
+elapsed 0.0s rc=0
+product: lk2nd-msm8916
+Finished. Total time: 0.003s
+
+== 判词 (03:4x 轮, 同文件追加) ==
+1. 03:24 轮三条 getvar 全部没跑成: macOS zsh 无 timeout 命令, 计时器
+   从未启动——该轮对争用零信息量 (工具错误, 非设备证据)。
+2. 03:44 轮用 python subprocess timeout=12 重做:
+   - adb server 在跑 (5037 监听) + claim 在册: getvar 0.0s rc=0
+   - adb kill-server 后: getvar 0.0s rc=0
+   → "adb 5037 争用"在 getvar 通道不复现。r6 轮 readq 挂死若为争用,
+     机制必在 bulk 长传输层 (claw 内核线程持有 interface), getvar 级别
+     测试无鉴别力; 挂死复现窗已过, 不追。
+3. 实况登记: 设备此刻在 lk2nd fastboot 槽 (product: lk2nd-msm8916),
+   自 00:2x boot3 交棒态存活整夜。取证窗状态=开, 但插桩内核修复
+   (builder *_o_SFLAGS_ADD, 见 heartbeat-20261109-0300 §2)未落地前
+   boot 下一轮 = 浪费窗, 遵守顺序闸, 本轮不 boot。
+4. 本会话并行件纪律: builder/readback/package 在途修改归其它会话, 不动。

@@ -1,0 +1,36 @@
+--- a/osfmk/arm/arm_init.c
++++ b/osfmk/arm/arm_init.c
+@@ -88,10 +88,11 @@
+ extern uint64_t native_early_fault_address;
+-static void native_phase_marker(uint32_t slot, uint64_t value)
++static boot_args *native_phase_args;
++static void native_phase_marker(boot_args *args, uint32_t slot, uint64_t value)
+ {
+ 	volatile uint64_t *record;
+-	if (native_early_fault_address == 0) return;
+-	/* start.s publishes the retained args+0x800 carrier before C starts. */
+-	record = (volatile uint64_t *)(uintptr_t)native_early_fault_address;
++	if (native_phase_args == 0) native_phase_args = args;
++	/* arm_init receives the original boot_args as a valid KVA after MMU enable. */
++	record = (volatile uint64_t *)((uintptr_t)native_phase_args + 0x800);
+ 	if (slot >= 11) return;
+ 	record[slot] = value;
+ }
+@@ -226,1 +227,1 @@
+-	native_phase_marker(5, 0x41524d494e495445ULL);
++	native_phase_marker(args, 5, 0x41524d494e495445ULL);
+@@ -244,1 +245,1 @@
+-	native_phase_marker(6, 0x5045494e4954454eULL);
++	native_phase_marker(args, 6, 0x5045494e4954454eULL);
+@@ -248,1 +249,1 @@
+-	native_phase_marker(7, 0x5045494e49545254ULL);
++	native_phase_marker(args, 7, 0x5045494e49545254ULL);
+@@ -409,1 +410,1 @@
+-	native_phase_marker(8, 0x41524d564d494e49ULL);
++	native_phase_marker(args, 8, 0x41524d564d494e49ULL);
+@@ -421,1 +422,1 @@
+-	native_phase_marker(9, 0x50414e4943494e49ULL);
++	native_phase_marker(args, 9, 0x50414e4943494e49ULL);
+@@ -464,1 +465,1 @@
+-	native_phase_marker(10, 0x434f4e534f4c45ULL);
++	native_phase_marker(args, 10, 0x434f4e534f4c45ULL);

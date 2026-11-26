@@ -1,0 +1,201 @@
+diff --git a/pexpert/arm/pe_serial.c b/pexpert/arm/pe_serial.c
+--- a/pexpert/arm/pe_serial.c
++++ b/pexpert/arm/pe_serial.c
+@@ -740,6 +740,56 @@
+ 	const char *str,
+ 	struct pe_serial_functions *fns);
+ 
++#if defined(XNU_NATIVE_UARTDM) && XNU_NATIVE_UARTDM
++#include <pexpert/arm/uartdm.h>
++static vm_offset_t uartdm_base;
++
++static void uartdm_init(void) { /* Retain already-initialized hardware. */ }
++/* Always accept an attempt: the leaf bounds polling and drops on timeout.
++ * Returning hardware readiness here would enter uart_putc_device's unbounded loop. */
++static unsigned int uartdm_transmit_ready(void) { return 1; }
++static void uartdm_transmit_data(uint8_t c)
++{
++	(void)uartdm_write_word(uartdm_base, &c, 1, UARTDM_POLL_LIMIT);
++}
++/* TX-only console. RXRDY alone does not establish a valid byte count; do not
++ * expose padded FIFO bytes without implementing DMRX/stale/snapshot lifecycle. */
++static unsigned int uartdm_receive_ready(void) { return 0; }
++static uint8_t uartdm_receive_data(void) { return 0; }
++SECURITY_READ_ONLY_LATE(static struct pe_serial_functions) uartdm_serial_functions = {
++	.init = uartdm_init,
++	.transmit_ready = uartdm_transmit_ready,
++	.transmit_data = uartdm_transmit_data,
++	.receive_ready = uartdm_receive_ready,
++	.receive_data = uartdm_receive_data,
++	.device = SERIAL_UARTDM
++};
++
++/* Return true once v1.4 is selected, even when its resources are invalid:
++ * never let the legacy name-only PL011 path touch a selected UARTDM. ADT reg
++ * uses native uintptr_t offset/size pairs relative to arm-io's SoC base. */
++static bool
++uartdm_probe(vm_offset_t soc_base)
++{
++	DTEntry entry = NULL;
++	const char *compatible = NULL;
++	const uintptr_t *reg = NULL;
++	uint32_t size = 0;
++	if (SecureDTFindEntry("boot-console", NULL, &entry) != kSuccess &&
++	    SecureDTFindEntry("name", "uart0", &entry) != kSuccess &&
++	    SecureDTFindEntry("name", "uart1", &entry) != kSuccess) return false;
++	if (SecureDTGetProperty(entry, "compatible", (const void **)&compatible, &size) != kSuccess ||
++	    !uartdm_compatible(compatible, size)) return false;
++	if (SecureDTGetProperty(entry, "reg", (const void **)&reg, &size) == kSuccess &&
++	    size == 2 * sizeof(*reg) && !(reg[0] & 3) && reg[1] >= UARTDM_TF + 4 &&
++	    reg[0] <= ~(uintptr_t)0 - soc_base &&
++	    reg[1] <= ~(uintptr_t)0 - (soc_base + reg[0])) {
++		uartdm_base = ml_io_map(soc_base + reg[0], reg[1]);
++	}
++	return true;
++}
++#endif /* XNU_NATIVE_UARTDM */
++
+ static void
+ register_serial_functions(struct pe_serial_functions *fns)
+ {
+@@ -820,6 +870,13 @@
+ 	}
+ 
+ 	soc_base = pe_arm_get_soc_base_phys();
++
++#if defined(XNU_NATIVE_UARTDM) && XNU_NATIVE_UARTDM
++	if (uartdm_probe(soc_base)) {
++		if (uartdm_base) register_serial_functions(&uartdm_serial_functions);
++		goto serial_devices_ready;
++	}
++#endif
+ 
+ 	if (soc_base == 0) {
+ 		uart_initted = true;
+@@ -960,6 +1017,9 @@
+ 	}
+ #endif /* APPLE_UART */
+ 
++#if defined(XNU_NATIVE_UARTDM) && XNU_NATIVE_UARTDM
++serial_devices_ready:
++#endif
+ 	fns = gPESF;
+ 	while (fns != NULL) {
+ 		serial_do_transmit = 1;
+@@ -1263,6 +1323,9 @@
+ serial_go_to_sleep(void)
+ {
+ 	struct pe_serial_functions *fns = gPESF;
++#if defined(XNU_NATIVE_UARTDM) && XNU_NATIVE_UARTDM
++	if (uartdm_base) (void)uartdm_drain(uartdm_base, UARTDM_POLL_LIMIT);
++#endif
+ 	while (fns != NULL) {
+ 		if (irq_available_and_ready(fns)) {
+ 			fns->disable_irq();
+diff --git a/pexpert/pexpert/arm/protos.h b/pexpert/pexpert/arm/protos.h
+--- a/pexpert/pexpert/arm/protos.h
++++ b/pexpert/pexpert/arm/protos.h
+@@ -47,7 +47,8 @@
+ 	SERIAL_DOCKCHANNEL=0x2,
+ 	SERIAL_PI3_UART=0x4,
+ 	SERIAL_VMAPPLE_UART=0x8,
+-	SERIAL_DCC_UART=0x10
++	SERIAL_DCC_UART=0x10,
++	SERIAL_UARTDM=0x20
+ } serial_device_t;
+ 
+ kern_return_t serial_irq_enable(serial_device_t device);
+diff --git a/pexpert/pexpert/arm/uartdm.h b/pexpert/pexpert/arm/uartdm.h
+new file mode 100644
+--- /dev/null
++++ b/pexpert/pexpert/arm/uartdm.h
+@@ -0,0 +1,89 @@
++/* Polled legacy-mode UARTDM v1.4 (BLSP), retaining bootloader configuration.
++ * Register/protocol reference: LK2nd 23.1 platform/msm_shared/uart_dm.{c,h}.
++ * No clocks, pinctrl, baud, interrupts, DMA, or RX transfer ownership here.
++ */
++#ifndef _PEXPERT_ARM_UARTDM_H
++#define _PEXPERT_ARM_UARTDM_H
++
++#ifndef UARTDM_READ32
++#define UARTDM_READ32(base, off) (*(volatile uint32_t *)((base) + (off)))
++#endif
++#ifndef UARTDM_WRITE32
++#define UARTDM_WRITE32(base, off, value) (*(volatile uint32_t *)((base) + (off)) = (value))
++#endif
++#define UARTDM_SR 0xa4u
++#define UARTDM_CR 0xa8u
++#define UARTDM_ISR 0xb4u
++#define UARTDM_TF 0x100u
++#define UARTDM_DMEN 0x3cu
++#define UARTDM_NCF_TX 0x40u
++#define UARTDM_RXRDY 1u
++#define UARTDM_TXRDY 4u
++#define UARTDM_TXEMT 8u
++#define UARTDM_TX_READY 0x80u
++#define UARTDM_RESET_TX_READY 0x300u
++#define UARTDM_POLL_LIMIT 100000u
++
++/* ADT compatible is a bounded NUL-separated string list, not a prefix. Only
++ * v1.4 is supported: older GSBI DM uses SR=0x08, CR=0x10, TF=0x70. */
++static inline int
++uartdm_compatible(const char *list, unsigned length)
++{
++	static const char wanted[] = "qcom,msm-uartdm-v1.4";
++	if (!list) return 0;
++	for (unsigned start = 0; start < length;) {
++		unsigned end = start;
++		while (end < length && list[end]) ++end;
++		if (end == length) return 0;
++		if (end - start == sizeof(wanted) - 1) {
++			unsigned i = 0;
++			while (i < sizeof(wanted) - 1 && list[start + i] == wanted[i]) ++i;
++			if (i == sizeof(wanted) - 1) return 1;
++		}
++		start = end + 1;
++	}
++	return 0;
++}
++
++/* A read budget, not a timer frequency assumption; zero means no MMIO. */
++static inline int
++uartdm_wait(uintptr_t base, uint32_t mask, unsigned budget)
++{
++	while (budget--) if (UARTDM_READ32(base, UARTDM_SR) & mask) return 1;
++	return 0;
++}
++static inline int
++uartdm_drain(uintptr_t base, unsigned budget)
++{
++	return uartdm_wait(base, UARTDM_TXEMT, budget);
++}
++static inline int
++uartdm_rx_available(uintptr_t base)
++{
++	return !!(UARTDM_READ32(base, UARTDM_SR) & UARTDM_RXRDY);
++}
++
++/* At most one FIFO word. XNU's console serializes callers and owns CRLF.
++ * Wait for the preceding transaction BEFORE NCF_TX; never reset the UART to
++ * recover a timeout. A stuck or DMA-owned UART drops output rather than hangs. */
++static inline int
++uartdm_write_word(uintptr_t base, const uint8_t *bytes, unsigned count, unsigned budget)
++{
++	if (!bytes || !count || count > 4 || !budget) return 0;
++	if (UARTDM_READ32(base, UARTDM_DMEN)) return 0;
++	unsigned left = budget;
++	while (left--) {
++		if ((UARTDM_READ32(base, UARTDM_SR) & UARTDM_TXEMT) ||
++		    (UARTDM_READ32(base, UARTDM_ISR) & UARTDM_TX_READY)) goto ready;
++	}
++	return 0;
++ready:
++	UARTDM_WRITE32(base, UARTDM_NCF_TX, count);
++	UARTDM_WRITE32(base, UARTDM_CR, UARTDM_RESET_TX_READY);
++	if (!uartdm_wait(base, UARTDM_TXRDY, budget)) return 0;
++	uint32_t word = 0;
++	for (unsigned i = 0; i < count; ++i) word |= (uint32_t)bytes[i] << (i * 8);
++	UARTDM_WRITE32(base, UARTDM_TF, word);
++	return 1;
++}
++#endif /* _PEXPERT_ARM_UARTDM_H */

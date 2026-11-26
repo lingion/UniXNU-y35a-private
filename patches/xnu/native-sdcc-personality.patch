@@ -1,0 +1,17 @@
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -92,6 +92,14 @@
+     "     'IOProbeScore'    = 1000:32;"
+     "   }"
+ #endif
++#if defined(XNU_NATIVE_SDCC) && XNU_NATIVE_SDCC
++    "   ,{"
++    "     'IOClass'         = NativeSdcc;"
++    "     'IOProviderClass' = IOPlatformDevice;"
++    "     'IONameMatch'     = 'qcom,sdhci-msm';"
++    "     'IOProbeScore'    = 1000:32;"
++    "   }"
++#endif
+ #if defined(XNU_NATIVE_UFS) && XNU_NATIVE_UFS
+     "   ,{"
+     "     'IOClass'         = NativeUfs;"

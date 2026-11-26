@@ -1,0 +1,57 @@
+{
+  "cache_bytes": 30228480,
+  "cache_path": "out/ipsw/16G102/kernelcache.decompressed",
+  "cache_sha256": "70e80388d42fe2376096bb6248073b0380dd87b85b1a792b36205ba60c722ce1",
+  "excluded_modules": [
+    "com.apple.IOTextEncryptionFamily",
+    "com.apple.driver.ASIOKit",
+    "com.apple.driver.AppleVXD393",
+    "com.apple.driver.FairPlayIOKit",
+    "com.apple.driver.IOAudioCodecs",
+    "com.apple.driver.LSKDIOKit",
+    "com.apple.driver.LSKDIOKitMSE"
+  ],
+  "kcid": {
+    "bytes": 16,
+    "cdata_present": false,
+    "location": "top level only",
+    "per_module_kcid_entries": 0,
+    "prelink_kext_plist_key_present": false,
+    "underscore_prelink_occurrences": 1124,
+    "underscore_prelink_unique_keys": 10
+  },
+  "pipeline": "legacy-ios12-in-place (synthetic native stand-in)",
+  "plan": {
+    "codeless": 8,
+    "exec_addr_entries": 184,
+    "kaslr_sites": 251829,
+    "kpi_stubs": 7,
+    "loadable": 177,
+    "plist_entries": 193,
+    "pruned": 1
+  },
+  "pointer_sites_sum_equals_kaslr_sites": true,
+  "recorded_utc": "2026-11-05T05:45:00+08:00",
+  "report": {
+    "candidate_bytes": 30228480,
+    "candidate_sha256": "cabda77014000053866ff87421fea9396aa509c786f53ea29107437d03e38fa0",
+    "codeless": 8,
+    "component_count": 170,
+    "kernel_payload_bytes_copied": 6379104,
+    "kpi_stubs": 7,
+    "loadable": false,
+    "plist_bytes": 2079138,
+    "plist_entries": 185,
+    "pointer_fixups": 171556,
+    "pointer_sites": {
+      "component": 75712,
+      "dropped": 4561,
+      "kernel": 171556,
+      "null": 0
+    },
+    "pruned": 1,
+    "runtime_qualified": false,
+    "slide": 0
+  },
+  "roots_count": 170
+}

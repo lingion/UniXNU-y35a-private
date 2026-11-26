@@ -1,0 +1,30 @@
+Instrumented early-fault capture attempt, 2026-11-08
+
+Artifacts
+- instrumented kernel SHA-256: 4aa64f2f6a6ff4e4adf6065c817957575e6f804c44860eeaac73a746fe484df3
+- instrumented boot3 image SHA-256: 18b916a265f153c6b0fe42da69be379ed161875524d5250893c8a36584624889
+- early-fault reset probe image SHA-256: ff7662c8418254fc7f7ffe68d3f855de46e687c2180b84887d5ecf52ace6e02d
+
+Sequence
+1. Read-only readiness: fastboot devices/getvar product/oem y35a layout/getvar max-download-size all returned normally.
+2. RAM boot of instrumented boot3 returned Sending/Booting OKAY.
+3. RAM boot of early-fault reset probe returned Sending/Booting OKAY.
+4. Chained `oem y35a panic` failed because USB disconnected immediately after the reset-only boot: fastboot reported `usb_write failed with status e00002ed` and `Write to device failed (No such file or directory)`.
+5. A subsequent read-only `fastboot devices` enumerated efff9d92 again.
+
+Result
+No staging file was obtained. This attempt does not prove or disprove an early-fault marker and is not a panic result. No partition or userdata write occurred.
+
+Second phase-marker attempt (2026-11-08 01:01-01:04 CST)
+- Instrumented kernel SHA-256: 6e9a09d2453a57532111dbead64ea67018ca31128e3ca7dcaa4e3fbf6f0216c5
+- Phase boot3 image SHA-256: 8694a25fdef575a5b615e8fee6f59bf546495f1f206478c5398af994a7462c4c
+- Phase reset-only image SHA-256: ff7662c8418254fc7f7ffe68d3f855de46e687c2180b84887d5ecf52ace6e02d
+- Instrumented kernel source contains native_phase_marker calls after arm_vm_init, panic_init and PE_create_console.
+- Reset-only entry copies 384 bytes from 0xa0b7c800 to 0x859f0400, then writes the two warm-reset registers; it does not write the EPH range.
+- The combined fastboot readiness/boot command hung at `fastboot getvar product` with no response. The process was stopped before any boot request; no device result was obtained and no storage was written.
+
+Transport retry (2026-11-08 01:07-01:08 CST)
+- `fastboot devices` still enumerated efff9d92.
+- A bounded read-only `fastboot -s efff9d92 getvar product` produced no response within 15 seconds and was stopped.
+- No boot, upload, reset, partition write or userdata operation was performed in this retry.
+- Current blocker is the fastboot transaction/USB session, not a kernel result.

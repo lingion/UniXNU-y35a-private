@@ -1,0 +1,283 @@
+XNU-4570 board bring-up patch 0001: ARM_MSMA53 machine + MSM8916 board
+config for vivo Y35A (PD1502A).
+
+Apply from the xnu-4570 tag checkout with:
+    patch -p1 < patches/xnu4570/0001-y35a-board.patch
+
+Build knob (see docs/board/ios12-bringup-map.md section 6 for the full
+contract with the concurrent vanilla-build agent):
+    ARCH_CONFIGS=ARM64 MACHINE_CONFIGS=MSM8916 -DARM64_BOARD_CONFIG_MSM8916
+    (the 4570 tag tree has no MACHINE_FLAGS_ARM64_* table at all -- the
+    -D injection follows scripts/build-xnu-4903-kernel.py's established
+    convention) -- plus CONFIG_REQUIRES_U32_MUNGING=1 (bsd_arm64.c:109).
+
+Design invariant: MSM8916 mirrors Apple Typhoon (iPad mini 4) exactly --
+__ARM_16K_PG__ absent (4K hardware granule), __ARM64_PMAP_SUBPAGE_L1__
+present, and the 16K SOFTWARE page size arrives at runtime from
+osfmk/arm/arm_init.c:178 because memSize > 1GB.  Do NOT add
+__ARM_16K_PG__.  Do NOT define APPLE_ARM64_ARCH_FAMILY: it is what keeps
+every Apple-only c15/HID/PMGR/EL3-monitor sequence compiled out; A53 traps
+on them.  The now-live non-Apple fallbacks (CleanPoU caches, fiq_context,
+xcall questions, U32 munging) are implemented in patches 0002+, tracked in
+docs/board/ios12-bringup-map.md section 3/4.  This patch alone is
+board-definition only: it does NOT by itself make the kernel boot.
+
+--- a/pexpert/pexpert/arm64/board_config.h
++++ b/pexpert/pexpert/arm64/board_config.h
+@@ -102,8 +102,34 @@
+ #endif  /* ARM64_BOARD_CONFIG_T8011 */
+ 
+ 
++#ifdef ARM64_BOARD_CONFIG_MSM8916
++/*
++ * vivo Y35A (PD1502A): Qualcomm MSM8916, 4x Cortex-A53 r0p3 (MIDR
++ * 0x410fd030), armv8.0, GICv2 (qgic; GICD_TYPER=0x468, SecurityExtn set),
++ * ARM generic timer @19.2MHz (virtual timer INTID 20), 2GB RAM, 4K
++ * hardware page granule.  Every constant's provenance:
++ * docs/board/y35a-facts.md (stock QCDT platform 206 / variant 8 / subtype
++ * 23 + on-device readback probes).
++ *
++ * Page-size regime: hardware 4K + software 16K chosen at RUNTIME by
++ * osfmk/arm/arm_init.c:178 (memSize > 1GB -> PAGE_SHIFT_CONST =
++ * PAGE_MAX_SHIFT = 14).  This is byte-for-byte the shipping configuration
++ * of iPad mini 4 (Typhoon): Typhoon also omits __ARM_16K_PG__
++ * (osfmk/arm/proc_reg.h:126-140).  Never add __ARM_16K_PG__ to this block;
++ * see docs/board/ios12-bringup-map.md section 1 for the full verdict.
++ */
++#define ARM_MSMA53                   /* machine selector for
++                                      * osfmk/arm/proc_reg.h's new
++                                      * ARM_MSMA53 block */
++#define ARM_ARCH_TIMER
++#include <pexpert/arm64/MSM8916.h>
++#define __ARM_L2CACHE_SIZE_LOG__ 20     /* MSM8916 shared L2 = 1MB (stock DTB) */
++#define ARM_BOARD_WFE_TIMEOUT_NS 1000
++#define ARM_BOARD_CLASS_MSM8916
++#define CPU_COUNT 4
++/* KERNEL_INTEGRITY_WT deliberately absent: no Apple watchtower exists at
++ * our EL1 handoff.  MONITOR requirement (osfmk/arm64/cpu.c:794) is
++ * satisfied by NO_MONITOR in MSM8916.h. */
++#endif  /* ARM64_BOARD_CONFIG_MSM8916 */
+ 
+-
+-
+-
+ #endif /* ! _PEXPERT_ARM_BOARD_CONFIG_H */
+--- /dev/null
++++ b/pexpert/pexpert/arm64/MSM8916.h
+@@ -0,0 +1,77 @@
++/*
++ * Y35A bring-up board header: XNU-4570 on Qualcomm MSM8916 (vivo PD1502A).
++ * Every address below is measured on the phone; provenance:
++ * docs/board/y35a-facts.md.
++ *
++ * This header deliberately includes NEITHER pexpert/arm64/AIC.h (Apple's
++ * proprietary interrupt controller is absent from MSM8916) NOR
++ * pexpert/arm/S3cUART.h (Samsung 2410 register map).  The machine block in
++ * osfmk/arm/proc_reg.h deliberately does NOT define APPLE_ARM64_ARCH_FAMILY:
++ * that gate keeps Apple-only c15/HID/EL3-monitor sequences out of the
++ * compiled paths (undefined-instruction trap on A53) and enables the
++ * standard cache-maintenance fallbacks implemented in patches 0002+.
++ */
++#ifndef _PEXPERT_ARM64_MSM8916_H
++#define _PEXPERT_ARM64_MSM8916_H
++
++#define NO_MONITOR            1 /* lk2nd hands off at EL1 (CurrentEL=EL1,
++                                 * SCTLR_EL1=0xc00800, MMU off); no EL3
++                                 * monitor ABI exists -- satisfies the
++                                 * #error at osfmk/arm64/cpu.c:794 */
++#define CPU_NAME              "MSM8916-A53"
++
++/*
++ * Kernel reaches all of these through the ADT, not by direct macro
++ * addressing:
++ *   - pe_arm_get_soc_base_phys(): /arm-io device_type + ranges[1]
++ *     (pexpert/arm/pe_identify_machine.c:225-243)
++ *   - pe_arm_map_interrupt_controller(): DTFindEntry("interrupt-controller",
++ *     "master") -- the property VALUE must strcmp-match "master"
++ *     (pexpert/gen/device_tree.c:202); @reg is a SoC-relative (child-bus,
++ *     ranges-applied) addr,size pair -> gPicBase
++ *     (pexpert/arm/pe_identify_machine.c:541-549)
++ *   - serial_init(): "boot-console" (value ignored) or name uart0/uart1
++ *     @reg SoC-relative -> uart_base (pexpert/arm/pe_serial.c:761-776)
++ * scripts/y35a/make_adt.py already emits all three node shapes.
++ */
++#define SOC_BASE              0x07800000  /* ADT arm-io ranges parent bus */
++
++/* Polled console: BLSP1 QUP1 LS-UART (qcom,msm-uartdm-v1.4 register set;
++ * TX TF=+0x100, SR=+0xa4, CR=+0xa8, ISR=+0xb4, DMEN=+0x3c, NCF_TX=+0x40).
++ * Proven 115200 8N1 under LK since 2026-11-03.  ADT encodes the
++ * SoC-relative offset 0x000b0000 / size 0x200. */
++#define UARTDM_CONSOLE_BASE   0x078b0000
++#define UARTDM_CONSOLE_SIZE   0x00000200
++
++/* GICv2 (QGIC2).  ADT intc node carries both windows as SoC-relative 4Q
++ * pairs.  GICD_TYPER=0x468 readback => SecurityExtn (bit 10) set: keep the
++ * Non-secure Group-1 assignments firmware left in place; group selection
++ * must honor the two-group split. */
++#define QGIC_DIST_BASE        0x0b000000
++#define QGIC_DIST_SIZE        0x00001000
++#define QGIC_CPU_BASE         0x0b002000
++#define QGIC_CPU_SIZE         0x00002000
++
++/* ARM generic timer via CPU interface registers only.  CNTFRQ_EL0 =
++ * 19.2MHz (measured).  Virtual timer PPI 4 -> INTID 20, physical PPI 3 ->
++ * INTID 19.  The memory-mapped armv7-timer-mem frame at 0x0b020000 exists
++ * on this SoC; XNU-4570 never consumes it.  Timer delivery is normal IRQ
++ * (NOT FIQ: fleh_fiq_generic is PANIC_UNIMPLEMENTED at
++ * osfmk/arm64/locore.s:719-720). */
++#define ARCH_TIMER_VIRT_INTID 20
++#define ARCH_TIMER_PHYS_INTID 19
++
++/* PS_HOLD warm reset (PMIC8916 ABI, proven via lk2nd).  The
++ * halt_all_cpus -> PE_HaltCPU reboot path must land here; wired in patch
++ * series 0003. */
++#define PS_HOLD_BASE          0x004ab000
++#define RESTART_REASON_REG    0x0860065c
++
++/* Panic log: /chosen embedded-panic-log-size + pram node reg drive
++ * pe_config_panic (pexpert/arm/pe_init.c:75-100) which ml_io_map_wcomb's
++ * the region.  Read back on-device via `fastboot get_staged panic.bin`
++ * (magic KNUF). */
++#define PRAM_BASE             0x859e0000
++#define PRAM_SIZE             0x00010000
++
++#endif /* ! _PEXPERT_ARM64_MSM8916_H */
+--- a/osfmk/arm/proc_reg.h
++++ b/osfmk/arm/proc_reg.h
+@@ -172,6 +172,44 @@
+ #define __ARM_GLOBAL_SLEEP_BIT__ 1
+ #define __ARM_PAN_AVAILABLE__ 1
+ 
++#elif defined (ARM_MSMA53)
++/*
++ * Qualcomm MSM8916 Cortex-A53 r0p3 (vivo Y35A).  armv8.0, hardware-coherent
++ * multicore, NO crypto extensions (ID_AA64ISAR0_EL1=0x10000 measured), no
++ * PAN, no EL3 monitor at our handoff.  Deliberate choices:
++ *   NOT __ARM_16K_PG__            -- hardware translation granule 4K.  The
++ *       A53 does implement 16K granule (ID_AA64MMFR0 TGran16 field 0), but
++ *       the Typhoon shipping shape (4K hardware + __ARM64_PMAP_SUBPAGE_L1__
++ *       + runtime PAGE_SHIFT_CONST=14 for >1GB devices) is what Apple
++ *       exercised on real iOS 12 16K-page binaries and what our own 4K-
++ *       hardware boot code is written against.  TCR then selects
++ *       TG0/TG1 = 4KB (osfmk/arm64/proc_reg.h:455-459,489-493).
++ *   YES __ARM64_PMAP_SUBPAGE_L1__ -- 1GB L1 blocks with 4K-entry tables;
++ *       with PAGE_SHIFT_CONST=14 this is the 16K-software-page regime
++ *       (pmap.c:480-481 pt-desc index shift 12 branch == this case).
++ *   NOT __ARM_KERNEL_PROTECT__    -- 3-level 4K tables, T0SZ/T1SZ=25
++ *       (proc_reg.h:563-565) give 32-bit-clean VA split, keeping the
++ *       uint32 boot_args Video fields honest.
++ *   NOT APPLE_ARM64_ARCH_FAMILY   -- compiled-out Apple c15/HID/monitor
++ *       paths (undefined-instruction trap risk on A53) + live standard
++ *       way/set cache maintenance (geometry below).
++ *   NOT __ARM_COHERENT_IO__       -- correct for A53: BLSP/GIC MMIO is NOT
++ *       HW-coherent with the CPU caches (no CCI interconnect on 8916), so
++ *       the non-coherent bcopy/bzero wimg fast paths in
++ *       osfmk/arm64/loose_ends.c must stay enabled; Apple blocks define it
++ *       because Cyclone+ attach coherent IO via CCI.  __ARM_COHERENT_CACHE__
++ *       is kept (consumers: none outside proc_reg in this drop).
++ */
++#define	__ARM_ARCH__	8
++#define __ARM_VMSA__	8
++#define	__ARM_SMP__	1
++#define	__ARM_VFP__	4
++#define __ARM_COHERENT_CACHE__ 1
++#define __ARM_L1_PTW__ 1
++#define __ARM_DEBUG__	7
++#define __ARM_ENABLE_SWAP__ 1
++#define __ARM64_PMAP_SUBPAGE_L1__ 1
++
+ #else
+ #error processor not supported
+ #endif
+@@ -296,7 +334,7 @@
+ 
+ #define	DFSR_WRITE		0x00000800	/* write data abort fault */
+ 
+-#if defined (ARMA7) || defined (APPLE_ARM64_ARCH_FAMILY)
++#if defined (ARMA7) || defined (APPLE_ARM64_ARCH_FAMILY) || defined (ARM_MSMA53)
+ 
+ #define TEST_FSR_VMFAULT(status)	\
+ 				(((status) == FSR_PFAULT)	\
+@@ -462,6 +500,44 @@
+ #define L2_I7SET	6		/* cp15 c7 set incrementer 1<<L2_I7SET */
+ #define L2_I7WAY	28		/* cp15 c7 way incrementer 1<<L2_I7WAY */
+ #define L2_I9WAY	28		/* cp15 c9 way incremenber 1<<L2_I9WAY */
++
++#define L2_SWAY	(L2_CSIZE - L2_NWAY)		/* set size 1<<L2_SWAY */
++#define L2_NSET	(L2_SWAY - L2_CLINE)		/* lines per way 1<<L2_NSET */
++
++#elif defined (ARM_MSMA53)
++
++/*
++ * Cortex-A53 r0p3 cache geometry (ARM DAI 03-0516: L1 I/D 32KiB, 8-way,
++ * 64B lines; MSM8916 shared L2 = 1MiB, 16-way, 64B lines --
++ * __ARM_L2CACHE_SIZE_LOG__ 20).  These feed the non-Apple dc csw way/set
++ * maintenance loops selected whenever APPLE_ARM64_ARCH_FAMILY is
++ * undefined: I7WAY = log2(size/ways/lines)+7.  A wrong L2_NWAY or way
++ * incrementer walks off the geometry and silently leaves lines dirty.
++ */
++
++/* I-Cache */
++#define MMU_I_CLINE	6		/* cache line size as 1<<MMU_I_CLINE (64) */
++
++/* D-Cache (L1: 32KiB, 8-way) */
++#define MMU_CSIZE	15		/* cache size as 1<<MMU_CSIZE (32K) */
++#define MMU_CLINE	6		/* cache line size as 1<<MMU_CLINE (64) */
++#define MMU_NWAY	3		/* set associativity 1<<MMU_NWAY (8) */
++#define MMU_I7SET	6
++#define MMU_I7WAY	31		/* (15-3-6)+7 = 31 */
++#define MMU_I9WAY	31
++
++#define MMU_SWAY	(MMU_CSIZE - MMU_NWAY)	/* set size 1<<MMU_SWAY */
++#define MMU_NSET	(MMU_SWAY - MMU_CLINE)	/* lines per way 1<<MMU_NSET */
++
++#define __ARM_L2CACHE__	1
++
++/* L2: 1MiB, 16-way, 64B lines */
++#define L2_CSIZE	__ARM_L2CACHE_SIZE_LOG__	/* cache size as 1<<L2_CSIZE */
++#define L2_CLINE	6		/* cache line size as 1<<L2_CLINE (64) */
++#define L2_NWAY		4		/* set associativity 1<<L2_NWAY (16) */
++#define L2_I7SET	6
++#define L2_I7WAY	28		/* (20-4-6)+7 = 28 */
++#define L2_I9WAY	28
+ 
+ #define L2_SWAY	(L2_CSIZE - L2_NWAY)		/* set size 1<<L2_SWAY */
+ #define L2_NSET	(L2_SWAY - L2_CLINE)		/* lines per way 1<<L2_NSET */
+
+NOTE ON UNRESOLVED COMPILE/LINK BLOCKERS (intentionally not patched here;
+each gets its own verified patch with its own experiment, tracked in
+docs/board/ios12-bringup-map.md section 7): with APPLE_ARM64_ARCH_FAMILY
+undefined the following non-Apple branches become live or missing:
+  osfmk/arm64/caches_asm.s:133 #error CleanPoU_Dcache needs an
+  implementation; region variants fall through to bodies last compiled for
+  pre-Typhoon/BCM targets -- A53 needs real dc cu / dc civac sequences (PoU
+  is L1-private on A53; Apple's fully-coherent short-circuit is WRONG here);
+  osfmk/arm64/machine_routines_asm.s: the ENTIRE idle path --
+  arm64_prepare_for_sleep (:837) and arm64_force_wfi_clock_gate (:885) --
+  sits inside #if defined(APPLE_ARM64_ARCH_FAMILY) (:830 ... :1033) whose
+  bodies touch ARM64_REG_CYC_*/ACC_* c15 registers, yet cpu.c calls
+  prepare_for_sleep unconditionally (:708, :738) => any non-Apple machine
+  config FAILS TO LINK ("_arm64_prepare_for_sleep undefined"). Patch 0002
+  must add a plain dsb; isb; wfi; b . idle loop for ARM_MSMA53 and gate
+  cpu.c:808's coresight-enable block correctly;
+  osfmk/arm64/machine_routines.c:1634 dcache-ops trap xcall question;
+  :1671 icache-trap clean-dcache question; :1793 fiq_context_init board
+  branch (MSM8916: skip the Apple timebase-event-stream #if, keep
+  _enable_virtual_timer);
+  osfmk/arm64/bsd_arm64.c:109 requires CONFIG_REQUIRES_U32_MUNGING=1
+  (syscall_sw.h:69 honors it) -- set in the build, not the header;
+  fleh_fiq_generic is PANIC_UNIMPLEMENTED (osfmk/arm64/locore.s:719) --
+  timer must be routed as normal IRQ via the GIC;
+  pexpert/arm/pe_identify_machine.c:582-668: every board branch of
+  pe_arm_init_timer is #if ARM_BOARD_CLASS_*-guarded and the ladder ends
+  `else return 0` (:663) -- patch 0002 adds the ARM_BOARD_CLASS_MSM8916
+  arm ({NULL,NULL,NULL} TBDs, eoi 0, CPU-generic timer semantics equal to
+  the Typhoon t7000_funcs);
+  AIC_init/AIC_lock/interrupt ack/EOI/IPI do not exist anywhere in the
+  4570 kernel (Apple ships them as AppleInterruptController.kext -- string
+  proof in out/ipsw/16G102 cache); the kernel core only calls
+  ml_install_interrupt_handler / ml_init_interrupt (empty,
+  machine_routines.c:757) / ml_cause_interrupt (empty stub, :1085) and
+  PE_cpu_signal* -> IOCPU::signalCPU (IOCPU.cpp:368-390, base unsupported).
+  All GICv2 bring-up therefore lands in the platform driver layer
+  (ArmCpu 4570 port, patch series 0004+), NOT in these core files.

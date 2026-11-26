@@ -1,0 +1,234 @@
+{
+  "certified": true,
+  "verdict": "CERTIFIED",
+  "reason": "the shipped kext stamps IOHIDFamily-1090.270.6, that revision is published on the mirror, its headers plus the pinned Darwin-18 base compile a digitizer IOHIDDevice subclass under -Werror for arm64-apple-ios12.0, and the inherited IOService dispatch (167 slots, 0 pure) is recovered from the kernel exports; the kext symbol table is link-stripped so no per-kext symbol match is claimed",
+  "cache": {
+    "cache_sha256": "70e80388d42fe2376096bb6248073b0380dd87b85b1a792b36205ba60c722ce1",
+    "prelink": {
+      "bundle_version": "2.0.0",
+      "short_version": "2.0.0",
+      "copyright": "\"Copyright \u00a9 2000-2018 Apple Inc. All rights reserved. [IOHIDFamily-1090.270.6]\"",
+      "dt_platform_version": "12.4",
+      "dt_sdk_name": "iphoneos12.4.internal",
+      "min_os": "12.4",
+      "exec_load_addr": "0xfffffff005ce34c0",
+      "exec_size": 7344
+    },
+    "source_revision": "1090.270.6",
+    "kmod_info": {
+      "info_version": 1,
+      "name": "com.apple.iokit.IOHIDFamily",
+      "version": "1.5.2"
+    },
+    "extents": {
+      "segments": {
+        "__TEXT": {
+          "va": 18446744005087474880,
+          "size": 7344
+        },
+        "__TEXT_EXEC": {
+          "va": 18446744005092790272,
+          "size": 178632
+        },
+        "__DATA": {
+          "va": 18446744005114825600,
+          "size": 3912
+        },
+        "__DATA_CONST": {
+          "va": 18446744005105556032,
+          "size": 32928
+        }
+      },
+      "executable_sha256": "bc126a6c197aea072c385d4ad6b89fa567b952deab1264802f8dd5da8dd2a04a"
+    },
+    "ioservice_vtable_slots": 167,
+    "ioservice_pure_virtual": 0
+  },
+  "selected_source_revision": "1090.270.6",
+  "selected_tag": "IOHIDFamily-1090.270.6",
+  "selected_commit": "1c547c5c9ff3e99a82fe369702cb1d9a77fb1cc9",
+  "base_header_provenance": {
+    "base_headers": "cached Darwin-18 installhdrs (.cache/hid-abi-base-4903)",
+    "reference_object_sha256": "69dff1a1768158aa82245eded46f62648edf6ea6752073c58ee2c4cd4532d015"
+  },
+  "shim_headers": {
+    "IOKit/hid/IOHIDDevice.h": {
+      "source_path": "IOHIDFamily/IOHIDDevice.h",
+      "sha256": "c1693a14cbdfb951b374beeb92fe7cf383abf48393094e11aa45518888d166c7"
+    },
+    "IOKit/hid/IOHIDKeys.h": {
+      "source_path": "IOHIDFamily/IOHIDKeys.h",
+      "sha256": "5d4eb2a10311df5de2a633aded27da629d1052d8e98260ace849d4d56a9e2a1f"
+    },
+    "IOKit/hid/IOHIDUsageTables.h": {
+      "source_path": "IOHIDFamily/IOHIDUsageTables.h",
+      "sha256": "67ec372567403095a83c2aff8378224a56b0a57fadd3278f6e0b7f692133d72e"
+    },
+    "IOKit/hid/IOHIDProperties.h": {
+      "source_path": "IOHIDFamily/IOHIDProperties.h",
+      "sha256": "043caca36a8e567433e228f61ee0df4599ce5f23250fce652835ec5e1cff6858"
+    },
+    "IOKit/hid/IOHIDEventTypes.h": {
+      "source_path": "IOHIDFamily/IOHIDEventTypes.h",
+      "sha256": "a09b694384e5626945e8cdbc93857c19a107490383633bed45a2e6a71f9b6508"
+    },
+    "IOKit/hid/IOHIDEventData.h": {
+      "source_path": "IOHIDFamily/IOHIDEventData.h",
+      "sha256": "aa49f2fcfeea6392ae61dc6f44affa6450a20edf667f8775971e7d7136ecb69f"
+    },
+    "IOKit/hid/AppleHIDUsageTables.h": {
+      "source_path": "IOHIDFamily/AppleHIDUsageTables.h",
+      "sha256": "9ea9d9b9f656ef95c4e54e66ce695189ce1a60d3d3483c4061e60c50fef3cc5e"
+    },
+    "IOKit/hid/IOHIDElement.h": {
+      "source_path": "IOHIDFamily/IOHIDElement.h",
+      "sha256": "39059a8191464ad3125dbb9947456a566f7142e954e2daf26f2ddf0421fe2d62"
+    },
+    "IOKit/hid/IOHIDElementPrivate.h": {
+      "source_path": "IOHIDFamily/IOHIDElementPrivate.h",
+      "sha256": "b1b155c98605bbef10d171eaddd2e7700e0b9891aa169a6e4934b5a00a738e6c"
+    },
+    "IOKit/hid/IOHIDInterface.h": {
+      "source_path": "IOHIDFamily/IOHIDInterface.h",
+      "sha256": "7cd0f62ddd1b844629032f92d825c1357049b0889867ce27c5f09c36710a0a84"
+    },
+    "IOKit/hidsystem/IOHIDDescriptorParser.h": {
+      "source_path": "IOHIDSystem/IOKit/hidsystem/IOHIDDescriptorParser.h",
+      "sha256": "d67b9e8f40860beed89a06c6876ae2a99f5ad04f4988d10694f212a382a13e8d"
+    },
+    "IOKit/hidsystem/IOHIDParameter.h": {
+      "source_path": "IOHIDSystem/IOKit/hidsystem/IOHIDParameter.h",
+      "sha256": "71a7820c047a231050aefdfa666b467df229060d65cb8b1fcb46ab1365ef86a2"
+    },
+    "IOKit/hidsystem/IOHIDTypes.h": {
+      "source_path": "IOHIDSystem/IOKit/hidsystem/IOHIDTypes.h",
+      "sha256": "561a86388ac87c209381a038012ee0d9fe3b414aa7e71cb77611018107d95504"
+    },
+    "IOKit/hidsystem/IOLLEvent.h": {
+      "source_path": "IOHIDSystem/IOKit/hidsystem/IOLLEvent.h",
+      "sha256": "d4678012e68b7738e460693441ef82d271828a0632f844757c69b5b662287377"
+    },
+    "IOKit/graphics/IOGraphicsTypes.h": "49f35c69bd4202ffcd650c9f0c3d68e7700b7ff29557a94185ba939de2c988c7(host-SDK)"
+  },
+  "compile_command": [
+    "clang++",
+    "-std=c++17",
+    "-target",
+    "arm64-apple-ios12.0",
+    "-isysroot",
+    "/",
+    "-ffreestanding",
+    "-nostdinc",
+    "-nostdinc++",
+    "-isystem",
+    "/Applications/Xcode.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/lib/clang/14.0.3/include",
+    "-isystem",
+    "/Users/lingion_k/unixnu-research/UniXNU-y35a/.cache/hid-abi-base-4903/System/Library/Frameworks/Kernel.framework/Versions/A/Headers",
+    "-isystem",
+    "/Users/lingion_k/unixnu-research/UniXNU-y35a/.cache/hid-abi-base-4903/usr/include",
+    "-isystem",
+    "/Applications/Xcode.app/Contents/Developer/Platforms/MacOSX.platform/Developer/SDKs/MacOSX.sdk/usr/include/c++/v1",
+    "-I",
+    "/Users/lingion_k/unixnu-research/UniXNU-y35a/build/hid-abi/include",
+    "-I",
+    "/Users/lingion_k/unixnu-research/UniXNU-y35a/build/hid-abi/include/IOKit",
+    "-DAPPLE",
+    "-DKERNEL",
+    "-DDEVELOPMENT",
+    "-DXNU_KERNEL_PRIVATE",
+    "-DBCM2837",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-Wno-unused-parameter",
+    "-Wno-macro-redefined",
+    "-Wno-incompatible-sysroot",
+    "-c",
+    "/Users/lingion_k/unixnu-research/UniXNU-y35a/build/hid-abi/IOHIDDevice-reference.cpp",
+    "-o",
+    "/Users/lingion_k/unixnu-research/UniXNU-y35a/build/hid-abi/IOHIDDevice-reference.o"
+  ],
+  "cache_checks": {
+    "source_stamp_matches_selected": {
+      "expected": "1090.270.6",
+      "observed": "1090.270.6",
+      "result": "match"
+    },
+    "kmod_info_identity": {
+      "name": "com.apple.iokit.IOHIDFamily",
+      "version": "1.5.2",
+      "expected_name": "com.apple.iokit.IOHIDFamily",
+      "source_module_versions": [
+        "1.5.2"
+      ],
+      "result": "match"
+    },
+    "component_extents": {
+      "segments": {
+        "__TEXT": {
+          "va": 18446744005087474880,
+          "size": 7344
+        },
+        "__TEXT_EXEC": {
+          "va": 18446744005092790272,
+          "size": 178632
+        },
+        "__DATA": {
+          "va": 18446744005114825600,
+          "size": 3912
+        },
+        "__DATA_CONST": {
+          "va": 18446744005105556032,
+          "size": 32928
+        }
+      },
+      "executable_sha256": "bc126a6c197aea072c385d4ad6b89fa567b952deab1264802f8dd5da8dd2a04a",
+      "prelink_exec_size": 7344,
+      "result": "recoverable"
+    },
+    "ioservice_vtable": {
+      "slots": 167,
+      "pure_virtual": 0,
+      "result": "recovered from kernel exports"
+    },
+    "kext_symbol_table": {
+      "result": "stripped",
+      "reason": "iOS 12 prelink sets every component LC_SYMTAB nsyms to 0 and zeroes every vtable typeinfo slot, so per-kext IOHIDDevice-family symbol names cannot be recovered from the cache; certification stands on the exact source stamp and the inherited IOService dispatch, not on a fabricated symbol match"
+    }
+  },
+  "interface_drift": {
+    "bounding_lo": "421.6",
+    "bounding_hi": "503.215.2",
+    "revisions_compared": [
+      "421.6",
+      "503.215.2",
+      "1090.270.6"
+    ],
+    "virtual_method_count": {
+      "421.6": 42,
+      "503.215.2": 43,
+      "1090.270.6": 45
+    },
+    "digitizer_methods_stable_across_interval": [
+      "free",
+      "getReport",
+      "handleOpen",
+      "handleReport",
+      "handleReportWithTime",
+      "newReportDescriptor",
+      "publishProperties",
+      "setReport"
+    ],
+    "digitizer_methods_changed": [
+      "handleClose",
+      "message",
+      "start",
+      "stop"
+    ],
+    "digitizer_methods_only_in_selected": [],
+    "closer_bounding_revision": "1090.270.6",
+    "note": "the kext stamps the exact selected revision, so the interval is a cross-generation stability study for the T3.2 shim, not a gap confession"
+  },
+  "instrument_linked_or_executed": false,
+  "hardware_tested": false
+}

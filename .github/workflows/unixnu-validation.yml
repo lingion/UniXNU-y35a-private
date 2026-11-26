@@ -1,0 +1,66 @@
+name: UniXNU validation
+
+on:
+  push:
+    paths:
+      - 'GOAL.md'
+      - 'LIVE-TARGET.md'
+      - 'REFERENCES.md'
+      - 'docs/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'patches/**'
+      - '.github/workflows/unixnu-validation.yml'
+  pull_request:
+    paths:
+      - 'GOAL.md'
+      - 'LIVE-TARGET.md'
+      - 'REFERENCES.md'
+      - 'docs/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'patches/**'
+      - '.github/workflows/unixnu-validation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unixnu-validation-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  host-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install test tools
+        run: python -m pip install --disable-pip-version-check pytest
+      - name: Check tracked text
+        run: git diff --check
+      - name: Compile Python helpers
+        run: python -m compileall -q scripts
+      - name: Validate evidence contract entry point
+        run: python scripts/y35a/verify_experiment_contract.py --help
+      - name: Check persistent execution contract
+        run: |
+          test -s GOAL.md
+          test -s LIVE-TARGET.md
+          test -s REFERENCES.md
+          test -s docs/sop/LESSONS.md
+          test -s docs/sop/UNIXNU-EXECUTION-SOP.md
+          test -s docs/sop/PACKAGING-EVIDENCE-SOP.md
+          test -s docs/skills/unixnu-evidence-gate/SKILL.md
+      - name: Run focused verifier tests
+        run: |
+          python -m pytest -q \
+            tests/test_memory_and_marker_gates.py \
+            tests/test_capture_layout.py \
+            tests/test_readback_names.py

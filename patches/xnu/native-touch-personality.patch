@@ -1,0 +1,21 @@
+--- a/iokit/KernelConfigTables.cpp
++++ b/iokit/KernelConfigTables.cpp
+@@ -112,5 +112,18 @@ const char * gIOKernelConfigTables =
+     "     'IOProviderClass' = IOPlatformExpertDevice;"
+     "     'IOProbeScore'    = 500:32;"
+     "   }"
++#endif
++#if defined(XNU_NATIVE_TOUCH) && XNU_NATIVE_TOUCH
++    "   ,{"
++    "     'IOClass'         = NativeQupI2c;"
++    "     'IOProviderClass' = IOPlatformDevice;"
++    "     'IONameMatch'     = 'qcom,i2c-msm-v2';"
++    "     'IOProbeScore'    = 1000:32;"
++    "   }"
++    "   ,{"
++    "     'IOClass'         = NativeHidDigitizer;"
++    "     'IOProviderClass' = NativeQupI2c;"
++    "     'IOProbeScore'    = 1000:32;"
++    "   }"
+ #endif
+     ")";

@@ -1,0 +1,163 @@
+--- /dev/null
++++ b/osfmk/arm64/native_crypto.h
+@@ -0,0 +1,125 @@
++/* Scalar ARMv8 cryptographic instruction semantics for CPUs without Crypto.
++ * Only recognized encodings mutate Vd. Sources are snapshotted for aliases.
++ * No allocation, floating point, lookup tables indexed by secrets, or skipped
++ * cryptographic work. Compile with implicit vector/FP generation disabled.
++ */
++#ifndef XNU_NATIVE_CRYPTO_H
++#define XNU_NATIVE_CRYPTO_H
++#include <stdint.h>
++
++static uint32_t nc_ror(uint32_t x, unsigned int n)
++{
++    return (x >> n) | (x << (32 - n));
++}
++static uint32_t nc_s0(uint32_t x) { return nc_ror(x,7) ^ nc_ror(x,18) ^ (x>>3); }
++static uint32_t nc_s1(uint32_t x) { return nc_ror(x,17) ^ nc_ror(x,19) ^ (x>>10); }
++static uint32_t nc_b0(uint32_t x) { return nc_ror(x,2) ^ nc_ror(x,13) ^ nc_ror(x,22); }
++static uint32_t nc_b1(uint32_t x) { return nc_ror(x,6) ^ nc_ror(x,11) ^ nc_ror(x,25); }
++static uint8_t nc_gfmul(uint8_t a, uint8_t b)
++{
++    uint8_t r=0;
++    for (unsigned int i=0;i<8;i++) {
++        r ^= a & (uint8_t)(0u-(b & 1u));
++        a = (uint8_t)((a<<1) ^ (0x1bu & (0u-(a>>7))));
++        b >>= 1;
++    }
++    return r;
++}
++static uint8_t nc_rol8(uint8_t x, unsigned int n)
++{
++    return (uint8_t)((x<<n)|(x>>(8-n)));
++}
++static uint8_t nc_sbox(uint8_t x, int inverse)
++{
++    if (inverse) x=nc_rol8(x,1)^nc_rol8(x,3)^nc_rol8(x,6)^0x05;
++    /* x^254, including 0 -> 0, in the AES field. Fixed exponent and work. */
++    uint8_t r=1;
++    for (unsigned int i=0;i<8;i++) {
++        if ((254u>>i)&1u) r=nc_gfmul(r,x);
++        x=nc_gfmul(x,x);
++    }
++    return inverse ? r : (uint8_t)(r^nc_rol8(r,1)^nc_rol8(r,2)^nc_rol8(r,3)^nc_rol8(r,4)^0x63);
++}
++static int native_crypto_emulate(uint32_t instruction, void *registers)
++{
++    uint32_t op3=instruction & 0xffe0fc00u;
++    uint32_t op2=instruction & 0xfffffc00u;
++    int three=(op3>=0x5e000000u && op3<=0x5e006000u && (op3&0xfffu)==0);
++    int two=op2==0x5e280800u || op2==0x5e281800u || op2==0x5e282800u ||
++            op2==0x4e284800u || op2==0x4e285800u || op2==0x4e286800u || op2==0x4e287800u;
++    int polynomial=op3==0x0ee0e000u || op3==0x4ee0e000u;
++    if (!three && !two && !polynomial) return 0;
++    unsigned int rd=instruction&31u, rn=(instruction>>5)&31u, rm=(instruction>>16)&31u;
++    uint8_t *v=(uint8_t *)registers;
++    uint32_t d[4],n[4],m[4],r[4]={0,0,0,0};
++    /* Byte accesses avoid strict-aliasing assumptions about saved vector types. */
++    for (unsigned int i=0;i<16;i++) {
++        ((uint8_t *)d)[i]=v[rd*16+i];
++        ((uint8_t *)n)[i]=v[rn*16+i];
++        ((uint8_t *)m)[i]=v[rm*16+i];
++    }
++    if (three && op3<=0x5e002000u) {
++        uint32_t a=d[0],b=d[1],c=d[2],e=n[0],dd=d[3];
++        for (unsigned int i=0;i<4;i++) {
++            uint32_t f=op3==0x5e000000u ? (b&c)^(~b&dd) :
++                       op3==0x5e001000u ? b^c^dd : (b&c)^(b&dd)^(c&dd);
++            uint32_t t=nc_ror(a,27)+f+e+m[i];
++            e=dd;dd=c;c=nc_ror(b,2);b=a;a=t;
++        }
++        r[0]=a;r[1]=b;r[2]=c;r[3]=dd;
++    } else if (op3==0x5e003000u) {
++        r[0]=d[0]^d[2]^m[0];r[1]=d[1]^d[3]^m[1];
++        r[2]=d[2]^n[0]^m[2];r[3]=d[3]^n[1]^m[3];
++    } else if (op3==0x5e004000u || op3==0x5e005000u) {
++        uint32_t s[8];
++        for (unsigned int i=0;i<4;i++) {s[i]=op3==0x5e004000u?d[i]:n[i];s[i+4]=op3==0x5e004000u?n[i]:d[i];}
++        for (unsigned int i=0;i<4;i++) {
++            uint32_t t=s[7]+nc_b1(s[4])+((s[4]&s[5])^(~s[4]&s[6]))+m[i];
++            uint32_t u=nc_b0(s[0])+((s[0]&s[1])^(s[0]&s[2])^(s[1]&s[2]));
++            for (unsigned int j=7;j>0;j--) s[j]=s[j-1];
++            s[4]+=t;s[0]=t+u;
++        }
++        for (unsigned int i=0;i<4;i++) r[i]=s[i+(op3==0x5e004000u?0:4)];
++    } else if (op3==0x5e006000u) {
++        r[0]=d[0]+n[1]+nc_s1(m[2]);r[1]=d[1]+n[2]+nc_s1(m[3]);
++        r[2]=d[2]+n[3]+nc_s1(r[0]);r[3]=d[3]+m[0]+nc_s1(r[1]);
++    } else if (op2==0x5e280800u) {
++        r[0]=nc_ror(n[0],2);
++    } else if (op2==0x5e281800u) {
++        r[0]=nc_ror(d[0]^n[1],31);r[1]=nc_ror(d[1]^n[2],31);
++        r[2]=nc_ror(d[2]^n[3],31);r[3]=nc_ror(d[3]^r[0],31);
++    } else if (op2==0x5e282800u) {
++        for (unsigned int i=0;i<3;i++) r[i]=d[i]+nc_s0(d[i+1]);
++        r[3]=d[3]+nc_s0(n[0]);
++    } else if (polynomial) {
++        unsigned int i=(op3==0x4ee0e000u)?2:0;
++        uint64_t a=(uint64_t)n[i]|((uint64_t)n[i+1]<<32);
++        uint64_t b=(uint64_t)m[i]|((uint64_t)m[i+1]<<32);
++        uint64_t lo=a&(0ull-(b&1u)),hi=0;
++        for (unsigned int j=1;j<64;j++) {
++            uint64_t mask=0ull-((b>>j)&1u);
++            lo^=(a<<j)&mask;hi^=(a>>(64-j))&mask;
++        }
++        r[0]=(uint32_t)lo;r[1]=(uint32_t)(lo>>32);r[2]=(uint32_t)hi;r[3]=(uint32_t)(hi>>32);
++    } else {
++        uint8_t *db=(uint8_t *)d,*nb=(uint8_t *)n,*rb=(uint8_t *)r;
++        if (op2==0x4e284800u || op2==0x4e285800u) {
++            int inverse=op2==0x4e285800u;
++            for (unsigned int col=0;col<4;col++) for (unsigned int row=0;row<4;row++) {
++                unsigned int source=((col+(inverse?4-row:row))&3u)*4+row;
++                rb[col*4+row]=nc_sbox(db[source]^nb[source],inverse);
++            }
++        } else {
++            int inverse=op2==0x4e287800u;
++            const uint8_t coefficients[4]={inverse?14:2,inverse?11:3,inverse?13:1,inverse?9:1};
++            for (unsigned int col=0;col<4;col++) for (unsigned int row=0;row<4;row++) {
++                uint8_t x=0;
++                for (unsigned int j=0;j<4;j++) x^=nc_gfmul(nb[col*4+((row+j)&3u)],coefficients[j]);
++                rb[col*4+row]=x;
++            }
++        }
++    }
++    for (unsigned int i=0;i<16;i++) v[rd*16+i]=((uint8_t *)r)[i];
++    return 1;
++}
++#endif
+--- a/osfmk/arm64/sleh.c
++++ b/osfmk/arm64/sleh.c
+@@ -107,6 +107,11 @@
+ #define ASSERT_CONTEXT_SANITY(context) \
+ 	assert(TEST_CONTEXT32_SANITY(context) || TEST_CONTEXT64_SANITY(context))
+ 
++
++#if defined(XNU_NATIVE_CRYPTO_INSTRUCTIONS) && XNU_NATIVE_CRYPTO_INSTRUCTIONS
++#include <arm64/native_crypto.h>
++uint64_t native_crypto_emulations;
++#endif
+ 
+ #define COPYIN(src, dst, size)                           \
+ 	(PSR64_IS_KERNEL(get_saved_state_cpsr(state))) ? \
+@@ -826,6 +831,20 @@
+ 			break;
+ 		}
+ #endif /* CONFIG_XNUPOST */
++#if defined(XNU_NATIVE_CRYPTO_INSTRUCTIONS) && XNU_NATIVE_CRYPTO_INSTRUCTIONS
++        /* Retain normal illegal-instruction behavior for every other encoding.
++         * The full SIMD context is saved/restored by the ordinary exception path.
++         */
++        if (TEST_CONTEXT64_SANITY(context)) {
++            uint32_t instruction = 0;
++            if ((COPYIN(get_saved_state_pc(state), (char *)&instruction, sizeof(instruction))) == 0 &&
++                native_crypto_emulate(instruction, &context->ns.ns_64.v)) {
++                __atomic_fetch_add(&native_crypto_emulations, 1, __ATOMIC_RELAXED);
++                add_saved_state_pc(state, 4);
++                break;
++            }
++        }
++#endif
+ 		handle_uncategorized(&context->ss);
+ 		break;
+ 

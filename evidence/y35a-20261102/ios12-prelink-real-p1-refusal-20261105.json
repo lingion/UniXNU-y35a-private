@@ -1,0 +1,18 @@
+{
+  "cache_bytes": 30228480,
+  "cache_path": "out/ipsw/16G102/kernelcache.decompressed",
+  "cache_sha256": "70e80388d42fe2376096bb6248073b0380dd87b85b1a792b36205ba60c722ce1",
+  "cache_text_vmaddr": "0xfffffff007004000",
+  "cache_text_vmsize": "0x74000",
+  "loadable": false,
+  "meaning": "P1 is a 4903.270.47 T7001 DEVELOPMENT build; its __TEXT vmsize (800 KiB) exceeds the j96ap cache kernel slice (464 KiB). emit_legacy correctly refuses before any geometry-relaxing could corrupt the boot contract. Link-editing the P1 against cache geometry (or rebuilding with matching TEXT sizing) is the open gate for a runtime-qualified candidate; the module TODO(link-edit) tracks it.",
+  "p1_bytes": 11422992,
+  "p1_path": "out/y35a/ios12-kernel.noctf",
+  "p1_sha256": "5fd4e6b5f7fa10e1b2cc9323ac5802833c15479fce5c67068f2ba8837fdcdc94",
+  "p1_text_vmaddr": "0xfffffff007004000",
+  "p1_text_vmsize": "0xc4000",
+  "real_p1_emit": "refused",
+  "recorded_utc": "2026-11-05T05:45:00+08:00",
+  "refusal": "Native __TEXT geometry 0xfffffff007004000+0xc4000 does not match cache 0xfffffff007004000+0x74000",
+  "runtime_qualified": false
+}

@@ -1,0 +1,58 @@
+--- a/osfmk/arm64/locore.s
++++ b/osfmk/arm64/locore.s
+@@ -316,6 +316,25 @@
+ Lel1_sp0_synchronous_vector_long:
+ 	sub		sp, sp, ARM_CONTEXT_SIZE			// Make space on the exception stack
+ 	stp		x0, x1, [sp, SS64_X0]				// Save x0, x1 to the stack
++#if defined(XNU_NATIVE_EARLY_FAULT) && XNU_NATIVE_EARLY_FAULT
++	// Retain the first pre-thread exception before C panic handling.
++	adrp		x0, EXT(native_early_fault_address)@page
++	add		x0, x0, EXT(native_early_fault_address)@pageoff
++	ldr		x0, [x0]
++	cbz		x0, Lnative_fault_recorded
++	ldr		x1, [x0]
++	cbnz		x1, Lnative_fault_recorded
++	mov		x1, #1
++	str		x1, [x0]
++	mrs		x1, ELR_EL1
++	str		x1, [x0, #8]
++	mrs		x1, ESR_EL1
++	str		x1, [x0, #16]
++	mrs		x1, FAR_EL1
++	str		x1, [x0, #24]
++	dsb		sy
++Lnative_fault_recorded:
++#endif
+ 	mrs		x1, ESR_EL1							// Get the exception syndrome
+ 	/* If the stack pointer is corrupt, it will manifest either as a data abort
+ 	 * (syndrome 0x25) or a misaligned pointer (syndrome 0x26). We can check
+@@ -1113,3 +1134,11 @@
+ //#include	"globals_asm.h"
+
+ /* vim: set ts=4: */
++#if defined(XNU_NATIVE_EARLY_FAULT) && XNU_NATIVE_EARLY_FAULT
++.data
++.balign 8
++.global EXT(native_early_fault_address)
++LEXT(native_early_fault_address)
++.quad 0
++#endif
++
+--- a/osfmk/arm64/start.s
++++ b/osfmk/arm64/start.s
+@@ -499,6 +499,16 @@
+ 	// Load address to the C init routine into link register
+ 	adrp	lr, EXT(arm_init)@page
+ 	add		lr, lr, EXT(arm_init)@pageoff
++#if defined(XNU_NATIVE_EARLY_FAULT) && XNU_NATIVE_EARLY_FAULT
++	adrp x16, EXT(native_early_fault_address)@page
++	add x16, x16, EXT(native_early_fault_address)@pageoff
++	ldr x17, [x0, BA_VIRT_BASE]
++	ldr x15, [x0, BA_PHYS_BASE]
++	add x17, x17, x0
++	sub x17, x17, x15
++	add x17, x17, #0x800
++	str x17, [x16]
++#endif
+ 	add		lr, lr, x22							// Convert to KVA
+ 	sub		lr, lr, x23

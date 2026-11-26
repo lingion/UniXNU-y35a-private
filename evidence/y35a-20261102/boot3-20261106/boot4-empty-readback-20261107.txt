@@ -1,0 +1,34 @@
+Boot4 readback comparison, 2026-11-07
+
+Question
+Why did the bounded boot4 readback produce no panic text?
+
+Artifacts
+- Original boot3 capture: panic.raw, SHA-256 ea88281610395269b0f1b91bf12e24fe8594d60f99accd425a07cf24e04196d7
+- First boot4 capture: /tmp/y35a-boot4-readback.raw, SHA-256 e946dd27dc8592d116fa348199a53d3e038080b1cf96f008ff7f7a5b91cebf3b
+- Reset-only follow-up: /tmp/y35a-pram-after-resetonly.raw, same SHA-256 e946dd27dc8592d116fa348199a53d3e038080b1cf96f008ff7f7a5b91cebf3b
+- Reset-only image: SHA-256 8ff6ff3bc10f49142ed0935ceb07d1fd74bb67dd37d48ecfeee2c3d3b1506b01
+- Boot3 clean rerun, staged directly before running reset-only: `/tmp/y35a-boot3-panic-clean.raw`, SHA-256 054f4a90cf1015220b69e27623a6d346af82e576ae175fe45f5051c3f40288ee
+- LK log after clean boot3 rerun: `/tmp/y35a-lk-after-boot3.log` (1160 bytes)
+- Booted kernel: SHA-256 5fd4e6b5f7fa10e1b2cc9323ac5802833c15479fce5c67068f2ba8837fdcdc94
+
+Findings
+1. XNU-4903 embeds panic header fields at offsets 0x14 and 0x18. In panic.raw they are eph_panic_log_offset=0xa9 and eph_panic_log_len=0xa37. The saved log begins at physical 0x859e00a9 and ends at 0x859e0ae0. It does not begin at the beginning of the pram allocation.
+2. The earlier theory that physical 0x859e0000 lies inside [0xa0004000,0xb0004000) was false. It is outside that interval.
+3. The earlier boot4 image used the generic DarwinBoot/XNU package path. That path has a zero_loop over its own owned window [0xa0004000,0xb0004000); this range does not overlap pram [0x859e0000,0x859f0000). It can explain why the diagnostic's kernel BSS globals were not valid at probe entry, but cannot by itself explain loss of pram text.
+4. The reset-only probe used the documented warm-reset writes, performed no pram writes, and LK staged 0x11000 bytes via a copy to its download buffer. The staged result was byte-identical to the preceding boot4 capture. This establishes that reset-only plus staging did not further change the captured pram bytes.
+5. 已证实的旧 readback staging 覆盖：manifest 将 early-fault record 写在 pram 偏移 0x40..0x1c0，随后写 `_BootArgs`、`_const_boot_args`、panic globals 等 128-byte 槽位，覆盖偏移约 0x40..0x640；`_excepstack` 写到 0x640..0x4640，`_intstack` 写到 0x4640..0xc640。旧有效 EPH 声明正文位于 [pram+0xa9, pram+0xae0)：前段 [0xa9,0x640) 被 early-fault/变量快照覆盖，后段 [0x640,0xae0) 被 exception stack 覆盖。这解释了旧 panic.raw 为何只从文件偏移 0x3c2（pram+0x382）显示 Calendar/Zone/launchd 等日志后段；原 panic message 不能从现有 dump 恢复。
+6. reset-only probe 只执行两个 warm-reset 控制写，直接 LK stage；fastboot_stage 复制源到下载缓冲区后上传，未改写 PRAM。reset-only stage 与先前 boot4 capture 逐字节一致，说明这条 probe 没有进一步修改 capture 的源字节。
+7. clean boot3（image SHA d7640a42...）直接 stage 后 EPH offset/len 均为零，panic 正文为空。LK log 顺序为 boot3 -> reset -> `oem y35a panic` -> `upload`，中间无第二次 XNU 启动。相较旧的两份有效 capture（offset 0xa9，len 0xa37），这是独立未解分叉；尚不能判断未写 header、nested panic、sync/flush 行为或 LK reset 路径影响，不能臆测其原因。
+
+Verified XNU source facts
+- pexpert/arm/pe_init.c check_for_panic_log finds root child "pram", reads its reg property and /chosen/embedded-panic-log-size, then maps it with ml_io_map_wcomb and sets gPanicBase/gPanicSize.
+- pexpert/gen/device_tree.c DTLookupEntry with searchPoint 0 starts at DTRootNode; an unprefixed name searches a root child. The generated ADT has root child pram.
+- osfmk/arm64/machine_routines.c machine_init calls debug_log_init.
+- osfmk/kern/debug.c debug_log_init sets debug_buf_base to gPanicBase + sizeof(embedded_panic_header), debug_buf_ptr to that base, and size to gPanicSize - header size.
+- pexpert/arm/pe_init.c PE_create_console calls check_for_panic_log before console setup; arm_init calls PE_create_console after PE_init_platform(FALSE) and arm_vm_init.
+
+Device actions
+- One RAM-only reset probe was executed on 2026-11-07 using the exact 5fd4e6b5 kernel hash and reset-only image hash above.
+- No partition flash, userdata access or other storage write was performed.
+- No further device action is recommended from this evidence alone.

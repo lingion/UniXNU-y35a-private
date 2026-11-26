@@ -1,0 +1,26 @@
+{
+  "byte_exact": true,
+  "cache_bytes": 30228480,
+  "cache_path": "out/ipsw/16G102/kernelcache.decompressed",
+  "cache_sha256": "70e80388d42fe2376096bb6248073b0380dd87b85b1a792b36205ba60c722ce1",
+  "command": "legacy_prelink.py --command roundtrip (reproduced independently in this session)",
+  "interpreter_runs": [
+    {
+      "python": "3.10.11",
+      "suite": "tests/ios12-prelink 35 passed"
+    },
+    {
+      "python": "3.12",
+      "suite": "35 passed OK (unittest)"
+    },
+    {
+      "python": "3.13",
+      "suite": "35 passed OK (unittest)"
+    }
+  ],
+  "krr_regression": "kits/XnuPrelink test_emit_prelink+test_native_prelink+test_codeless: 26 passed, 11 subtests passed",
+  "plist_payload_bytes": 2099530,
+  "prelink_info_filesize": 2113536,
+  "recorded_utc": "2026-11-05T05:45:00+08:00",
+  "reparse_stable": true
+}
