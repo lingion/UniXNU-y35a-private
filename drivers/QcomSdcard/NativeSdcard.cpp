@@ -89,7 +89,8 @@ class SdcardPorts {
 class NativeSdcard : public IOBlockStorageDevice {
   OSDeclareDefaultStructors(NativeSdcard)
   SdcardPorts ports;
-  SdCardBus<SdcardPorts> card{ports};
+  SdCardBus<SdcardPorts> bus{ports};
+  sdcard::Controller<SdCardBus<SdcardPorts>> card{bus};
   IOMemoryMap *hcMapping = nullptr, *coreMapping = nullptr;
   IOLock *gate = nullptr;
   uint8_t *staging = nullptr;
@@ -105,6 +106,7 @@ class NativeSdcard : public IOBlockStorageDevice {
   char *getVendorString() override { return const_cast<char *>("Qualcomm"); }
   char *getProductString() override { return const_cast<char *>("Y35A TF card sdhc2"); }
   char *getRevisionString() override { return const_cast<char *>("sd-card-readonly-1"); }
+  char *getAdditionalDeviceInfoString() override { return const_cast<char *>("MSM8916 SDHCI polling, removable TF"); }
   IOReturn reportBlockSize(UInt64 *value) override { *value = 512; return kIOReturnSuccess; }
   IOReturn reportEjectability(bool *value) override { *value = true; return kIOReturnSuccess; }
   IOReturn reportMaxValidBlock(UInt64 *value) override { *value = capacity ? capacity - 1 : 0; return kIOReturnSuccess; }
