@@ -42,10 +42,18 @@ jobs:
           git -C "$RUNNER_TEMP/xnu" fetch --depth=1 origin 494ffe1c29d37ca720c37328feb83069c9641b67
           git -C "$RUNNER_TEMP/xnu" checkout --detach 494ffe1c29d37ca720c37328feb83069c9641b67
           test "$(git -C "$RUNNER_TEMP/xnu" rev-parse HEAD)" = 494ffe1c29d37ca720c37328feb83069c9641b67
+      - name: Generate exact XNU headers
+        run: |
+          make -C "$RUNNER_TEMP/xnu" \
+            ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=DEVELOPMENT \
+            SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
+            OBJROOT="$RUNNER_TEMP/xnu-obj" \
+            DSTROOT="$RUNNER_TEMP/xnu-dst" installhdrs
       - name: Compile NativeSdcard object
         run: |
           python scripts/ci/compile_r208_sdcard.py \
             --xnu-source "$RUNNER_TEMP/xnu" \
+            --generated-headers "$RUNNER_TEMP/xnu-dst" \
             --repo-root "$GITHUB_WORKSPACE" \
             --output "$RUNNER_TEMP/r208/NativeSdcard.o"
       - name: Upload R208 compile artifact

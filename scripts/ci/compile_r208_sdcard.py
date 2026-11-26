@@ -28,11 +28,13 @@ def run(command: list[str], *, env: dict[str, str] | None = None) -> str:
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--xnu-source", type=Path, required=True)
+    parser.add_argument("--generated-headers", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
     xnu = args.xnu_source.resolve(strict=True)
+    generated = args.generated_headers.resolve(strict=True)
     repo = args.repo_root.resolve(strict=True)
     source = repo / "drivers/QcomSdcard/NativeSdcard.cpp"
     if not source.is_file():
@@ -62,6 +64,13 @@ def main() -> int:
     include_roots = [
         xnu / "iokit", xnu / "osfmk", xnu / "bsd", xnu / "libkern",
         xnu / "pexpert", xnu / "EXTERNAL_HEADERS", xnu / "config",
+    ]
+    include_roots += [
+        generated / "System/Library/Frameworks/Kernel.framework/Headers",
+        generated / "System/Library/Frameworks/Kernel.framework/PrivateHeaders",
+        generated / "System/Library/Frameworks/IOKit.framework/Headers",
+        generated / "System/Library/Frameworks/IOKit.framework/PrivateHeaders",
+        generated / "usr/include", generated / "usr/local/include",
     ]
     for include in include_roots:
         if not include.is_dir():
