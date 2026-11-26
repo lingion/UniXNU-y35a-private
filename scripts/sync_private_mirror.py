@@ -39,12 +39,16 @@ def excluded(path: Path) -> bool:
 
 
 def source_files(source: Path, include_untracked: bool) -> list[Path]:
-    commands = [["git", "ls-files", "-c", "-z"]]
+    commands = [
+        ["git", "diff", "--name-only", "-z"],
+        ["git", "diff", "--cached", "--name-only", "-z"],
+    ]
     paths: set[Path] = set()
-    raw = subprocess.check_output(commands[0], cwd=source, text=False).decode(
-        "utf-8", "surrogateescape"
-    )
-    paths.update(Path(item) for item in raw.split("\0") if item)
+    for command in commands:
+        raw = subprocess.check_output(command, cwd=source, text=False).decode(
+            "utf-8", "surrogateescape"
+        )
+        paths.update(Path(item) for item in raw.split("\0") if item)
     if include_untracked:
         for root_name in UNTRACKED_ROOTS:
             root = source / root_name
