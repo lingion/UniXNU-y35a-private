@@ -240,11 +240,11 @@ class NativeXnuBuildContractTest(unittest.TestCase):
             def fake_capture(command, *, env=None):
                 calls.append((command, env))
                 if command[-1] == "-version":
-                    return "Xcode 14.3.1\nBuild version 14E300c\n"
+                    return "Xcode 16.4\nBuild version 16F6\n"
                 if command[-1] == "--show-sdk-path" and command[-2] == "iphoneos":
                     return "/sdk/iphoneos"
                 if command[-1] == "--show-sdk-version":
-                    return "16.4"
+                    return "18.5"
                 if command[-1] == "--show-sdk-path" and command[-2] == "macosx":
                     return "/sdk/macosx"
                 if command[:3] == ["/usr/sbin/sysctl", "-n", "hw.memsize"]:
@@ -259,7 +259,7 @@ class NativeXnuBuildContractTest(unittest.TestCase):
 
             with mock.patch.object(MODULE, "_capture", side_effect=fake_capture):
                 info = MODULE._xcode_inputs(developer)
-            self.assertEqual(info["iphoneos_sdk_version"], "16.4")
+            self.assertEqual(info["iphoneos_sdk_version"], "18.5")
             xcrun_calls = [call for call in calls if call[0][0].endswith("/usr/bin/xcrun")]
             self.assertEqual(len(xcrun_calls), 3)
             for command, env in xcrun_calls:

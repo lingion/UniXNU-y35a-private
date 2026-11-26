@@ -34,7 +34,7 @@ DEFAULT_SOURCE_DIFF = EVIDENCE / "kernel/source-worktree-diff.patch"
 DEFAULT_SOURCE_PROVENANCE = EVIDENCE / "kernel/build-input-provenance.json"
 DEFAULT_NATIVE_ROOT = Path("/tmp/xnu4903-r68e7-v5-native-20261111")
 DEFAULT_FAKEROOT = DEFAULT_NATIVE_ROOT / "fakeroot"
-DEFAULT_SDK_OVERLAY = DEFAULT_NATIVE_ROOT / "compat/overlay-iPhoneOS16.4.sdk"
+DEFAULT_SDK_OVERLAY = DEFAULT_NATIVE_ROOT / "compat/overlay-iPhoneOS18.5.sdk"
 DEFAULT_XCRUN_WRAPPER = DEFAULT_NATIVE_ROOT / "compat/bin/xcrun-overlay"
 DRIVER_INTEGRATION_ROLE = "userdata-window"
 DRIVER_REQUIRED_SYMBOLS = {
@@ -357,10 +357,10 @@ def _xcode_inputs(developer_dir: Path) -> dict[str, object]:
         [str(xcrun), "--sdk", "iphoneos", "--show-sdk-version"], env=selected_env)
     macosx = Path(_capture(
         [str(xcrun), "--sdk", "macosx", "--show-sdk-path"], env=selected_env))
-    if version_lines[:2] != ["Xcode 14.3.1", "Build version 14E300c"]:
-        raise SystemExit(f"expected Xcode 14.3.1 (14E300c); found {version_lines}")
-    if iphoneos_version != "16.4":
-        raise SystemExit(f"expected iPhoneOS SDK 16.4; found {iphoneos_version}")
+    if version_lines[:2] != ["Xcode 16.4", "Build version 16F6"]:
+        raise SystemExit(f"expected Xcode 16.4 (16F6); found {version_lines}")
+    if iphoneos_version != "18.5":
+        raise SystemExit(f"expected iPhoneOS SDK 18.5; found {iphoneos_version}")
     toolchain = developer_dir / "Toolchains/XcodeDefault.xctoolchain/usr"
     required_tools = (
         developer_dir / "usr/bin/make", toolchain / "bin/clang", toolchain / "bin/clang++",

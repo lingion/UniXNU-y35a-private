@@ -55,18 +55,16 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Test native input restoration
+        run: python -m unittest -v tests/test_ci_native_input_prep.py
       - name: Select Xcode
         id: xcode
         run: |
-          if [ -n "${DEVELOPER_DIR:-}" ] && [ -d "$DEVELOPER_DIR" ]; then
-            true
-          else
-            export DEVELOPER_DIR="$(find /Applications -maxdepth 1 -type d -name 'Xcode*.app' | sort | tail -n 1)/Contents/Developer"
-          fi
+          export DEVELOPER_DIR="/Applications/Xcode_16.4.app/Contents/Developer"
           test -d "$DEVELOPER_DIR"
           echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
           xcodebuild -version
-          xcrun --sdk macosx --show-sdk-version
+          xcrun --sdk iphoneos --show-sdk-version
       - name: Fetch exact XNU source
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/xnu.git "$RUNNER_TEMP/xnu"

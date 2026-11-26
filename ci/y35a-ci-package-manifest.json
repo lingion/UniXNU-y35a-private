@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "board": {
+    "name": "vivo Y35A / PD1502A",
+    "dts_path": "evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts",
+    "dts_sha256": "4b2a7fda53ab9b4a69aa3bf9c1247feb7f767b577612914b353f076b391a8714",
+    "qcdt": {
+      "platform_id": 206,
+      "variant_id": 8,
+      "subtype_id": 23,
+      "version": 3,
+      "page_size": 2048
+    }
+  },
+  "firmware": {
+    "product": "iPad5,1",
+    "device_class": "j96ap",
+    "version": "12.4.1",
+    "build": "16G102",
+    "url": "https://updates.cdn-apple.com/2019SummerFCS/fullrestores/061-05476/A469FDC0-C4E7-11E9-94D6-11610AD8B7A1/iPad_64bit_TouchID_12.4.1_16G102_Restore.ipsw",
+    "size": 3053369741,
+    "sha256": "8a7f0750b9ba07884d2ff926b640c93285df8ed669b79970a223da62dc7df917",
+    "components": {
+      "OS": {
+        "size": 2826117884,
+        "sha1": "6261005d89661566dae0739fba070933b9c57ded"
+      },
+      "RestoreRamDisk": {
+        "size": 91602971,
+        "sha1": "442db8d9ce49281812bf012a8e48870b13705de0",
+        "payload_size": 91602944,
+        "payload_magic_offset": 1024,
+        "payload_magic_hex": "4858"
+      },
+      "RestoreTrustCache": {
+        "size": 3875,
+        "sha256": "695f912e494cbfe15fab46d424e7c7e3711b32bc1794d8d6d4e4503787ec7f6e",
+        "payload_version": 1,
+        "payload_entries": 174,
+        "payload_size": 3852,
+        "payload_sha256": "099a621d60e0333eef68d11c2820f99aea0e0e3674d1873d7a52193877a44ba0"
+      },
+      "StaticTrustCache": {
+        "size": 38261,
+        "sha1": "5da16c8c6983240f9445212dcda705c3e7a16aa8",
+        "payload_version": 1,
+        "payload_entries": 1737,
+        "payload_size": 38238
+      }
+    }
+  },
+  "package_scope": {
+    "kind": "launchd-diagnostic-ramboot",
+    "expected_staged_macho_count": 58,
+    "require_all_staged_machos_trusted": true,
+    "device_run_allowed": false,
+    "runtime_qualified": false,
+    "springboard_included": false,
+    "touch_runtime_validated": false
+  },
+  "dtc": {
+    "repository": "https://github.com/dgibson/dtc.git",
+    "commit": "2d10aa2afe35527728db30b35ec491ecb6959e5c"
+  }
+}
