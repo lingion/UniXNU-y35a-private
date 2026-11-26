@@ -44,4 +44,4 @@
 
 ## 下一条可执行动作
 
-根据 R208 GitHub Actions 结果修正 native input preparation 的源树恢复闭包，再执行一次精确绑定的 native link；随后补齐 package/probe 和 hash closure。失败先追加 lessons，再修正 CI 或输入。NativeSdcard、TF image、root mount 和 fallback 未闭合前不写卡、不启动设备。任何本机磁盘上的 UniXNU 编译保持关闭。
+先等待并核实 GitHub Actions Billing/spending limit 已恢复且 runner 能启动；恢复前不重复触发相同 workflow。额度恢复后，再按精确 SHA 修正并验证 native input preparation 的源树恢复闭包，执行一次精确绑定的 native link，随后补齐 package/probe 和 hash closure。失败先追加 lessons，再修正 CI 或输入。NativeSdcard、TF image、root mount 和 fallback 未闭合前不写卡、不启动设备。任何本机磁盘上的 UniXNU 编译保持关闭。
