@@ -1,0 +1,57 @@
+--- a/project/msm8916.mk
++++ b/project/msm8916.mk
+@@ -12,7 +12,15 @@
+ DEBUG := 1
+ endif
+ 
++# Keep the resident path on eMMC unless an experimental build explicitly
++# selects the removable TF controller. SD_BOOT is a make-time input so the
++# ordinary Y35A image remains unchanged and reversible.
++SD_BOOT ?= 0
++ifeq ($(SD_BOOT),1)
++DEFINES += FORCE_SD_BOOT=1
++else
+ EMMC_BOOT := 1
++endif
+ 
+ #DEFINES += WITH_DEBUG_DCC=1
+ DEFINES += WITH_DEBUG_LOG_BUF=1
+--- a/target/msm8916/init.c
++++ b/target/msm8916/init.c
+@@ -103,6 +103,25 @@
+ {
+ 	struct mmc_config_data config;
+ 
++#if FORCE_SD_BOOT
++	/* The stock PD1502A DT identifies sdhc2 as the removable TF slot:
++	 * 4-bit bus, TLMM card-detect GPIO38, PMIC rails already described by DT.
++	 * Do not reuse the eMMC 8-bit handoff configuration here. */
++	set_sdc_power_ctrl(2);
++	config.bus_width = DATA_BUS_WIDTH_4BIT;
++	config.max_clk_rate = MMC_CLK_50MHZ;
++	config.slot         = 2;
++	config.sdhc_base    = mmc_sdhci_base[config.slot - 1];
++	config.pwrctl_base  = mmc_pwrctl_base[config.slot - 1];
++	config.pwr_irq      = mmc_sdc_pwrctl_irq[config.slot - 1];
++	config.hs400_support = 0;
++	if (!(dev = mmc_init(&config))) {
++		dprintf(CRITICAL, "removable SD card init failed!\n");
++		ASSERT(0);
++	}
++	return;
++#endif
++
+ 	/* Set drive strength & pull ctrl values */
+ 	set_sdc_power_ctrl(1);
+ 
+@@ -147,8 +166,8 @@
+ 	set_sdc_power_ctrl(2);
+ 
+ 	config.slot          = 2;
+-	config.bus_width     = DATA_BUS_WIDTH_8BIT;
+-	config.max_clk_rate  = MMC_CLK_200MHZ;
++	config.bus_width     = DATA_BUS_WIDTH_4BIT;
++	config.max_clk_rate  = MMC_CLK_50MHZ;
+ 	config.sdhc_base     = mmc_sdhci_base[config.slot - 1];
+ 	config.pwrctl_base   = mmc_pwrctl_base[config.slot - 1];
+ 	config.pwr_irq       = mmc_sdc_pwrctl_irq[config.slot - 1];

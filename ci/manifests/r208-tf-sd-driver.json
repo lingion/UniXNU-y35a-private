@@ -1,0 +1,91 @@
+{
+  "adt": {
+    "contract_test": "scripts/y35a/test_board_adt.py",
+    "contract_test_sha256": "02b5a58e74df2c2308d6b4ee81b241821533484147b2328ded2e9c477ec9fbce",
+    "script": "scripts/y35a/make_adt.py",
+    "script_sha256": "72bcafc305f3a1cc1cbe9899e5df3e326da91c42a76595cde9f376a5936f4847",
+    "sdhc2": {
+      "active_low": true,
+      "base": "0x07864000",
+      "bus_width": 4,
+      "card_detect_gpio": 38,
+      "hc": "0x07864900",
+      "poll_only": true,
+      "slot": 2
+    }
+  },
+  "board_evidence": {
+    "official_capacity": "up to 128GB TF",
+    "official_spec_url": "https://www.vivo.com.cn/vivo/param/y35a",
+    "stock_dts_path": "evidence/y35a-20261102/dtb10-stock.dts",
+    "stock_dts_sha256": "4b2a7fda53ab9b4a69aa3bf9c1247feb7f767b577612914b353f076b391a8714"
+  },
+  "build": {
+    "component": "QcomSdcard",
+    "execute": false,
+    "jobs": 4,
+    "mode": "driver-only-plan",
+    "run_root_policy": "new external CI runner temp directory"
+  },
+  "candidate": "R208-tf-sd",
+  "device_run_allowed": false,
+  "driver": {
+    "compile_status": "pending",
+    "component": "QcomSdcard",
+    "requires_native_headers": true,
+    "role": "tf-storage",
+    "source_sha256": {
+      "drivers/QcomSdcard/NativeSdcard.cpp": "6b58cd0590a0969681c38faace056228bd670060ad93e38d09cb9aab01ceb3f6",
+      "drivers/QcomSdcard/SdCardBus.h": "2fb913fb07a3e82dc6c0cd9f254478e4811a8a41983eca35bbb2483e85b1aff9",
+      "drivers/QcomSdcard/SdCardCore.h": "7849ca2bb4111f6fde19684e8b442fd0f197ee164093cab917bfc0fe0cd1e7e8",
+      "drivers/QcomSdcard/Test/Model.h": "7e2a87bf866926d076b2210817d901fd293d77e6c34ecdd9c9d72dd5c4732e0b",
+      "drivers/QcomSdcard/Test/sdcard_host.cpp": "c4ccac81dcd0a1e0f827ff92dfdb76e2fbadd0e9e4a52f74f7b2bea9ffcc7929"
+    }
+  },
+  "expected": {
+    "driver_archive_sha256": null,
+    "kernel_sha256": null,
+    "package_sha256": null,
+    "probe_sha256": null
+  },
+  "lk2nd_patch": {
+    "apply_check": "passed",
+    "path": "patches/lk2nd/msm8916-sd-boot.patch",
+    "sha256": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc"
+  },
+  "patches": [
+    {
+      "order": 0,
+      "path": "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch",
+      "sha256": "c243eb2991bc707ad30bd22f0ca1b27b129f0beeec85995eefaf5849909347fa"
+    }
+  ],
+  "root_mount": {
+    "requires": "GPT/APFS image, root selection, eMMC fallback, matching package/probe",
+    "status": "unverified"
+  },
+  "schema_version": 1,
+  "source": {
+    "commit": "494ffe1c29d37ca720c37328feb83069c9641b67",
+    "repository": "apple-oss-distributions/xnu",
+    "tag": "xnu-4903.270.47"
+  },
+  "source_files": {
+    "components.toml": "abc2efe231e7903dceaf3889b3f329b0819c1bb4980b004de5fec2e81a1cd390",
+    "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch": "c243eb2991bc707ad30bd22f0ca1b27b129f0beeec85995eefaf5849909347fa",
+    "patches/lk2nd/msm8916-sd-boot.patch": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc",
+    "scripts/build-xnu-4903-native.py": "684312fe12799519adaef13b73d08353015e128994eee5ab51ee074269e1535a",
+    "scripts/build-xnu-4k-baseline.sh": "ac959683bf4e9f792f261aa02a729a012b8704b75261c8599ced7ef37d25fc2b",
+    "scripts/y35a/build_arm_driver_4903.py": "993dee39fc4a1b3a12b1c966a54b995e2ddb64d2f80e8977f253da6e642d56b9",
+    "scripts/y35a/make_adt.py": "72bcafc305f3a1cc1cbe9899e5df3e326da91c42a76595cde9f376a5936f4847",
+    "scripts/y35a/test_board_adt.py": "02b5a58e74df2c2308d6b4ee81b241821533484147b2328ded2e9c477ec9fbce"
+  },
+  "status": "offline-plan-only",
+  "toolchain": {
+    "build": "14E300c",
+    "developer_dir": "/Applications/Xcode.app/Contents/Developer",
+    "iphoneos_sdk": "16.4",
+    "native_runner": "scripts/build-xnu-4903-native.py",
+    "xcode": "14.3.1"
+  }
+}
