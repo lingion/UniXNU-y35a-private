@@ -1,6 +1,6 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-26T19:48:00Z
+Updated: 2026-11-26T19:59:29Z
 Milestone: R208 TF/SD source, host, root-selection, NativeSdcard object, IOStorageFamily archive and Docs gates passed in CI; native kernel link and TF root path remain pending. All local UniXNU compilation is disabled on every disk.
 Authority: intended /Volumes/Mobile/unixnu-research/UniXNU-y35a; current writable metadata mirror /Users/lingion_k/unixnu-y35a-private-sync; /Volumes/Mobile currently returns I/O errors.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
@@ -14,7 +14,7 @@ Current gates:
 - R206 offline/binding gates passed; R206 paired MVE failed after candidate boot. Do not repeat R206.
 - R207 v1 was rejected before make due to corrupt patch hunk. R207 v2 patch SHA `05e9822905d6187a22009d957ffa350354ff11f53bd31b846b754b41f8f88f84` passes apply-check against R206 staged source.
 - R207 v2 external builder PID 90604 was terminated per user instruction. It produced no provenance or kernel artifact. Do not restart it or run any local UniXNU build on any disk.
-- R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, root-selection positive/negative contract, TF/eMMC fallback contract, NativeSdcard object, IOStorageFamily combine/archive and Docs gates are green. Main validation run `45884101324` (`host-validation`) and Docs run `45884101618` (`build`) passed on commit `49ece4c59964644d4bbbab09db3488e54fa63bf4`; TF validation `45885655057` passed on commit `c2d6c980cd6a57d7ab5c9fc8ac85fc97ee5b4d8c`. No verified kernel/package/device evidence is recorded.
+- R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, root-selection positive/negative contract, TF/eMMC fallback contract, NativeSdcard object, IOStorageFamily combine/archive and Docs gates are green. Main validation run `45884101324` (`host-validation`) and Docs run `45884101618` (`build`) passed; latest TF validation `45887232679` passed all jobs on main commit `425ec007c2973fc14c81f64f14898138340cca3c`. No verified kernel/package/device evidence is recorded.
 - R208 object closure is bound by NativeSdcard object `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`, combined object `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`, and deterministic archive `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`. Native plan-only run `45882865622` passed on main commit `53966d60ea558dae8a12c795736e8418bcc8cca9`; no kernel artifact exists because execute=false. Fallback implementation remains unverified even though its offline contract is green.
 - Historical failures: Native runs `45838744656` and `45838740886` on commit `4c817f03fbd5a0611fadfd2675381c32ae995363` failed at `Compile NativeSdcard object`; later successful runs supersede them.
 

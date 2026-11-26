@@ -27,6 +27,8 @@ State documents were superseded by main commit `49ecec4c59964644d4bbbab09db3488e
 
 TF validation `45885655057` on `c2d6c980cd6a57d7ab5c9fc8ac85fc97ee5b4d8c` passed the new TF/eMMC fallback contract. The contract is offline-only; implementation status remains `unverified` because the two drivers still register independently without a linked root coordinator.
 
+Stock DTS path is now bound by main `425ec007c2973fc14c81f64f14898138340cca3c`; TF validation `45887232679` passed manifest, SD, ADT, root-selection, fallback, XNU headers and NativeSdcard artifact checks.
+
 ## 2026-11-26 R208 remote validation after staging sync
 
 Private mirror commit `9a98ce2480220da4e663688dd730beb62b004bb7` is on remote main. UniXNU validation run `45862410871` (`host-validation`) and Docs run `45862410942` (`build`) both completed successfully. This verifies the documented offline gates and staging policy only; kernel link, package/probe, TF image, root mount, eMMC fallback and device evidence remain pending.

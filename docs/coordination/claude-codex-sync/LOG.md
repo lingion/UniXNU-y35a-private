@@ -2994,3 +2994,10 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 类型: CI-STATUS / ADJUDICATION
 事实: TF validation `45885655057` on commit `c2d6c980cd6a57d7ab5c9fc8ac85fc97ee5b4d8c` passed manifest validation, SD host suite, ADT, root-selection tests, and the new TF/eMMC fallback contract. The fallback contract defines TF-ready, TF card-absent/init/read failure, eMMC ready/failure, and unknown outcomes; its implementation field remains `unverified`.
 裁决: offline fallback contract is green, but source/runtime fallback is not proven. Native kernel, package/probe, TF GPT/APFS, root mount, eMMC fallback implementation and device evidence remain pending; `device_run_allowed=false`.
+
+
+## L-2026-11-26T19:59:29Z-codex — R208 stock DTS and fallback CI closure
+
+类型: CI-STATUS / ADJUDICATION
+事实: main `425ec007c2973fc14c81f64f14898138340cca3c` binds the tracked stock DTS `evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts` with SHA-256 `4b2a7fda53ab9b4a69aa3bf9c1247feb7f767b577612914b353f076b391a8714`. TF validation `45887232679` passed manifest, SD host, ADT, root-selection, fallback contract, exact XNU headers, NativeSdcard object and artifact upload.
+裁决: offline fallback contract is green, but its source/runtime implementation remains unverified; native kernel, package/probe, TF GPT/APFS/root, eMMC fallback implementation and device evidence remain pending; device_run_allowed=false.
