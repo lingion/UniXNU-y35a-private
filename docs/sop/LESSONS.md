@@ -161,3 +161,13 @@
 - 证据：run `45878934377` failed before firehose compile at the hard-coded `atomic_private.h` precheck; libdispatch 913 source uses `<internal/atomic.h>`.
 - 自动化入口：`scripts/ci/prepare_native_inputs.py`。
 - 下一次触发：任何依赖版本切换后的 firehose preparation。
+
+## L-2026-11-26-16 native input tree hash function
+
+- 现象：XNU headers、`libcc_kext.a` 和 `libfirehose_kernel.a` 均生成，但 manifest 写入阶段对 fakeroot 目录调用 file SHA-256，触发 `IsADirectoryError`。
+- 根因：输入闭包需要 tree hash，而 helper 只有单文件 hash。
+- 影响：native input manifest 未生成，native build 未执行。
+- 正确做法：使用与 native builder 相同的名称、类型、权限、symlink 和文件内容 tree digest。
+- 证据：main native run `45879966044` failed at manifest creation with `IsADirectoryError` on `fakeroot`.
+- 自动化入口：`scripts/ci/prepare_native_inputs.py`。
+- 下一次触发：任何 fakeroot/SDK overlay provenance 写入。

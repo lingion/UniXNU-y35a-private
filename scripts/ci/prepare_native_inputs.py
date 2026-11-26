@@ -34,6 +34,28 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def tree_sha256(path: Path) -> str:
+    root = path.resolve(strict=True)
+    if not root.is_dir():
+        raise SystemExit(f"native input is not a directory: {root}")
+    digest = hashlib.sha256()
+    for item in sorted(root.rglob("*"), key=lambda value: value.relative_to(root).as_posix()):
+        relative = item.relative_to(root).as_posix().encode("utf-8")
+        mode = item.lstat().st_mode
+        kind = b"L" if item.is_symlink() else b"D" if item.is_dir() else b"F"
+        digest.update(kind)
+        digest.update(len(relative).to_bytes(4, "big"))
+        digest.update(relative)
+        digest.update((mode & 0o777).to_bytes(4, "big"))
+        if item.is_symlink():
+            digest.update(os.readlink(item).encode("utf-8"))
+        elif item.is_file():
+            digest.update(bytes.fromhex(sha256(item)))
+        elif not item.is_dir():
+            raise SystemExit(f"unsupported native input entry: {item}")
+    return digest.hexdigest()
+
+
 def run(command: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
     print("$", " ".join(str(part) for part in command), flush=True)
     subprocess.run(command, cwd=cwd, env=env, check=True)
@@ -303,7 +325,7 @@ def main() -> int:
                     "libdispatch_tag": "libdispatch-1477.100.9",
                     "llvm_commit": LLVM_COMMIT, "libc_commit": LIBC_COMMIT},
         "paths": {"fakeroot": str(fakeroot), "sdk_overlay": str(overlay), "xcrun_wrapper": str(wrapper)},
-        "trees": {"fakeroot_sha256": sha256(fakeroot), "sdk_overlay_sha256": sha256(overlay),
+        "trees": {"fakeroot_sha256": tree_sha256(fakeroot), "sdk_overlay_sha256": tree_sha256(overlay),
                   "xcrun_wrapper_sha256": sha256(wrapper)},
         "sdk_public_headers": copied_headers,
         "local_build_allowed": False,
