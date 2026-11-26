@@ -25,6 +25,8 @@ Main is at `fc6a4727e74e9913d4336deb78bce3557c91c56f`. Validation `45879899093` 
 
 State documents were superseded by main commit `49ecec4c59964644d4bbbab09db3488e54fa63bf4`: validation `45884101324` and Docs `45884101618` passed, and native plan-only run `45882865622` passed with `execute=false`. No kernel artifact exists yet; package stage must land before the one execute=true native build.
 
+TF validation `45885655057` on `c2d6c980cd6a57d7ab5c9fc8ac85fc97ee5b4d8c` passed the new TF/eMMC fallback contract. The contract is offline-only; implementation status remains `unverified` because the two drivers still register independently without a linked root coordinator.
+
 ## 2026-11-26 R208 remote validation after staging sync
 
 Private mirror commit `9a98ce2480220da4e663688dd730beb62b004bb7` is on remote main. UniXNU validation run `45862410871` (`host-validation`) and Docs run `45862410942` (`build`) both completed successfully. This verifies the documented offline gates and staging policy only; kernel link, package/probe, TF image, root mount, eMMC fallback and device evidence remain pending.

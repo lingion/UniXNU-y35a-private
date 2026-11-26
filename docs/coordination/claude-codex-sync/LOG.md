@@ -2988,3 +2988,9 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 类型: CI-STATUS / STATE
 事实: main commit `49ecec4c59964644d4bbbab09db3488e54fa63bf4` 的 validation `45884101324` 和 Docs `45884101618` 均 completed/success。Native plan-only `45882865622` remains the latest successful native workflow and used `execute=false`; no kernel artifact was emitted. Package branch `codex/unixnu-ci-package` has no commits beyond the synchronized state handoff.
 裁决: 以 `49ecec4`、`45884101324`、`45884101618` 和 `45882865622` 为当前状态依据。package stage、execute=true native link、kernel artifact、package/probe、TF/root/fallback 和设备证据仍未完成；`device_run_allowed=false`。
+
+## L-2026-11-26T19:48:00Z-codex — R208 fallback contract CI green
+
+类型: CI-STATUS / ADJUDICATION
+事实: TF validation `45885655057` on commit `c2d6c980cd6a57d7ab5c9fc8ac85fc97ee5b4d8c` passed manifest validation, SD host suite, ADT, root-selection tests, and the new TF/eMMC fallback contract. The fallback contract defines TF-ready, TF card-absent/init/read failure, eMMC ready/failure, and unknown outcomes; its implementation field remains `unverified`.
+裁决: offline fallback contract is green, but source/runtime fallback is not proven. Native kernel, package/probe, TF GPT/APFS, root mount, eMMC fallback implementation and device evidence remain pending; `device_run_allowed=false`.
