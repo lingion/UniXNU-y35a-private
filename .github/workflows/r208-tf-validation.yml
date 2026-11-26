@@ -37,6 +37,8 @@ jobs:
           /tmp/sdcard_host_test
       - name: Run ADT contract
         run: (cd scripts/y35a && python3 -m unittest -v test_board_adt)
+      - name: Run root-selection contract tests
+        run: python3 -m unittest -v tests/test_y35a_root_selection_contract.py
       - name: Fetch exact XNU source
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/xnu.git "$RUNNER_TEMP/xnu"

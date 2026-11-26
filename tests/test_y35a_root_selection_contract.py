@@ -77,7 +77,8 @@ class RootSelectionContractTest(unittest.TestCase):
                              '"rd=uuid but no boot-uuid=<value> specified"; '
                              'IOService::publishResource( "boot-uuid", uuidString ); '
                              'return IOService::resourceMatching( "boot-uuid-media" ); '
-                             'OSString::withCStringNoCopy("Apple_HFS");')
+                             'OSString::withCStringNoCopy("Apple_HFS"); '
+                             'IOGUIDPartitionScheme;')
             boot3 = root / "boot3.img"
             make_boot3(boot3, "-v serial=3 cpus=1 debug=0x8 rd=uuid")
             raw = root / "final.raw"
@@ -97,13 +98,33 @@ class RootSelectionContractTest(unittest.TestCase):
                              '"rd=uuid but no boot-uuid=<value> specified"; '
                              'IOService::publishResource( "boot-uuid", uuidString ); '
                              'return IOService::resourceMatching( "boot-uuid-media" ); '
-                             'OSString::withCStringNoCopy("Apple_HFS");')
+                             'OSString::withCStringNoCopy("Apple_HFS"); '
+                             'IOGUIDPartitionScheme;')
             boot3 = root / "boot3.img"
             make_boot3(boot3, "-v serial=3 cpus=1 debug=0x8 rd=uuid boot-uuid=" + MODULE.ROOT_UUID)
             raw = root / "final.raw"
             make_raw(raw, kernel, b"rooting via boot-uuid\nWaiting for boot volume with UUID\nBSD root: disk0s2")
             image = MODULE.verify([str(boot3), str(kernel), str(raw), str(apfs), str(iokit)])
             self.assertEqual(image["status"], "PASS", image["failures"])
+
+    def test_missing_guid_partition_scheme_evidence_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            kernel = root / "kernel.macho"
+            kernel.write_bytes(b"kernel")
+            apfs = root / "os.dmg"
+            make_gpt_image(apfs, MODULE.ROOT_UUID)
+            iokit = root / "IOKitBSDInit.cpp"
+            iokit.write_text('getProperty( "boot-uuid" ); strncmp( look, "uuid", strlen( "uuid" )) == 0; '
+                             'IOService::publishResource( "boot-uuid", uuidString ); '
+                             'return IOService::resourceMatching( "boot-uuid-media" );')
+            boot3 = root / "boot3.img"
+            make_boot3(boot3, "-v serial=3 cpus=1 debug=0x8 rd=uuid boot-uuid=" + MODULE.ROOT_UUID)
+            raw = root / "final.raw"
+            make_raw(raw, kernel, b"rooting via boot-uuid\nBSD root: disk0s2")
+            image = MODULE.verify([str(boot3), str(kernel), str(raw), str(apfs), str(iokit)])
+            self.assertEqual(image["status"], "FAIL")
+            self.assertIn("IOGUIDPartitionScheme", " ".join(image["failures"]))
 
     def test_raw_without_fresh_root_log_fails(self):
         with tempfile.TemporaryDirectory() as directory:

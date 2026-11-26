@@ -144,7 +144,7 @@ def source_facts(iokit_source: Path) -> dict:
         "waits_on_boot_uuid_media": 'return IOService::resourceMatching( "boot-uuid-media" );' in source,
         "apple_hfs_fallback": 'withCStringNoCopy("Apple_HFS")' in source,
         "uses_osenvironment_for_root": "osenvironment" in source,
-        "guid_partition_scheme_in_tree": "IOGUIDPartitionScheme" in source or True,
+        "guid_partition_scheme_in_tree": "IOGUIDPartitionScheme" in source,
         "apple_partition_scheme_in_tree": "IOApplePartitionScheme" in source,
     }
     return {"path": str(iokit_source), "sha256": sha256(iokit_source), "checks": checks}
@@ -180,6 +180,8 @@ def verify(args: list[str]) -> dict:
         failures.append("IOKitBSDInit.cpp no longer reads /chosen boot-uuid")
     if not source["checks"]["parses_rd_uuid_boot_arg"]:
         failures.append("IOKitBSDInit.cpp no longer parses rd=uuid")
+    if not source["checks"]["guid_partition_scheme_in_tree"]:
+        failures.append("bound IOKit storage source lacks IOGUIDPartitionScheme GPT evidence")
     if source["checks"]["uses_osenvironment_for_root"]:
         failures.append("IOKitBSDInit.cpp appears to use osenvironment for root selection")
     if not boot_matches_kernel:
@@ -219,8 +221,9 @@ def verify(args: list[str]) -> dict:
 
 
 def main() -> None:
-    print(json.dumps(verify(sys.argv[1:]), indent=2, sort_keys=True))
-    raise SystemExit(0)
+    result = verify(sys.argv[1:])
+    print(json.dumps(result, indent=2, sort_keys=True))
+    raise SystemExit(0 if result["status"] == "PASS" else 1)
 
 
 if __name__ == "__main__":
