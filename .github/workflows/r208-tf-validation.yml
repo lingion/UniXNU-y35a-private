@@ -53,6 +53,7 @@ jobs:
           git -C "$RUNNER_TEMP/AvailabilityVersions" checkout --detach AvailabilityVersions-33.200.7
           export XNU_AVAILABILITY_PL="$RUNNER_TEMP/availability-dst/usr/local/libexec/availability.pl"
           make -C "$RUNNER_TEMP/AvailabilityVersions" install \
+            SRCROOT="$RUNNER_TEMP/AvailabilityVersions" \
             OBJROOT="$RUNNER_TEMP/availability-obj" SYMROOT="$RUNNER_TEMP/availability-sym" \
             DSTROOT="$RUNNER_TEMP/availability-dst" CMAKE="$(command -v cmake)" NINJA="$(command -v ninja)"
           make -C "$RUNNER_TEMP/xnu" \
