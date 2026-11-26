@@ -11,6 +11,22 @@ import subprocess
 import shutil
 
 
+def normalize_ar_timestamps(path: Path) -> None:
+    data = bytearray(path.read_bytes())
+    if data[:8] != b"!<arch>\n":
+        raise SystemExit(f"not an ar archive: {path}")
+    offset = 8
+    while offset < len(data):
+        if offset + 60 > len(data) or data[offset + 58:offset + 60] != b"`\n":
+            raise SystemExit(f"malformed ar member header at {offset}: {path}")
+        size = int(bytes(data[offset + 48:offset + 58]).decode("ascii").strip())
+        data[offset + 16:offset + 28] = b"0           "
+        offset += 60 + size + (size & 1)
+    if offset != len(data):
+        raise SystemExit(f"ar archive has invalid trailing bytes: {path}")
+    path.write_bytes(data)
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -155,6 +171,7 @@ def main() -> int:
                 *[str(path) for path in [*family_objects, args.output]]], env=env)
     archive = args.output.with_name("libQcomSdcard.a")
     run(["/usr/bin/xcrun", "ar", "-rcs", str(archive), str(combined)], env=env)
+    normalize_ar_timestamps(archive)
     report["iostorage_objects"] = [{"path": str(path), "sha256": sha256(path)} for path in family_objects]
     report["combined_object"] = {"path": str(combined), "sha256": sha256(combined), "size": combined.stat().st_size}
     report["archive"] = {"path": str(archive), "sha256": sha256(archive), "size": archive.stat().st_size}
