@@ -224,6 +224,14 @@ if [ "$NATIVE_SDCC" = 1 ]; then
   fi
   PERSONALITY_CFLAGS="$PERSONALITY_CFLAGS -DXNU_NATIVE_SDCC=1"
 fi
+NATIVE_SDCARD=${XNU_NATIVE_SDCARD:-0}
+if [ "$NATIVE_SDCARD" != 0 ] && [ "$NATIVE_SDCARD" != 1 ]; then
+  echo 'XNU_NATIVE_SDCARD must be 0 or 1' >&2
+  exit 1
+fi
+if [ "$NATIVE_SDCARD" = 1 ]; then
+  PERSONALITY_CFLAGS="$PERSONALITY_CFLAGS -DXNU_NATIVE_SDCARD=1"
+fi
 NATIVE_TOUCH=${XNU_NATIVE_TOUCH:-0}
 if [ "$NATIVE_TOUCH" != 0 ] && [ "$NATIVE_TOUCH" != 1 ]; then
   echo 'XNU_NATIVE_TOUCH must be 0 or 1' >&2
@@ -785,6 +793,12 @@ PY_BINDINGS
     # linker must keep the whole archive (same discipline as RamBlock).
     KERNEL_EXTRA_ARCHIVES="$KERNEL_EXTRA_ARCHIVES -Wl,-force_load,$SDCC_ARCHIVE"
     KERNEL_ARCHIVE_DEPENDENCIES="$KERNEL_ARCHIVE_DEPENDENCIES $SDCC_ARCHIVE"
+  fi
+  if [ "$NATIVE_SDCARD" = 1 ]; then
+    SDCARD_ARCHIVE=$ROOT/build/qcom-sdcard/libQcomSdcard.a
+    test -f "$SDCARD_ARCHIVE"
+    KERNEL_EXTRA_ARCHIVES="$KERNEL_EXTRA_ARCHIVES -Wl,-force_load,$SDCARD_ARCHIVE"
+    KERNEL_ARCHIVE_DEPENDENCIES="$KERNEL_ARCHIVE_DEPENDENCIES $SDCARD_ARCHIVE"
   fi
   if [ "$NATIVE_TOUCH" = 1 ]; then
     # Bus driver first: the digitizer's metaClass references its own but the
