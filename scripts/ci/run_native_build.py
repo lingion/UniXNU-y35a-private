@@ -33,6 +33,11 @@ def main() -> int:
     parser.add_argument("--developer-dir", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, default=Path.cwd())
     parser.add_argument("--plan-only", action="store_true")
+    parser.add_argument("--fakeroot", type=Path)
+    parser.add_argument("--sdk-overlay", type=Path)
+    parser.add_argument("--xcrun-wrapper", type=Path)
+    parser.add_argument("--driver-archive", type=Path)
+    parser.add_argument("--driver-manifest", type=Path)
     args = parser.parse_args()
 
     repo_root = args.repo_root.resolve()
@@ -86,6 +91,8 @@ def main() -> int:
     ]
     if manifest.get("source_diff"):
         command.extend(["--source-diff", str(resolve(repo_root, manifest["source_diff"]))])
+    else:
+        command.append("--no-source-diff")
     for path in patch_paths:
         command.extend(["--patch", str(path)])
     for flag in build.get("flags", []):
@@ -96,6 +103,16 @@ def main() -> int:
         command.extend(["--manifest", str(resolve(repo_root, build["manifest"]))])
     if manifest.get("source_provenance"):
         command.extend(["--source-provenance", str(resolve(repo_root, manifest["source_provenance"]))])
+    if args.fakeroot:
+        command.extend(["--fakeroot", str(args.fakeroot.resolve())])
+    if args.sdk_overlay:
+        command.extend(["--sdk-overlay", str(args.sdk_overlay.resolve())])
+    if args.xcrun_wrapper:
+        command.extend(["--xcrun-wrapper", str(args.xcrun_wrapper.resolve())])
+    if args.driver_archive:
+        command.extend(["--driver-archive", str(args.driver_archive.resolve())])
+    if args.driver_manifest:
+        command.extend(["--driver-manifest", str(args.driver_manifest.resolve())])
 
     report = {
         "ok": True,

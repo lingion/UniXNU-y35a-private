@@ -159,6 +159,10 @@ class NativeXnuBuildContractTest(unittest.TestCase):
         self.assertEqual(explicit.patch, [Path("first.patch"), Path("second.patch")])
         self.assertEqual(explicit.source_diff, defaults.source_diff)
 
+    def test_no_source_diff_is_explicit_and_does_not_use_historical_default(self):
+        args = MODULE.parse_args(["--no-source-diff"])
+        self.assertIsNone(args.source_diff)
+
     def test_default_make_flags_use_consumed_variable_without_sflags_override(self):
         installhdrs = self.make_command("installhdrs")
         build = self.make_command("build")

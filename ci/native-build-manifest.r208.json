@@ -1,6 +1,19 @@
 {
   "kind": "R208 TF SD native build plan",
   "source_ref": "494ffe1c29d37ca720c37328feb83069c9641b67",
+  "source_provenance": "ci/native-source-provenance.r208.json",
+  "driver_artifact": {
+    "run_id": 45852497429,
+    "name": "r208-native-sdcard-45852497429",
+    "archive": "libQcomSdcard.a",
+    "sha256": "f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73"
+  },
+  "native_inputs": {
+    "availability_tag": "AvailabilityVersions-33.200.7",
+    "libdispatch_tag": "libdispatch-1477.100.9",
+    "llvm_commit": "58c46bae21181fb4240cf964461bea738d96d50e",
+    "libc_commit": "899a3b2d52d95d75e05fb286a5e64975ec3de757"
+  },
   "patches": [
     {
       "order": 0,
@@ -31,6 +44,11 @@
       "order": 5,
       "path": "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch",
       "sha256": "c243eb2991bc707ad30bd22f0ca1b27b129f0beeec85995eefaf5849909347fa"
+    },
+    {
+      "order": 6,
+      "path": "patches/xnu/local-availability.patch",
+      "sha256": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0"
     }
   ],
   "build": {

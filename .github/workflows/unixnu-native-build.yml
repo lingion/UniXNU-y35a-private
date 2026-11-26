@@ -20,6 +20,16 @@ on:
         required: true
         default: false
         type: boolean
+      driver_run_id:
+        description: Existing successful R208 driver artifact run
+        required: true
+        default: '45852497429'
+        type: string
+      driver_artifact_name:
+        description: Driver archive artifact name
+        required: true
+        default: r208-native-sdcard-45852497429
+        type: string
 
 permissions:
   contents: read
@@ -62,6 +72,45 @@ jobs:
           git -C "$RUNNER_TEMP/xnu" fetch --depth=1 origin "$SOURCE_REF"
           git -C "$RUNNER_TEMP/xnu" checkout --detach "$SOURCE_REF"
           git -C "$RUNNER_TEMP/xnu" rev-parse HEAD
+      - name: Fetch native input sources
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/AvailabilityVersions.git "$RUNNER_TEMP/AvailabilityVersions"
+          git -C "$RUNNER_TEMP/AvailabilityVersions" fetch --depth=1 origin AvailabilityVersions-33.200.7
+          git -C "$RUNNER_TEMP/AvailabilityVersions" checkout --detach AvailabilityVersions-33.200.7
+          git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/libdispatch.git "$RUNNER_TEMP/libdispatch"
+          git -C "$RUNNER_TEMP/libdispatch" fetch --depth=1 origin libdispatch-1477.100.9
+          git -C "$RUNNER_TEMP/libdispatch" checkout --detach libdispatch-1477.100.9
+          git clone --filter=blob:none --no-checkout https://github.com/llvm/llvm-project.git "$RUNNER_TEMP/llvm-project"
+          git -C "$RUNNER_TEMP/llvm-project" fetch --depth=1 origin 58c46bae21181fb4240cf964461bea738d96d50e
+          git -C "$RUNNER_TEMP/llvm-project" checkout --detach 58c46bae21181fb4240cf964461bea738d96d50e
+          git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/Libc.git "$RUNNER_TEMP/Libc"
+          git -C "$RUNNER_TEMP/Libc" fetch --depth=1 origin 899a3b2d52d95d75e05fb286a5e64975ec3de757
+          git -C "$RUNNER_TEMP/Libc" checkout --detach 899a3b2d52d95d75e05fb286a5e64975ec3de757
+      - name: Download hash-bound R208 driver archive
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/r208-driver"
+          gh run download "${{ inputs.driver_run_id }}" \
+            --repo "${{ github.repository }}" \
+            --name "${{ inputs.driver_artifact_name }}" \
+            --dir "$RUNNER_TEMP/r208-driver"
+          test -f "$RUNNER_TEMP/r208-driver/libQcomSdcard.a"
+          test -f "$RUNNER_TEMP/r208-driver/driver-manifest.json"
+      - name: Prepare exact native inputs
+        run: |
+          python scripts/ci/prepare_native_inputs.py \
+            --xnu-source "$RUNNER_TEMP/xnu" \
+            --availability-source "$RUNNER_TEMP/AvailabilityVersions" \
+            --libdispatch-source "$RUNNER_TEMP/libdispatch" \
+            --llvm-source "$RUNNER_TEMP/llvm-project" \
+            --libc-source "$RUNNER_TEMP/Libc" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --developer-dir "$DEVELOPER_DIR" \
+            --iphoneos-sdk "$(xcrun --sdk iphoneos --show-sdk-path)" \
+            --macosx-sdk "$(xcrun --sdk macosx --show-sdk-path)" \
+            --run-root "$RUNNER_TEMP/native-inputs" \
+            --jobs 4
       - name: Validate native manifest and print command
         run: |
           python scripts/ci/run_native_build.py \
@@ -70,6 +119,11 @@ jobs:
             --run-root "$RUN_ROOT" \
             --developer-dir "$DEVELOPER_DIR" \
             --repo-root "$GITHUB_WORKSPACE" \
+            --fakeroot "$RUNNER_TEMP/native-inputs/fakeroot" \
+            --sdk-overlay "$RUNNER_TEMP/native-inputs/sdk-overlay" \
+            --xcrun-wrapper "$RUNNER_TEMP/native-inputs/compat/bin/xcrun" \
+            --driver-archive "$RUNNER_TEMP/r208-driver/libQcomSdcard.a" \
+            --driver-manifest "$RUNNER_TEMP/r208-driver/driver-manifest.json" \
             --plan-only | tee "$RUNNER_TEMP/native-build-plan.json"
       - name: Run native build
         if: inputs.execute == true
@@ -79,7 +133,12 @@ jobs:
             --source-root "$RUNNER_TEMP/xnu" \
             --run-root "$RUN_ROOT" \
             --developer-dir "$DEVELOPER_DIR" \
-            --repo-root "$GITHUB_WORKSPACE"
+            --repo-root "$GITHUB_WORKSPACE" \
+            --fakeroot "$RUNNER_TEMP/native-inputs/fakeroot" \
+            --sdk-overlay "$RUNNER_TEMP/native-inputs/sdk-overlay" \
+            --xcrun-wrapper "$RUNNER_TEMP/native-inputs/compat/bin/xcrun" \
+            --driver-archive "$RUNNER_TEMP/r208-driver/libQcomSdcard.a" \
+            --driver-manifest "$RUNNER_TEMP/r208-driver/driver-manifest.json"
       - name: Upload build provenance and logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -87,6 +146,7 @@ jobs:
           name: unixnu-native-build-${{ github.run_id }}
           path: |
             ${{ runner.temp }}/native-build-plan.json
+            ${{ runner.temp }}/native-inputs/native-inputs-manifest.json
             ${{ runner.temp }}/unixnu-native-build/**/build-provenance.json
             ${{ runner.temp }}/unixnu-native-build/**/logs/**
           if-no-files-found: warn

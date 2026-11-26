@@ -495,6 +495,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--source", type=Path, default=DEFAULT_SOURCE)
     parser.add_argument("--source-diff", type=Path, default=DEFAULT_SOURCE_DIFF)
+    parser.add_argument("--no-source-diff", dest="source_diff", action="store_const", const=None,
+                        help="do not apply the historical default source diff")
     parser.add_argument("--patch", action="append", default=[], type=Path,
                         help="additional patch applied after --source-diff; repeatable")
     parser.add_argument("--source-provenance", type=Path, default=DEFAULT_SOURCE_PROVENANCE)
@@ -657,6 +659,29 @@ def _execute_run(
         "sdk_overlay_tree_sha256": tree_sha256(overlay),
         "xcrun_wrapper_sha256": sha256_file(wrapper),
     }
+    host_tool_patch = ROOT / "scripts/ci/patch_xnu_host_tools.py"
+    compatibility_target = staged_source / "bsd/kern/makekdebugevents.py"
+    if compatibility_target.is_file():
+        host_tool_command = [sys.executable, str(host_tool_patch), "--xnu-source", str(staged_source)]
+        host_tool_result = subprocess.run(host_tool_command, capture_output=True, text=True, check=False)
+        provenance["staged_source_compatibility"] = {
+            "status": "passed" if host_tool_result.returncode == 0 else "failed",
+            "script": str(host_tool_patch),
+            "script_sha256": sha256_file(host_tool_patch),
+            "argv": host_tool_command,
+            "exit_code": host_tool_result.returncode,
+            "stdout": host_tool_result.stdout,
+            "stderr": host_tool_result.stderr,
+        }
+        _write_json(provenance_path, provenance)
+        if host_tool_result.returncode:
+            raise SystemExit("XNU host-tool compatibility patch failed; run preserved")
+    else:
+        provenance["staged_source_compatibility"] = {
+            "status": "not-applicable",
+            "reason": "bsd/kern/makekdebugevents.py absent from staged source",
+        }
+        _write_json(provenance_path, provenance)
     provenance["status"] = "prepared"
     _write_json(provenance_path, provenance)
 
@@ -751,7 +776,7 @@ def main(argv: list[str] | None = None) -> int:
     driver_manifest = load_driver_integration(driver_archives, args.driver_manifest)
     source = args.source.resolve(strict=True)
     source_identity = validate_source_tree(source)
-    source_diff = args.source_diff.resolve(strict=True)
+    source_diff = args.source_diff.resolve(strict=True) if args.source_diff else None
     source_provenance = args.source_provenance.resolve(strict=True)
     fakeroot_input = args.fakeroot.resolve(strict=True)
     overlay_input = args.sdk_overlay.resolve(strict=True)
@@ -763,7 +788,8 @@ def main(argv: list[str] | None = None) -> int:
         xcode_select = Path(_capture(["/usr/bin/xcode-select", "-p"]))
         developer_dir = xcode_select.resolve(strict=True)
     xcode_info = _xcode_inputs(developer_dir)
-    patch_paths = [source_diff, *[Path(path).resolve(strict=True) for path in args.patch]]
+    patch_paths = [path for path in (source_diff, *[Path(path).resolve(strict=True) for path in args.patch])
+                   if path is not None]
     assets = {
         "source": {**source_identity, "path": str(source), "tree_sha256": tree_sha256(source)},
         "source_diff": [{"path": str(path), "sha256": sha256_file(path)} for path in patch_paths],
