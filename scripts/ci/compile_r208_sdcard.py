@@ -158,6 +158,21 @@ def main() -> int:
     report["iostorage_objects"] = [{"path": str(path), "sha256": sha256(path)} for path in family_objects]
     report["combined_object"] = {"path": str(combined), "sha256": sha256(combined), "size": combined.stat().st_size}
     report["archive"] = {"path": str(archive), "sha256": sha256(archive), "size": archive.stat().st_size}
+    driver_manifest = {
+        "schema_version": 1,
+        "component": "QcomSdcard",
+        "integration": {"role": "tf-storage", "force_load": True,
+                         "consumer": "scripts/build-xnu-4903-native.py"},
+        "archive": report["archive"],
+        "source": {"path": str(source), "sha256": sha256(source)},
+        "xnu": {"commit": commit},
+        "iostorage": {"commit": iostorage_commit},
+        "object": report["object"],
+        "combined_object": report["combined_object"],
+    }
+    driver_manifest_path = args.output.with_name("driver-manifest.json")
+    driver_manifest_path.write_text(json.dumps(driver_manifest, indent=2, sort_keys=True) + "\n")
+    report["driver_manifest"] = {"path": str(driver_manifest_path), "sha256": sha256(driver_manifest_path)}
     args.output.with_name("compile-report.json").write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
     return 0
