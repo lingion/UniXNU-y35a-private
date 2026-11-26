@@ -2899,3 +2899,9 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 事实: 直接查询 GitHub Actions run `45830700561`，head commit `830168775e07b92be34e6454f62f65d035eaaa5c`。manifest、SD host suite、ADT contract 和 exact XNU checkout 步骤成功；`Generate exact XNU headers` 失败，`Compile NativeSdcard object` 被跳过。当前没有 NativeSdcard 编译成功结论或 object artifact。该失败属于 XNU host-header 生成阶段，不能作为驱动源码编译失败的证据。
 裁决: R207 PID 90604 已终止且没有产物，不得重启。`device_run_allowed=false`，不写 TF 卡、不操作设备。CI 修复继续由主线负责，本轮只更新目标、状态与交接文档，不重复修改 CI 输入。
 下一步: 主线修复 host-header CI 前置后，按实际 workflow 终态和 hash-bound artifact 更新 R208 状态；任何本机磁盘都不运行 UniXNU 编译。
+
+## 2026-11-26T13:42:22Z — R208 最新 CI 仍阻塞于 XNU host headers
+
+类型: CI-STATUS
+事实: GitHub Actions run `45831371261`，head `794c5a7624b2ddfa0991971b6284e1971f348652`。manifest、SD host suite、ADT contract 和 exact XNU checkout 均通过。`Generate exact XNU headers` 因找不到 Xcode SDK 内的 `availability.pl` 失败，`Compile NativeSdcard object` 被跳过。
+裁决: 该 run 没有验证 NativeSdcard 源码编译，也没有生成可绑定 object artifact。继续由主线修复 CI host-header 前置，不在本机编译，不据此得出驱动源码好坏结论。
