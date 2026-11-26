@@ -50,8 +50,15 @@ jobs:
             SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
             OBJROOT="$RUNNER_TEMP/xnu-obj" \
             DSTROOT="$RUNNER_TEMP/xnu-dst" \
+            SDKVERSION=12.4 PLATFORM=iPhoneOS ARCH_CONFIGS=ARM64 MACHINE_CONFIGS=T7001 \
+            ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 \
+            HOST_CC="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" \
+            MIG="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin/mig" \
+            MIGCOM="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/libexec/migcom" \
+            HOST_OS_VERSION="$(sw_vers -productVersion)" \
             CTFCONVERT=/usr/bin/true CTFMERGE=/usr/bin/true CTFINSERT=/usr/bin/true \
-            EMBEDDED_DEVICE_MAP=/usr/bin/true installhdrs
+            EMBEDDED_DEVICE_MAP=/usr/bin/true TIGHTBEAMC=tightbeamc-not-supported \
+            installhdrs
       - name: Compile NativeSdcard object
         run: |
           python scripts/ci/compile_r208_sdcard.py \
