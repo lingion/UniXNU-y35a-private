@@ -23,7 +23,7 @@ Staging is `/Volumes/Portable/UniXNU-staging-20261127-0042`, exported from priva
 
 Main is at `fc6a4727e74e9913d4336deb78bce3557c91c56f`. Validation `45879899093` and Docs `45879899053` passed on main ancestor `0e0a1356ab09ab6dee8fec6f4a9459ad82467d8c`. Native run `45879966044` failed before kernel build during Darwin 18 firehose input preparation; no kernel artifact exists. `fc6a472` push-triggered native workflow `45880957209` was skipped and is not a build result. The native workflow now defines the future `unixnu-kernel-${run_id}` producer contract, but it has not yet emitted an artifact. Package/probe/TF/root/fallback/device gates remain pending.
 
-State documents are now updated in main commit `03bffddac32a8c7caec658a45db8533e1fc78694`; validation `45881634929` and Docs `45881634974` both passed. The native blocker and package handoff above remain unchanged.
+State documents were superseded by main commit `53966d60ea558dae8a12c795736e8418bcc8cca9`: validation `45882596692` and Docs `45882596678` passed, and native plan-only run `45882865622` passed with `execute=false`. No kernel artifact exists yet; package stage must land before the one execute=true native build.
 
 ## 2026-11-26 R208 remote validation after staging sync
 

@@ -1,6 +1,6 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-26T19:13:00Z
+Updated: 2026-11-26T19:27:44Z
 Milestone: R208 TF/SD source, host, root-selection, NativeSdcard object, IOStorageFamily archive and Docs gates passed in CI; native kernel link and TF root path remain pending. All local UniXNU compilation is disabled on every disk.
 Authority: intended /Volumes/Mobile/unixnu-research/UniXNU-y35a; current writable metadata mirror /Users/lingion_k/unixnu-y35a-private-sync; /Volumes/Mobile currently returns I/O errors.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
@@ -14,13 +14,13 @@ Current gates:
 - R206 offline/binding gates passed; R206 paired MVE failed after candidate boot. Do not repeat R206.
 - R207 v1 was rejected before make due to corrupt patch hunk. R207 v2 patch SHA `05e9822905d6187a22009d957ffa350354ff11f53bd31b846b754b41f8f88f84` passes apply-check against R206 staged source.
 - R207 v2 external builder PID 90604 was terminated per user instruction. It produced no provenance or kernel artifact. Do not restart it or run any local UniXNU build on any disk.
-- R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, root-selection positive/negative contract, NativeSdcard object, IOStorageFamily combine/archive and Docs gates are green. Main validation run `45879899093` (`host-validation`) and Docs run `45879899053` (`build`) passed on commit `0e0a1356ab09ab6dee8fec6f4a9459ad82467d8c`. No verified kernel/package/device evidence is recorded.
-- R208 object closure is bound by NativeSdcard object `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`, combined object `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`, and deterministic archive `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`. Native run `45879966044` failed during input preparation before kernel build; `fc6a472` push workflow `45880957209` was skipped. No kernel artifact exists from main.
+- R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, root-selection positive/negative contract, NativeSdcard object, IOStorageFamily combine/archive and Docs gates are green. Main validation run `45882596692` (`host-validation`) and Docs run `45882596678` (`build`) passed on commit `53966d60ea558dae8a12c795736e8418bcc8cca9`. No verified kernel/package/device evidence is recorded.
+- R208 object closure is bound by NativeSdcard object `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`, combined object `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`, and deterministic archive `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`. Native plan-only run `45882865622` passed on main commit `53966d60ea558dae8a12c795736e8418bcc8cca9`; no kernel artifact exists because execute=false.
 - Historical failures: Native runs `45838744656` and `45838740886` on commit `4c817f03fbd5a0611fadfd2675381c32ae995363` failed at `Compile NativeSdcard object`; later successful runs supersede them.
 
 Next:
-1. Continue the CI-only native input closure for the Darwin 18 libdispatch/libplatform firehose path, then run plan-only on the same future package-stage SHA.
-2. Use a successful native run's `unixnu-kernel-${run_id}` artifact as the only package input; package/probe and TF/root/fallback gates remain downstream.
+1. Wait for the isolated package workflow stage to land, then run one `execute=true` native build on that exact package-stage SHA.
+2. Use that successful run's `unixnu-kernel-${run_id}` artifact as the only package input; package/probe and TF/root/fallback gates remain downstream.
 3. Keep runtime qualification and device_run_allowed false; do not run local UniXNU compilation on any disk.
 
 Active agents: none. Persistent writes: none.
