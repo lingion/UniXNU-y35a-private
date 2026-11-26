@@ -21,6 +21,8 @@ EXCLUDED_DIRS = {
     "refer",
     "upstream-refresh",
 }
+UNTRACKED_ROOTS = (".github", "ci", "components.toml", "drivers", "docs", "patches", "profiles", "scripts", "tests", "tools", "GOAL.md", "LIVE-TARGET.md", "REFERENCES.md", "STATE.md")
+
 EXCLUDED_SUFFIXES = {
     ".a", ".bin", ".dbr", ".dmg", ".dylib", ".img", ".ipsw", ".macho", ".o", ".raw", ".tar"
 }
@@ -38,14 +40,22 @@ def excluded(path: Path) -> bool:
 
 def source_files(source: Path, include_untracked: bool) -> list[Path]:
     commands = [["git", "ls-files", "-c", "-z"]]
-    if include_untracked:
-        commands.append(["git", "ls-files", "-o", "--exclude-standard", "-z"])
     paths: set[Path] = set()
-    for command in commands:
-        raw = subprocess.check_output(command, cwd=source, text=False).decode(
-            "utf-8", "surrogateescape"
-        )
-        paths.update(Path(item) for item in raw.split("\0") if item)
+    raw = subprocess.check_output(commands[0], cwd=source, text=False).decode(
+        "utf-8", "surrogateescape"
+    )
+    paths.update(Path(item) for item in raw.split("\0") if item)
+    if include_untracked:
+        for root_name in UNTRACKED_ROOTS:
+            root = source / root_name
+            if root.is_file():
+                paths.add(Path(root_name))
+                continue
+            if not root.is_dir():
+                continue
+            for path in root.rglob("*"):
+                if path.is_file():
+                    paths.add(path.relative_to(source))
     return [path for path in sorted(paths) if not excluded(path)]
 
 
