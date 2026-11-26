@@ -1380,3 +1380,8 @@ Main `43ae09a` adds the opt-in `XNU_Y35A_STORAGE_FALLBACK` candidate patch, boun
 ## 2026-11-26 R208 native execute source-tree cleanliness blocker
 
 Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e378f61` reached `Run native build` but stopped before kernel compilation because `run_native_build.py` rejected `/Users/runner/work/_temp/xnu` as dirty. The preceding host-tool preparation rewrote `bsd/kern/makekdebugevents.py` without a verified restore in the executed input path. No kernel artifact was emitted. This is a CI preparation failure; the isolated restoration fix must pass a new run before another execute build. `device_run_allowed=false`.
+
+
+## 2026-11-26 R208 package candidate rebased; CI billing blocker
+
+Package candidate commits `1cdc077` and `ac28710` are based on current main and pushed as `codex/unixnu-ci-package-v2`. They add hash-bound package consumption, native build plan binding, derived QCDT provenance, iOS 12.4.1 root staging and combined TrustCache coverage. Status is `WAITING_FOR_CI`: runs `45895478488` (package), `45895478580` (validation) and `45895478533` (TF validation) failed before steps because the GitHub account has failed recent payments or reached its Actions spending limit. No kernel or package artifact exists; `device_run_allowed=false`.

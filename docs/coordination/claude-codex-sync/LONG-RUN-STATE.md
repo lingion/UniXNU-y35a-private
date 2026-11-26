@@ -1138,3 +1138,8 @@ Main `43ae09a` adds the opt-in `XNU_Y35A_STORAGE_FALLBACK` candidate patch, boun
 ## 2026-11-26 R208 native execute source-tree cleanliness blocker
 
 Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e378f61` stopped before kernel compilation because the staged XNU checkout was dirty after host-tool preparation. No kernel artifact was emitted. The next CI input revision must restore `bsd/kern/makekdebugevents.py` before the native runner snapshots the source tree, then pass a new execute run; keep package/probe and device stages pending.
+
+
+## 2026-11-26 R208 package candidate rebased; CI billing blocker
+
+The package candidate is now based on current main at commits `1cdc077` and `ac28710` on branch `codex/unixnu-ci-package-v2`. It binds the native build plan, exact native manifest, source provenance, package components, derived QCDT and TrustCache coverage. Status is `WAITING_FOR_CI`: GitHub runs `45895478488`, `45895478580` and `45895478533` did not start because account payments/spending limit blocked runner allocation. Keep native execute, package/probe, TF image and device stages pending; local fallback is forbidden.

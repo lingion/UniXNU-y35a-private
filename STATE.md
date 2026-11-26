@@ -1,7 +1,7 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-26T20:29:24Z
-Milestone: R208 TF/SD source, host, root-selection, NativeSdcard object, IOStorageFamily archive and Docs gates passed in CI; native execute build is blocked in CI input preparation before kernel link. All local UniXNU compilation is disabled on every disk.
+Updated: 2026-11-26T21:05:01Z
+Milestone: `WAITING_FOR_CI`. R208 TF/SD source, host, root-selection, NativeSdcard object, IOStorageFamily archive and Docs gates passed in CI; native execute and package CI are currently blocked by GitHub Actions account billing/spending limit. All local UniXNU compilation is disabled on every disk.
 Authority: intended /Volumes/Mobile/unixnu-research/UniXNU-y35a; current writable metadata mirror /Users/lingion_k/unixnu-y35a-private-sync; /Volumes/Mobile currently returns I/O errors.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
 Workspace: /Volumes/Mobile/unixnu-research stores source caches, run roots, CI artifacts, backups and raw only when readable; /Volumes/Portable is temporary staging only. No local UniXNU compilation, linking or large builds. External Git metadata restored, core.filemode=false, and fsck passed.
@@ -17,10 +17,11 @@ Current gates:
 - R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, root-selection positive/negative contract, TF/eMMC fallback contract, NativeSdcard object, IOStorageFamily combine/archive and Docs gates are green. Main validation run `45884101324` (`host-validation`) and Docs run `45884101618` (`build`) passed; latest TF validation `45887232679` passed all jobs on main commit `425ec007c2973fc14c81f64f14898138340cca3c`. No verified kernel/package/device evidence is recorded.
 - R208 object closure is bound by NativeSdcard object `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`, combined object `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`, and deterministic archive `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`. Native plan-only run `45882865622` passed on main commit `53966d60ea558dae8a12c795736e8418bcc8cca9`; no kernel artifact exists because execute=false. Fallback implementation remains unverified even though its offline contract is green; candidate patch `native-y35a-tf-emmc-root-fallback.patch` is apply-check verified but not in native build inputs.
 - Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e378f61` failed before kernel build because `run_native_build.py` found the staged XNU checkout dirty after host-tool preparation; no kernel artifact was emitted. This is a CI input-preparation blocker, not a kernel or driver result. The isolated fix must restore `bsd/kern/makekdebugevents.py` before source snapshot and pass a new CI run.
+- Package candidate commits `1cdc077` and `ac28710` are now rebased onto current main and pushed as `codex/unixnu-ci-package-v2`; they add native-plan, source-provenance, package and TrustCache closure. Runs `45895478488`, `45895478580` and `45895478533` did not start because GitHub account payments/spending limit blocked runners; no package or kernel artifact was produced.
 - Historical failures: Native runs `45838744656` and `45838740886` on commit `4c817f03fbd5a0611fadfd2675381c32ae995363` failed at `Compile NativeSdcard object`; later successful runs supersede them.
 
 Next:
-1. Land and validate the isolated native-input restoration fix, then run one `execute=true` native build on the exact package-stage SHA.
+1. Restore GitHub Actions Billing & plans / spending limit, then validate the isolated native-input restoration fix and run one `execute=true` native build on the exact package-stage SHA.
 2. Use that successful run's `unixnu-kernel-${run_id}` artifact as the only package input; package/probe and TF/root/fallback gates remain downstream.
 3. Keep runtime qualification and device_run_allowed false; do not run local UniXNU compilation on any disk.
 

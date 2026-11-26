@@ -52,6 +52,8 @@ Phase A 只追求 D1 和 D2。允许的 stub、绕过和硬编码必须登记为
 
 所有可复现的 UniXNU 编译、链接、主机验证、静态门禁、package/probe plan 和产物 hash closure 必须由 GitHub Actions 执行，结论以对应 CI run 的真实日志、退出状态和绑定产物为准。任何本机磁盘，包括内置盘、外置盘和移动机械盘，都不得运行 UniXNU 编译、链接或大规模构建。`/Volumes/Mobile/unixnu-research` 仅保存源码缓存、run root、CI 产物、设备备份和 raw。真机 USB、设备锁以及不能上传 CI 的私有本地输入可留在本机，但不得据此启动本地构建。CI workflow 失败时先修 CI、输入闭包或记录明确阻塞原因，不能以本地编译替代。
 
+这条 CI-only 规则是无条件约束。GitHub Actions 因账户 Billing、付款或 spending limit 无法启动时，状态必须标为 `WAITING_FOR_CI`；不得在任何本机磁盘、临时盘或机械盘回退编译、链接、主机验证、静态门禁或 package/probe 验证。
+
 当前平台路线：UniXNU 构建和可复现验证只在 GitHub Actions 执行。TF/SD 启动路线优先于继续重复已失败的 RAM-only boot-args 候选。TF 路线必须同时保留 eMMC 回退，完成 sdhc2 协议、card-detect、GPT/APFS、root selection、回退路径和完整 artifact 闭包后才允许设备写卡或启动。
 
 外置卷用于保存源码缓存、CI 输入快照、run roots、下载后的 CI 产物、设备备份和 raw。可复现构建及其临时构建目录、日志和产物由 CI runner 管理。参考仓库只读。主线只针对 Y35A，不能把其他设备或模拟器结果写成 Y35A 结论。
