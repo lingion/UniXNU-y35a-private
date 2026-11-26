@@ -2963,3 +2963,10 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 类型: CI-STATUS / ADJUDICATION
 事实: 私有镜像提交 `9a98ce2480220da4e663688dd730beb62b004bb7` 已推送到 remote main。GitHub Actions UniXNU validation run `45862410871` 的 `host-validation` job 和 Docs run `45862410942` 的 `build` job 均 completed/success。两条 run 都绑定该提交。
 裁决: R208 已验证的范围仍是离线 source/host/root-selection/storage/archive/docs gates 及文档中的 CI-only/staging 规则。native kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback 和设备证据仍未完成；`device_run_allowed=false`，无持久写入。
+
+## L-2026-11-26T19:08:57Z-codex — R208 native input blocker and package producer contract
+
+类型: CI-STATUS / BLOCKER
+事实: 私有镜像 main 当前为 `fc6a4727e74e9913d4336deb78bce3557c91c56f`。主线 validation `45879899093` 与 Docs `45879899053` 在其 ancestor `0e0a1356ab09ab6dee8fec6f4a9459ad82467d8c` 成功。native run `45879966044` 在 `Prepare exact native inputs` 失败，未执行 kernel build；`fc6a472` 的 push workflow `45880957209` 为 skipped，不是 native build 结果。失败前已验证 XNU headers、`libcc_kext.a` 和同代 firehose 编译命令，当前输入闭包仍未产出 manifest/kernel。
+事实: native workflow 已加入未来成功 run 的 `unixnu-kernel-${run_id}` artifact 合同，要求 kernel、`kernel-artifact.json` 和完整 `build-provenance.json`，并绑定 run_id、head_sha、kernel SHA/size、provenance SHA 和 static verification。当前尚无该 artifact。
+裁决: R208 离线 host/root-selection/storage/docs 范围保持已证；native kernel link、package/probe、TF GPT/APFS、root mount、eMMC fallback 和设备证据未完成。package workflow 不得消费旧 SHA 或 skipped run；`device_run_allowed=false`，无持久写入。
