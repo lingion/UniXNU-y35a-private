@@ -2891,3 +2891,11 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 事实: 用户要求取消所有 `/Volumes/Mobile/unixnu-research` 上的 UniXNU 本地编译，以 CI 为唯一编译来源。已终止 R207 v2 builder PID 90604 及其父进程；无 provenance、kernel artifact 或设备操作产生。扫描确认没有剩余 UniXNU build-xnu、make、clang 或 linker 进程。
 裁决: 机械盘只保存源码缓存、run root、产物、备份和 raw。R208 NativeSdcard object compile、XNU link、package/probe 和静态门禁全部交给 GitHub Actions。`device_run_allowed=false` 保持。
 下一步: 使用私有仓库的 R208 manifest 做 CI plan-only、object compile 和 static gates，不恢复本地 builder。
+
+## 2026-11-26T13:37:45Z — CI-only 构建规则扩展并核对 R208 状态
+
+类型: DECISION / CI-STATUS
+事实: 用户明确要求取消所有机械盘上的本地编译，并要求以 GitHub Actions 为准。规则范围明确为任何本机磁盘上的 UniXNU 编译、链接和大规模构建，不因本地私有输入或 CI 失败而回退。本地磁盘仅作源码缓存、run roots、CI 下载产物、设备备份和 raw 存储；所有可复现 build、host verification、静态门禁、package/probe plan 和 hash closure 由 GitHub Actions 执行。
+事实: 直接查询 GitHub Actions run `45830700561`，head commit `830168775e07b92be34e6454f62f65d035eaaa5c`。manifest、SD host suite、ADT contract 和 exact XNU checkout 步骤成功；`Generate exact XNU headers` 失败，`Compile NativeSdcard object` 被跳过。当前没有 NativeSdcard 编译成功结论或 object artifact。该失败属于 XNU host-header 生成阶段，不能作为驱动源码编译失败的证据。
+裁决: R207 PID 90604 已终止且没有产物，不得重启。`device_run_allowed=false`，不写 TF 卡、不操作设备。CI 修复继续由主线负责，本轮只更新目标、状态与交接文档，不重复修改 CI 输入。
+下一步: 主线修复 host-header CI 前置后，按实际 workflow 终态和 hash-bound artifact 更新 R208 状态；任何本机磁盘都不运行 UniXNU 编译。

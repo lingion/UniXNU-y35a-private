@@ -9,7 +9,7 @@ R205b preclear and baseline completed with fresh zero target windows and `PSTCOP
 当前参考根：`/Volumes/Mobile/unixnu-research/UniXNU-y35a/upstream-refresh/2026-11-11/sources/`。
 当前设备锁：`/Volumes/Mobile/unixnu-research/UniXNU-y35a/.device.lock`。
 当前备份根：`/Volumes/Mobile/unixnu-research/device-backups/efff9d92-20261119/`。
-Xcode 目标：本机 `/Applications/Xcode.app`；UniXNU 构建输入和产物全部留在外置盘。
+Xcode 仅由 GitHub Actions runner 用于 UniXNU 构建。外置卷只保存源码缓存、run roots、CI 下载产物、备份和 raw；本机任何磁盘均不运行 UniXNU 编译或链接。
 历史条目中的旧路径保持原样，作为当时证据位置，不代表当前活动路径。
 ## 2026-11-25 R204b adjudication
 
@@ -1335,9 +1335,9 @@ Offline comparison found R204b final fresh `PEBARGRT`, proving the external carr
 
 ## 2026-11-26 R208 current target supersedes R207 queue
 
-The active target is now the R208 TF/SD offline path with GitHub Actions native-build as the compilation route. R207 v2 PID 90604 remains a background process waiting for terminal provenance and must not be restarted or duplicated. R208 has passed the SD protocol host suite, sdhc2 ADT contract and lk2nd SD_BOOT patch apply-check. Private manifest commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds the exact XNU ref and six arm-driver patches. macOS plan-only run `45812745086` passed. NativeSdcard object compilation, XNU link, package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain pending. Keep `device_run_allowed=false`.
+The active target is the R208 TF/SD offline path with GitHub Actions as the only UniXNU build route. R207 v2 PID 90604 was terminated and produced no provenance or kernel artifact. R208 has passed the SD protocol host suite, sdhc2 ADT contract and lk2nd SD_BOOT patch apply-check. Private manifest commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds the exact XNU ref and six arm-driver patches. Plan-only run `45812745086` passed. Latest native run `45830700561` on commit `830168775e07b92be34e6454f62f65d035eaaa5c` failed during XNU header generation, before the NativeSdcard object compile step, so source compilation and artifact production remain unverified. XNU link, package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain pending. No local UniXNU compilation is allowed on any disk. Keep `device_run_allowed=false`.
 
 
 ## 2026-11-26 机械盘本地编译已关闭
 
-用户要求取消所有 `/Volumes/Mobile/unixnu-research` 上的 UniXNU 编译。R207 v2 builder PID 90604 已终止，未生成 provenance 或 kernel artifact。后续编译、NativeSdcard object、XNU link、package/probe 和静态门禁全部走 GitHub Actions；机械盘只保存缓存、run roots、产物、备份和 raw。`device_run_allowed=false`。
+用户要求取消所有本机磁盘上的 UniXNU 编译。R207 v2 builder PID 90604 已终止，未生成 provenance 或 kernel artifact。后续编译、NativeSdcard object、XNU link、package/probe 和静态门禁全部走 GitHub Actions；机械盘只保存缓存、run roots、CI 下载产物、备份和 raw。`device_run_allowed=false`。
