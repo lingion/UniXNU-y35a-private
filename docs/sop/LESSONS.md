@@ -89,3 +89,14 @@
 - 证据：run `45867874002` failed at `Prepare exact native inputs`; log reports `could not fetch ... from promisor remote` during `git clone --shared`.
 - 自动化入口：`scripts/ci/prepare_native_inputs.py` 的 source staging。
 - 下一次触发：任何 partial checkout 的临时源树复制。
+
+## L-2026-11-26-09 CI script executable-bit assumption
+
+- 现象：native inputs preparation 在 runner 上启动 `patch_xnu_host_tools.py` 时返回 `PermissionError: [Errno 13] Permission denied`。
+- 根因：Git checkout 保留的脚本文件模式不是 executable，准备脚本直接 exec 了它。
+- 影响：native inputs 尚未生成，native build 未执行。
+- 错误做法：依赖仓库脚本的 executable bit。
+- 正确做法：由 `sys.executable` 显式调用 Python 脚本；workflow 中的 Python 工具不依赖文件模式。
+- 证据：run `45869025831` failed at `Prepare exact native inputs`; log shows `PermissionError` for `scripts/ci/patch_xnu_host_tools.py`.
+- 自动化入口：`scripts/ci/prepare_native_inputs.py`。
+- 下一次触发：任何 CI Python helper 调用。

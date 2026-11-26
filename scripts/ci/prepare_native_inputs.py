@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 
 
 PROFILE_SOURCES = (
@@ -196,7 +197,7 @@ def main() -> int:
 
     header_source = args.xnu_source
     patch_tool = args.repo_root / "scripts/ci/patch_xnu_host_tools.py"
-    run([str(patch_tool), "--xnu-source", str(header_source)])
+    run([sys.executable, str(patch_tool), "--xnu-source", str(header_source)])
     availability_pl = availability_dst / "usr/local/libexec/availability.pl"
     run(["make", "-C", str(args.availability_source), "install",
          f"SRCROOT={args.availability_source}", f"OBJROOT={availability_obj}",
