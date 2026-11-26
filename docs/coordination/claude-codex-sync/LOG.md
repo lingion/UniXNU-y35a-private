@@ -3031,3 +3031,10 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 事实: package candidate commits `1cdc077` and `ac28710` were created from current main and pushed as `codex/unixnu-ci-package-v2`. The candidate binds the native build plan, exact R208 manifest, source provenance, ordered patch and driver archive hashes, derived QCDT, package components and combined TrustCache coverage.
 事实: package run `45895478488`, validation `45895478580` and TF validation `45895478533` all ended before steps. The package check-run annotation states: `The job was not started because recent account payments have failed or your spending limit needs to be increased.`
 裁决: status is `WAITING_FOR_CI`. This is an account-level Actions runner blocker, not a workflow or source result. No kernel/package artifact exists; after Billing & plans is restored, rerun CI on the exact v2 branch. Keep `device_run_allowed=false` and do not fall back to local build.
+
+
+## L-2026-11-26T21:10:57Z-codex — package trigger-path closure
+
+类型: CI-STATUS / PACKAGE-PROVENANCE
+事实: package commit `73f1756` adds the six missing push/pull_request trigger paths corresponding to `PACKAGE_SOURCE_FILES`: the R208 driver manifest, `make_adt.py`, `devicetree.py`, `udif.py`, `util.py` and the native-input test. Package run `45896319737` was created from this commit and failed before steps for the same account Billing/spending-limit reason.
+裁决: trigger closure is prepared but not CI-verified while Actions is unavailable. Keep status `WAITING_FOR_CI`, `device_run_allowed=false`, and do not run local fallback validation.
