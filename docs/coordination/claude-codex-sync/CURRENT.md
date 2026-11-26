@@ -1390,3 +1390,8 @@ Package candidate commits `1cdc077`, `ac28710` and `73f1756` are based on curren
 ## 2026-11-26 R208 TF/APFS package contract split
 
 Commit `f694b4f` adds a design-only TF/APFS device-package contract to `codex/unixnu-ci-package-v2`. It requires a schema-2 native artifact and build plan, stock QCDT provenance, GPT/APFS image with exact card binding, linked `native_storage_select_root`, first-read TF failure coverage in the eMMC fallback, and package/probe hashes. The existing RAM package remains `launchd-diagnostic-ramboot` with `runtime_qualified=false`; `device_ready=false` and `device_run_allowed=false` remain fixed. Billing/spending-limit recovery is still required before CI execution.
+
+
+## 2026-11-27 R208 stock QCDT unavailable
+
+Read-only checks of all registered Mobile stock boot/QCDT candidate paths returned `Input/output error`; Portable staging contains no stock boot/QCDT/image. The TF/APFS device-package contract therefore remains design-only: derived DTS/QCDT may support offline control packaging, but cannot satisfy stock-QCDT device provenance. Keep `WAITING_FOR_CI`, `device_ready=false` and `device_run_allowed=false`.

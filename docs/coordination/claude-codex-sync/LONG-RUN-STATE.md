@@ -1148,3 +1148,8 @@ The package candidate is now based on current main at commits `1cdc077`, `ac2871
 ## 2026-11-26 R208 TF/APFS package contract split
 
 Package commit `f694b4f` adds a design-only TF/APFS device-package contract. It separates the existing launchd diagnostic RAM package from the future TF/APFS deliverable and requires schema-2 native plan/artifact binding, stock QCDT, GPT/APFS/card binding, linked root selection, first-read TF failure fallback to eMMC, and package/probe closure. No device-ready or runtime-qualified claim is allowed.
+
+
+## 2026-11-27 R208 stock QCDT unavailable
+
+Every registered stock boot/QCDT candidate under `/Volumes/Mobile` returned `Input/output error` during read-only stat/find checks; `/Volumes/Portable` has no stock boot/QCDT/image. Derived DTS/QCDT remains limited to offline control use and cannot close the stock provenance requirement for a TF/APFS device package. Keep native execute, package/probe, TF image and device stages pending.

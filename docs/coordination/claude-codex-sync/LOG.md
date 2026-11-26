@@ -3040,6 +3040,13 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 裁决: the current RAM package remains a separate `launchd-diagnostic-ramboot` candidate and cannot be promoted to a TF/APFS device package. Keep the TF/APFS contract design-only until CI billing is restored and all linked/package/probe gates produce artifacts.
 
 
+## L-2026-11-27T06:49:47+08:00-codex — R208 stock QCDT unavailable
+
+类型: PACKAGE-BLOCKER / PROVENANCE
+事实: read-only checks of registered stock boot/QCDT candidates under `/Volumes/Mobile` returned `Input/output error`; `/Volumes/Portable/UniXNU-staging-20261127-0042` contains no stock boot, QCDT or image input. No Mobile reads or writes will be retried while the volume is returning I/O errors.
+裁决: stock QCDT provenance is unavailable. Derived DTS/QCDT remains valid only for offline control packaging and cannot satisfy the TF/APFS device-package requirement. Keep `WAITING_FOR_CI`, `device_ready=false`, `device_run_allowed=false`, and do not promote the launchd diagnostic RAM package.
+
+
 ## L-2026-11-26T21:10:57Z-codex — package trigger-path closure
 
 类型: CI-STATUS / PACKAGE-PROVENANCE
