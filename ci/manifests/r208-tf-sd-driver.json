@@ -21,7 +21,7 @@
   "board_evidence": {
     "official_capacity": "up to 128GB TF",
     "official_spec_url": "https://www.vivo.com.cn/vivo/param/y35a",
-    "stock_dts_path": "evidence/y35a-20261102/dtb10-stock.dts",
+    "stock_dts_path": "evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts",
     "stock_dts_sha256": "4b2a7fda53ab9b4a69aa3bf9c1247feb7f767b577612914b353f076b391a8714"
   },
   "build": {
