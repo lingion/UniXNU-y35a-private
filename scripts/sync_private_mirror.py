@@ -36,17 +36,22 @@ def excluded(path: Path) -> bool:
     return path.suffix in EXCLUDED_SUFFIXES or path.name in {".device.lock"}
 
 
-def source_files(source: Path) -> list[Path]:
-    raw = subprocess.check_output(
-        ["git", "ls-files", "-c", "-z"], cwd=source, text=False
-    ).decode("utf-8", "surrogateescape")
-    tracked = [Path(item) for item in raw.split("\0") if item]
-    return [path for path in tracked if not excluded(path)]
+def source_files(source: Path, include_untracked: bool) -> list[Path]:
+    commands = [["git", "ls-files", "-c", "-z"]]
+    if include_untracked:
+        commands.append(["git", "ls-files", "-o", "--exclude-standard", "-z"])
+    paths: set[Path] = set()
+    for command in commands:
+        raw = subprocess.check_output(command, cwd=source, text=False).decode(
+            "utf-8", "surrogateescape"
+        )
+        paths.update(Path(item) for item in raw.split("\0") if item)
+    return [path for path in sorted(paths) if not excluded(path)]
 
 
-def sync(source: Path, mirror: Path) -> int:
+def sync(source: Path, mirror: Path, include_untracked: bool) -> int:
     changed = 0
-    for relative in source_files(source):
+    for relative in source_files(source, include_untracked):
         source_path = source / relative
         mirror_path = mirror / relative
         if not source_path.is_file():
@@ -65,6 +70,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-root", type=Path, required=True)
     parser.add_argument("--mirror-root", type=Path, required=True)
+    parser.add_argument("--include-untracked", action="store_true")
     parser.add_argument("--push", action="store_true")
     parser.add_argument("--message", default="chore(sync): update private UniXNU mirror")
     args = parser.parse_args()
@@ -76,7 +82,7 @@ def main() -> int:
     if not (mirror / ".git").exists():
         raise SystemExit(f"mirror is not a git repository: {mirror}")
 
-    changed = sync(source, mirror)
+    changed = sync(source, mirror, args.include_untracked)
     subprocess.run(["git", "-C", str(mirror), "diff", "--check"], check=True)
     status = run("git", "status", "--short", cwd=mirror)
     if not status:
