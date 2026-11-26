@@ -1,0 +1,88 @@
+name: UniXNU native build
+
+on:
+  workflow_dispatch:
+    inputs:
+      manifest:
+        description: Repository-relative native build manifest with ordered patch hashes
+        required: true
+        type: string
+      source_ref:
+        description: Exact XNU source ref
+        required: true
+        default: 494ffe1c29d37ca720c37328feb83069c9641b67
+        type: string
+      execute:
+        description: Run the native build after plan validation
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: unixnu-native-${{ github.ref }}-${{ inputs.manifest }}-${{ inputs.source_ref }}
+  cancel-in-progress: false
+
+jobs:
+  native-build:
+    runs-on: macos-14
+    timeout-minutes: 360
+    env:
+      SOURCE_REF: ${{ inputs.source_ref }}
+      BUILD_MANIFEST: ${{ inputs.manifest }}
+      RUN_ROOT: ${{ runner.temp }}/unixnu-native-build
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Select Xcode
+        id: xcode
+        run: |
+          if [ -n "${DEVELOPER_DIR:-}" ] && [ -d "$DEVELOPER_DIR" ]; then
+            true
+          else
+            export DEVELOPER_DIR="$(find /Applications -maxdepth 1 -type d -name 'Xcode*.app' | sort | tail -n 1)/Contents/Developer"
+          fi
+          test -d "$DEVELOPER_DIR"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          xcodebuild -version
+          xcrun --sdk macosx --show-sdk-version
+      - name: Fetch exact XNU source
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/xnu.git "$RUNNER_TEMP/xnu"
+          git -C "$RUNNER_TEMP/xnu" fetch --depth=1 origin "$SOURCE_REF"
+          git -C "$RUNNER_TEMP/xnu" checkout --detach "$SOURCE_REF"
+          git -C "$RUNNER_TEMP/xnu" rev-parse HEAD
+      - name: Validate native manifest and print command
+        run: |
+          python scripts/ci/run_native_build.py \
+            --manifest "$BUILD_MANIFEST" \
+            --source-root "$RUNNER_TEMP/xnu" \
+            --run-root "$RUN_ROOT" \
+            --developer-dir "$DEVELOPER_DIR" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --plan-only | tee "$RUNNER_TEMP/native-build-plan.json"
+      - name: Run native build
+        if: inputs.execute == true
+        run: |
+          python scripts/ci/run_native_build.py \
+            --manifest "$BUILD_MANIFEST" \
+            --source-root "$RUNNER_TEMP/xnu" \
+            --run-root "$RUN_ROOT" \
+            --developer-dir "$DEVELOPER_DIR" \
+            --repo-root "$GITHUB_WORKSPACE"
+      - name: Upload build provenance and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixnu-native-build-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/native-build-plan.json
+            ${{ runner.temp }}/unixnu-native-build/**/build-provenance.json
+            ${{ runner.temp }}/unixnu-native-build/**/logs/**
+          if-no-files-found: warn
