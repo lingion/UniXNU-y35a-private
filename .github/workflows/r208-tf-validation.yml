@@ -26,6 +26,7 @@ jobs:
           python-version: '3.12'
       - name: Record Xcode toolchain
         run: |
+          echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
       - name: Validate manifest
@@ -52,9 +53,9 @@ jobs:
             DSTROOT="$RUNNER_TEMP/xnu-dst" \
             SDKVERSION=12.4 PLATFORM=iPhoneOS ARCH_CONFIGS=ARM64 MACHINE_CONFIGS=T7001 \
             ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64 \
-            HOST_CC="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang" \
-            MIG="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/bin/mig" \
-            MIGCOM="$DEVELOPER_DIR/Toolchains/XcodeDefault.xctoolchain/usr/libexec/migcom" \
+            HOST_CC="$(xcrun --find clang)" \
+            MIG="$(xcrun --find mig)" \
+            MIGCOM="$(xcrun --find migcom)" \
             HOST_OS_VERSION="$(sw_vers -productVersion)" \
             CTFCONVERT=/usr/bin/true CTFMERGE=/usr/bin/true CTFINSERT=/usr/bin/true \
             EMBEDDED_DEVICE_MAP=/usr/bin/true TIGHTBEAMC=tightbeamc-not-supported \
