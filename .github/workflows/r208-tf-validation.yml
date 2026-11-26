@@ -17,13 +17,17 @@ permissions:
 
 jobs:
   offline:
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Record Xcode toolchain
+        run: |
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
       - name: Validate manifest
         run: python scripts/ci/validate_r208_tf_manifest.py --manifest ci/manifests/r208-tf-sd-driver.json --repo-root .
       - name: Run SD host suite
