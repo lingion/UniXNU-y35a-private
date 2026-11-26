@@ -41,4 +41,4 @@
 
 ## 下一条可执行动作
 
-根据 R208 GitHub Actions 结果修复 CI 或离线输入，直到 NativeSdcard object compile、XNU link、package/probe 和 hash closure 都有对应 CI 证据。失败先追加 lessons，再修正 CI 或输入。NativeSdcard、TF image、root mount 和 fallback 未闭合前不写卡、不启动设备。任何本机磁盘上的 UniXNU 编译保持关闭。
+根据正在推进的 R208 GitHub Actions 结果修复 CI 或离线输入，直到 NativeSdcard object compile、XNU link、package/probe 和 hash closure 都有对应 CI 证据。失败先追加 lessons，再修正 CI 或输入。NativeSdcard、TF image、root mount 和 fallback 未闭合前不写卡、不启动设备。任何本机磁盘上的 UniXNU 编译保持关闭。

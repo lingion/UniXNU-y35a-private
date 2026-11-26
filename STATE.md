@@ -13,8 +13,9 @@ Current gates:
 - R206 offline/binding gates passed; R206 paired MVE failed after candidate boot. Do not repeat R206.
 - R207 v1 was rejected before make due to corrupt patch hunk. R207 v2 patch SHA `05e9822905d6187a22009d957ffa350354ff11f53bd31b846b754b41f8f88f84` passes apply-check against R206 staged source.
 - R207 v2 external builder PID 90604 was terminated per user instruction. It produced no provenance or kernel artifact. Do not restart it or run any local UniXNU build on any disk.
-- R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, NativeSdcard scaffold, and lk2nd SD_BOOT patch gates passed their recorded offline checks. The final NativeSdcard CI compile result and bound artifact are not confirmed; no verified kernel/package/device evidence is recorded.
-- R208 CI plan commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds exact XNU ref and six arm-driver patches; plan-only run `45812745086` passed. Latest native run `45831371261`, commit `794c5a7624b2ddfa0991971b6284e1971f348652`, failed at `Generate exact XNU headers` because `availability.pl` was missing; `Compile NativeSdcard object` was skipped. This is a host-header generation failure, not a NativeSdcard source compile verdict. No verified object artifact exists.
+- R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, NativeSdcard scaffold, and lk2nd SD_BOOT patch gates passed their recorded offline checks. The final NativeSdcard CI compile result and bound artifact are not yet confirmed; no verified kernel/package/device evidence is recorded.
+- R208 CI plan commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds exact XNU ref and six arm-driver patches; macOS plan-only run `45812745086` passed. NativeSdcard compile, kernel link, package/probe, TF image and root mount remain pending.
+- Latest native CI run `45831371261`, commit `794c5a7624b2ddfa0991971b6284e1971f348652`, failed at `Generate exact XNU headers` because `availability.pl` was missing; `Compile NativeSdcard object` was skipped. This is a host-header generation failure, not a NativeSdcard source compile verdict. No verified object artifact exists.
 
 Next:
 1. Verify the current R208 NativeSdcard object compile and static gates from GitHub Actions logs and bound artifacts only.
