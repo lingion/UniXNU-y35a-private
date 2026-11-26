@@ -48,7 +48,9 @@ jobs:
             ARCH_CONFIGS=ARM64 KERNEL_CONFIGS=DEVELOPMENT \
             SDKROOT="$(xcrun --sdk macosx --show-sdk-path)" \
             OBJROOT="$RUNNER_TEMP/xnu-obj" \
-            DSTROOT="$RUNNER_TEMP/xnu-dst" installhdrs
+            DSTROOT="$RUNNER_TEMP/xnu-dst" \
+            CTFCONVERT=/usr/bin/true CTFMERGE=/usr/bin/true CTFINSERT=/usr/bin/true \
+            EMBEDDED_DEVICE_MAP=/usr/bin/true installhdrs
       - name: Compile NativeSdcard object
         run: |
           python scripts/ci/compile_r208_sdcard.py \
