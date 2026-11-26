@@ -9,6 +9,7 @@ the exact source revisions and commands, and refuses to use an existing output.
 from __future__ import annotations
 
 import argparse
+from contextlib import contextmanager
 import hashlib
 import json
 import os
@@ -59,6 +60,18 @@ def tree_sha256(path: Path) -> str:
 def run(command: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
     print("$", " ".join(str(part) for part in command), flush=True)
     subprocess.run(command, cwd=cwd, env=env, check=True)
+
+
+@contextmanager
+def temporary_xnu_host_tool_patch(xnu_source: Path, patch_tool: Path):
+    host_tool = xnu_source / "bsd/kern/makekdebugevents.py"
+    original = host_tool.read_bytes()
+    try:
+        run([sys.executable, str(patch_tool), "--xnu-source", str(xnu_source)])
+        yield
+    finally:
+        if host_tool.is_file() and host_tool.read_bytes() != original:
+            host_tool.write_bytes(original)
 
 
 def copy_tree(source: Path, destination: Path) -> None:
@@ -121,7 +134,7 @@ def build_cc_kext(xnu: Path, llvm: Path, libc: Path, fakeroot: Path,
     objects: list[Path] = []
     for name in PROFILE_SOURCES:
         obj = objects_root / f"{name}.o"
-        command = [clang, "-target", "arm64-apple-ios17.0", "-arch", "arm64",
+        command = [clang, "-target", "arm64-apple-ios12.4", "-arch", "arm64",
                    "-isysroot", str(fakeroot), "-mkernel", "-DKERNEL_USE", "-O3", "-fPIC", "-w",
                    "-I", str(runtime / "include"),
                    "-I", str(iphoneos_sdk / "usr/include"),
@@ -170,7 +183,7 @@ def build_firehose(xnu: Path, libdispatch: Path, libplatform: Path,
         raise SystemExit(f"unsupported firehose atomic include contract: {firehose_source}")
     source = firehose_source
     obj = objects / "firehose_buffer.o"
-    command = [clang, "-target", "arm64-apple-ios17.0", "-std=gnu11", "-Os", "-g",
+    command = [clang, "-target", "arm64-apple-ios12.4", "-std=gnu11", "-Os", "-g",
                "-mkernel", "-nostdinc", "-Wno-packed", "-DKERNEL=1",
                "-DDISPATCH_USE_DTRACE=0", "-DOS_ATOMIC_CONFIG_MEMORY_ORDER_DEPENDENCY=1",
                "-DOS_ATOMIC_CONFIG_STARVATION_FREE_ONLY=0", "-I", str(libdispatch),
@@ -269,7 +282,6 @@ def main() -> int:
 
     header_source = args.xnu_source
     patch_tool = args.repo_root / "scripts/ci/patch_xnu_host_tools.py"
-    run([sys.executable, str(patch_tool), "--xnu-source", str(header_source)])
     availability_pl = availability_dst / "usr/local/libexec/availability.pl"
     run(["make", "-C", str(args.availability_source), "install",
          f"SRCROOT={args.availability_source}", f"OBJROOT={availability_obj}",
@@ -287,13 +299,14 @@ def main() -> int:
         toolchain = xcode / "Toolchains/XcodeDefault.xctoolchain/usr"
         make = xcode / "usr/bin/make"
         clang = str(toolchain / "bin/clang")
-        run([make, f"-j{args.jobs}", "-C", str(header_source), "installhdrs",
-             f"SDKROOT={args.macosx_sdk}", "ARCH_CONFIGS=ARM64", "KERNEL_CONFIGS=DEVELOPMENT",
-             "MACHINE_CONFIGS=T7001", "ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64",
-             "SDKVERSION=12.4", f"XNU_AVAILABILITY_PL={availability_pl}",
-             "CTFCONVERT=/usr/bin/true", "CTFMERGE=/usr/bin/true", "CTFINSERT=/usr/bin/true",
-             "EMBEDDED_DEVICE_MAP=/usr/bin/true", "TIGHTBEAMC=tightbeamc-not-supported",
-             f"OBJROOT={root / 'xnu-obj'}", f"DSTROOT={fakeroot}", f"MAKEJOBS=-j{args.jobs}"])
+        with temporary_xnu_host_tool_patch(header_source, patch_tool):
+            run([make, f"-j{args.jobs}", "-C", str(header_source), "installhdrs",
+                 f"SDKROOT={args.macosx_sdk}", "ARCH_CONFIGS=ARM64", "KERNEL_CONFIGS=DEVELOPMENT",
+                 "MACHINE_CONFIGS=T7001", "ARCH_STRING_FOR_CURRENT_MACHINE_CONFIG=arm64",
+                 "SDKVERSION=12.4", f"XNU_AVAILABILITY_PL={availability_pl}",
+                 "CTFCONVERT=/usr/bin/true", "CTFMERGE=/usr/bin/true", "CTFINSERT=/usr/bin/true",
+                 "EMBEDDED_DEVICE_MAP=/usr/bin/true", "TIGHTBEAMC=tightbeamc-not-supported",
+                 f"OBJROOT={root / 'xnu-obj'}", f"DSTROOT={fakeroot}", f"MAKEJOBS=-j{args.jobs}"])
         target_conditions = args.repo_root / "scripts/linux/TargetConditionals.h"
         target = fakeroot / "usr/include/TargetConditionals.h"
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -312,7 +325,7 @@ def main() -> int:
     wrapper.write_text(
         "#!/bin/bash\nset -u\n"
         f'export UNIXNU_SDKROOT="{overlay}"\n'
-        'export UNIXNU_SDK_VERSION="16.4"\n'
+        'export UNIXNU_SDK_VERSION="18.5"\n'
         f'export UNIXNU_PLATFORM_PATH="{fakeroot / "Platforms/iPhoneOS.platform"}"\n'
         f'export XNU_TOOLCHAIN_BIN="{args.developer_dir / "Toolchains/XcodeDefault.xctoolchain/usr/bin"} {args.developer_dir / "usr/bin"}"\n'
         + xcrun_body.split("set -u", 1)[1]

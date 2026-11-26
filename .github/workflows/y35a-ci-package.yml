@@ -1,0 +1,222 @@
+name: Y35A CI RAM-boot package
+
+on:
+  push:
+    paths:
+      - '.github/workflows/y35a-ci-package.yml'
+      - '.github/workflows/unixnu-native-build.yml'
+      - 'ci/native-build-manifest.r208.json'
+      - 'ci/y35a-ci-package-manifest.json'
+      - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
+      - 'scripts/ci/build_y35a_ci_package.py'
+      - 'scripts/ci/build_y35a_qcdt.py'
+      - 'scripts/ci/extract_ios12_package_inputs.py'
+      - 'scripts/ci/verify_y35a_trustcache.py'
+      - 'scripts/ci/prepare_native_inputs.py'
+      - 'scripts/ci/patch_xnu_host_tools.py'
+      - 'scripts/ci/run_native_build.py'
+      - 'ci/native-source-provenance.r208.json'
+      - 'scripts/build-xnu-4903-native.py'
+      - 'scripts/stage-ios12-root.py'
+      - 'scripts/unixnu/ipsw.py'
+      - 'scripts/y35a/boot_layout.py'
+      - 'scripts/y35a/package_native.py'
+      - 'tests/test_ci_y35a_package.py'
+  pull_request:
+    paths:
+      - '.github/workflows/y35a-ci-package.yml'
+      - '.github/workflows/unixnu-native-build.yml'
+      - 'ci/native-build-manifest.r208.json'
+      - 'ci/y35a-ci-package-manifest.json'
+      - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
+      - 'scripts/ci/build_y35a_ci_package.py'
+      - 'scripts/ci/build_y35a_qcdt.py'
+      - 'scripts/ci/extract_ios12_package_inputs.py'
+      - 'scripts/ci/verify_y35a_trustcache.py'
+      - 'scripts/ci/prepare_native_inputs.py'
+      - 'scripts/ci/patch_xnu_host_tools.py'
+      - 'scripts/ci/run_native_build.py'
+      - 'ci/native-source-provenance.r208.json'
+      - 'scripts/build-xnu-4903-native.py'
+      - 'scripts/stage-ios12-root.py'
+      - 'scripts/unixnu/ipsw.py'
+      - 'scripts/y35a/boot_layout.py'
+      - 'scripts/y35a/package_native.py'
+      - 'tests/test_ci_y35a_package.py'
+  workflow_dispatch:
+    inputs:
+      native_run_id:
+        description: Successful UniXNU native build Actions run on this branch
+        required: true
+        type: string
+  workflow_run:
+    workflows:
+      - UniXNU native build
+    branches:
+      - main
+    types:
+      - completed
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: y35a-ci-package-${{ github.event.workflow_run.id || inputs.native_run_id || github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      native_run_id: ${{ steps.native.outputs.run_id }}
+      native_head_sha: ${{ steps.native.outputs.head_sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test package contracts
+        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py
+      - name: Resolve successful native run
+        id: native
+        if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NATIVE_RUN_ID: ${{ github.event.workflow_run.id || inputs.native_run_id }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$NATIVE_RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "native_run_id must be a decimal Actions run ID" >&2
+            exit 1
+          fi
+          gh run view "$NATIVE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,conclusion,headBranch,headSha \
+            > "$RUNNER_TEMP/native-run.json"
+          jq -e --arg id "$NATIVE_RUN_ID" '
+            .databaseId == ($id | tonumber)
+            and .workflowName == "UniXNU native build"
+            and .conclusion == "success"
+            and .headBranch == strenv(GITHUB_REF_NAME)
+            and .headSha == strenv(GITHUB_SHA)
+            and (.headSha | test("^[0-9a-f]{40}$"))
+          ' "$RUNNER_TEMP/native-run.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN_ID/artifacts" \
+            > "$RUNNER_TEMP/native-artifacts.json"
+          ARTIFACT_NAME="unixnu-kernel-$NATIVE_RUN_ID"
+          if ! jq -e --arg name "$ARTIFACT_NAME" \
+            '[.artifacts[] | select(.name == $name and .expired == false)] | length > 0' \
+            "$RUNNER_TEMP/native-artifacts.json" > /dev/null; then
+            if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+              echo "selected successful run has no unexpired $ARTIFACT_NAME artifact" >&2
+              exit 1
+            fi
+            echo "::notice::successful native run has no kernel artifact, likely plan-only; package skipped"
+            exit 0
+          fi
+          echo "run_id=$NATIVE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$(jq -r '.headSha' "$RUNNER_TEMP/native-run.json")" >> "$GITHUB_OUTPUT"
+
+  package:
+    needs: validate
+    if: needs.validate.outputs.native_run_id != ''
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.native_head_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/checkout@v4
+        with:
+          repository: dgibson/dtc
+          ref: 2d10aa2afe35527728db30b35ec491ecb6959e5c
+          path: .ci-tools/dtc
+          persist-credentials: false
+      - name: Download hash-bound native kernel
+        uses: actions/download-artifact@v4
+        with:
+          name: unixnu-kernel-${{ needs.validate.outputs.native_run_id }}
+          run-id: ${{ needs.validate.outputs.native_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/native-kernel
+      - name: Select and record cross tools
+        run: |
+          set -euo pipefail
+          export DEVELOPER_DIR="/Applications/Xcode_16.4.app/Contents/Developer"
+          test -d "$DEVELOPER_DIR"
+          echo "DEVELOPER_DIR=$DEVELOPER_DIR" >> "$GITHUB_ENV"
+          CLANG="$(xcrun --find clang)"
+          OBJCOPY="$(command -v llvm-objcopy || xcrun --find llvm-objcopy)"
+          LLD="$(command -v ld.lld || xcrun --find ld.lld)"
+          echo "CLANG=$CLANG" >> "$GITHUB_ENV"
+          echo "LLVM_OBJCOPY=$OBJCOPY" >> "$GITHUB_ENV"
+          echo "LLVM_LLD=$LLD" >> "$GITHUB_ENV"
+          echo "$(dirname "$LLD")" >> "$GITHUB_PATH"
+          "$CLANG" --version
+          "$OBJCOPY" --version
+          "$LLD" --version
+          xcodebuild -version
+          xcrun --sdk iphoneos --show-sdk-version
+      - name: Build pinned device-tree compiler
+        env:
+          DTC_REVISION: 2d10aa2afe35527728db30b35ec491ecb6959e5c
+        run: |
+          set -euo pipefail
+          test "$(git -C .ci-tools/dtc rev-parse HEAD)" = "$DTC_REVISION"
+          test "$(python3 -c 'import json; print(json.load(open("ci/y35a-ci-package-manifest.json"))["dtc"]["commit"])')" = "$DTC_REVISION"
+          make -C .ci-tools/dtc dtc
+      - name: Download pinned iOS 12.4.1 firmware
+        run: |
+          set -euo pipefail
+          IPSW_URL="$(python3 -c 'import json; print(json.load(open("ci/y35a-ci-package-manifest.json"))["firmware"]["url"])')"
+          curl --fail --location --retry 3 --retry-all-errors \
+            --output "$RUNNER_TEMP/ios-12.4.1-16G102.ipsw" "$IPSW_URL"
+      - name: Build and verify RAM-boot package
+        env:
+          NATIVE_RUN_ID: ${{ needs.validate.outputs.native_run_id }}
+          NATIVE_HEAD_SHA: ${{ needs.validate.outputs.native_head_sha }}
+          PACKAGE_SOURCE_SHA: ${{ needs.validate.outputs.native_head_sha }}
+          PACKAGE_RUN_ID: ${{ github.run_id }}
+          DTC_REVISION: 2d10aa2afe35527728db30b35ec491ecb6959e5c
+        run: |
+          set -euo pipefail
+          python3 scripts/ci/build_y35a_ci_package.py \
+            --native-run-id "$NATIVE_RUN_ID" \
+            --native-head-sha "$NATIVE_HEAD_SHA" \
+            --native-artifact-dir "$RUNNER_TEMP/native-kernel" \
+            --package-source-sha "$PACKAGE_SOURCE_SHA" \
+            --package-run-id "$PACKAGE_RUN_ID" \
+            --ipsw "$RUNNER_TEMP/ios-12.4.1-16G102.ipsw" \
+            --dtc .ci-tools/dtc/dtc \
+            --dtc-revision "$DTC_REVISION" \
+            --compiler "$CLANG" \
+            --linker "$LLVM_LLD" \
+            --objcopy "$LLVM_OBJCOPY" \
+            --output "$RUNNER_TEMP/y35a-ramboot-package"
+          cd "$RUNNER_TEMP/y35a-ramboot-package"
+          shasum -a 256 -c SHA256SUMS
+          jq -e '.status == "offline-package-complete" and .package.static_container_checks == "passed" and .native_build_status == "complete" and .trust_cache.combined.coverage.coverage == "complete" and .trust_cache.combined.coverage.staged_macho_count == 58' package-provenance.json > /dev/null
+          {
+            echo "## Y35A RAM-boot package"
+            echo
+            echo "Native Actions run: $NATIVE_RUN_ID"
+            echo "Native commit: $NATIVE_HEAD_SHA"
+            echo "Package commit: $PACKAGE_SOURCE_SHA"
+            echo "boot3.img SHA-256: $(shasum -a 256 boot3.img | awk '{print $1}')"
+            echo "Package scope: launchd diagnostic RAM boot"
+            echo "Device qualification: not run"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload verified package
+        uses: actions/upload-artifact@v4
+        with:
+          name: y35a-ramboot-${{ github.run_id }}
+          path: ${{ runner.temp }}/y35a-ramboot-package
+          if-no-files-found: error
+          retention-days: 30

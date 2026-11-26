@@ -372,11 +372,21 @@ def build(args):
     if rootfs and second_off_for(len(entry_bin))!=second_off:
         raise ValueError('second_off fixed point did not converge')
     if rootfs:rootfs['scratch']=SCRATCH+second_off
-    stock=args.stock_boot.read_bytes()
-    if stock[:8]!=b'ANDROID!':raise ValueError('Invalid stock boot reference')
-    values=struct.unpack_from('<10I',stock,8);page=values[7]
-    dt_offset=page+align(values[0],page)+align(values[2],page)+align(values[4],page)
-    dt=select_device_dt(stock[dt_offset:dt_offset+values[8]])
+    if args.qcdt is not None:
+        qcdt_input=args.qcdt.read_bytes()
+        dt=select_device_dt(qcdt_input)
+        dt_source={'source_type':'derived-qcdt','path':args.qcdt.name,
+                   'input_sha256':hashlib.sha256(qcdt_input).hexdigest()}
+    else:
+        stock=args.stock_boot.read_bytes()
+        if stock[:8]!=b'ANDROID!':raise ValueError('Invalid stock boot reference')
+        values=struct.unpack_from('<10I',stock,8);page=values[7]
+        dt_offset=page+align(values[0],page)+align(values[2],page)+align(values[4],page)
+        qcdt_input=stock[dt_offset:dt_offset+values[8]]
+        dt=select_device_dt(qcdt_input)
+        dt_source={'source_type':'stock-boot-qcdt','path':args.stock_boot.name,
+                   'input_sha256':hashlib.sha256(stock).hexdigest()}
+    dt_source['selected_qcdt_sha256']=hashlib.sha256(dt).hexdigest()
     packed=android_container(entry_bin,dt,second=rootfs['bytes'] if rootfs else b'',ramdisk=b'\0')
     output=args.directory/'experimental-native-xnu.img';output.write_bytes(packed)
     if rootfs:(args.directory/'boot3.img').write_bytes(packed)
@@ -400,13 +410,30 @@ def build(args):
         'diagnostic_carrier_bytes':512,
         'second_offset':hex(second_off) if rootfs else None,
         'entry_bytes':len(entry_bin),
-        'sidecars':sidecars,
+        'sidecars':sidecars,'device_tree':dt_source,
         'warm_reset_prepared_required':args.warm_reset_prepared,
         'status':'offline-built experimental image; not device-boot validated'}
+    component_names = ['entry.S', 'entry.bin', 'boot-args.bin', 'board.adt', 'kernel-packed.macho']
+    if rootfs:
+        component_names.append('ramdisk-second.bin')
+    if trustcache:
+        component_names.append('trustcache.bin')
+    record['package_components'] = {}
+    for name in component_names:
+        component = args.directory / name
+        data = component.read_bytes()
+        record['package_components'][name] = {
+            'path': name,
+            'bytes': len(data),
+            'sha256': hashlib.sha256(data).hexdigest(),
+        }
     (args.directory/'manifest.json').write_text(json.dumps(record,indent=2));print(json.dumps(record,indent=2))
 def main():
     p=argparse.ArgumentParser(description=__doc__)
-    p.add_argument('--kernel',required=True,type=Path);p.add_argument('--stock-boot',required=True,type=Path)
+    p.add_argument('--kernel',required=True,type=Path)
+    dt_input=p.add_mutually_exclusive_group(required=True)
+    dt_input.add_argument('--stock-boot',type=Path)
+    dt_input.add_argument('--qcdt',type=Path,help='QCDT v3 input, for CI-derived board DT packaging')
     p.add_argument('--directory',required=True,type=Path);p.add_argument('--compiler',default='clang');p.add_argument('--objcopy',default='llvm-objcopy')
     p.add_argument('--command-line',default='-v serial=3 cpus=1 debug=0x8 rd=md0')
     p.add_argument('--owned-memory-size',type=lambda x:int(x,0),default=DEFAULT_OWNED_SIZE, help='Contiguous measured RAM span exposed to XNU')
