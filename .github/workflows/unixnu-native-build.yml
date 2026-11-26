@@ -33,6 +33,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: unixnu-native-${{ github.ref }}-${{ inputs.manifest }}-${{ inputs.source_ref }}

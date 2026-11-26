@@ -67,3 +67,14 @@
 - 证据：`R207-control-plan-v2.json` 与 `R207-bootargs-read-no-marker-control-native-build-20261126-01/build-provenance.json`。
 - 自动化入口：experiment contract 的 ordered patch closure。
 - 下一次触发：任何 builder 启动前和 provenance 结束后。
+
+## L-2026-11-26-07 native artifact permission closure
+
+- 现象：native workflow 的固定依赖源拉取成功，但下载同仓库 R208 driver artifact 返回 GitHub API HTTP 403，后续 native-inputs 和 build 均未执行。
+- 根因：workflow 只声明了 `contents: read`，默认 `GITHUB_TOKEN` 没有 `actions: read`。
+- 影响：hash-bound artifact 存在，但 CI 无法消费它，失败位置容易被误判为 artifact 缺失或构建问题。
+- 错误做法：只在 runner 上调用 `gh run download`，不声明 artifact 读取权限。
+- 正确做法：workflow 显式声明 `actions: read`，下载后继续检查 archive、driver manifest 和 SHA-256。
+- 证据：GitHub Actions run `45866748560` failed at `Download hash-bound R208 driver archive`; log reports `HTTP 403: Resource not accessible by integration`.
+- 自动化入口：native workflow permissions 和 driver artifact hash gate。
+- 下一次触发：任何跨 run 复用 GitHub Actions artifact 的 workflow。
