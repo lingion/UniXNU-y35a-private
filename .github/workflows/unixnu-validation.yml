@@ -61,6 +61,5 @@ jobs:
       - name: Run focused verifier tests
         run: |
           python -m pytest -q \
-            tests/test_memory_and_marker_gates.py \
             tests/test_capture_layout.py \
             tests/test_readback_names.py

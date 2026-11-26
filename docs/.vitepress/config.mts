@@ -127,6 +127,7 @@ export default withMermaid(defineConfig({
   description: 'Run iOS and macOS on non-Apple ARM64 hardware through UEFI.',
   cleanUrls: true,
   lastUpdated: true,
+  srcExclude: ['superpowers/**'],
   locales: {
     root: {
       label: 'English',
