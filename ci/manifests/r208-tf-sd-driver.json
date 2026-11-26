@@ -36,10 +36,10 @@
     "role": "tf-storage",
     "source_sha256": {
       "drivers/QcomSdcard/NativeSdcard.cpp": "6b58cd0590a0969681c38faace056228bd670060ad93e38d09cb9aab01ceb3f6",
-      "drivers/QcomSdcard/SdCardBus.h": "2fb913fb07a3e82dc6c0cd9f254478e4811a8a41983eca35bbb2483e85b1aff9",
+      "drivers/QcomSdcard/SdCardBus.h": "a174318f3ce17ebb400cfab24eb1fa5ec9ce6a0b637b18b226fabaee6a59f75c",
       "drivers/QcomSdcard/SdCardCore.h": "7849ca2bb4111f6fde19684e8b442fd0f197ee164093cab917bfc0fe0cd1e7e8",
       "drivers/QcomSdcard/Test/Model.h": "7e2a87bf866926d076b2210817d901fd293d77e6c34ecdd9c9d72dd5c4732e0b",
-      "drivers/QcomSdcard/Test/sdcard_host.cpp": "c4ccac81dcd0a1e0f827ff92dfdb76e2fbadd0e9e4a52f74f7b2bea9ffcc7929"
+      "drivers/QcomSdcard/Test/sdcard_host.cpp": "c7e9c5708cd5373f0557d87b287adb01773ec7ba16463892ed053586932cca98"
     }
   },
   "expected": {
@@ -53,6 +53,7 @@
     "path": "patches/lk2nd/msm8916-sd-boot.patch",
     "sha256": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc"
   },
+  "manifest_revision": "sdhci-csd-and-multi-block-fix",
   "patches": [
     {
       "order": 0,

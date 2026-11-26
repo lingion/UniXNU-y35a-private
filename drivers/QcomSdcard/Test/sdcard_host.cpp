@@ -24,7 +24,7 @@ int main() {
     assert(card.info().four_bit);
     assert(card.info().rca == 0x1234);
     assert(model.acmd41_count == 2);
-    const unsigned init_sequence[] = {0, 8, 55, 41, 55, 41, 2, 3, 7};
+    const unsigned init_sequence[] = {0, 8, 55, 41, 55, 41, 2, 3, 9, 7};
     require_subsequence(model, init_sequence, sizeof(init_sequence) / sizeof(init_sequence[0]));
     puts("1. SD init, OCR readiness, RCA, and 4-bit switch: ok");
   }
