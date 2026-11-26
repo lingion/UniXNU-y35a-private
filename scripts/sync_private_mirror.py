@@ -21,7 +21,7 @@ EXCLUDED_DIRS = {
     "refer",
     "upstream-refresh",
 }
-UNTRACKED_ROOTS = (".github", "ci", "components.toml", "drivers", "docs", "patches", "profiles", "scripts", "tests", "tools", "GOAL.md", "LIVE-TARGET.md", "REFERENCES.md", "STATE.md")
+UNTRACKED_ROOTS = (".github", "ci", "components.toml", "drivers/QcomSdcard", "patches/arm-driver-4903", "scripts/ci", "scripts/y35a", "tests", "GOAL.md", "LIVE-TARGET.md", "REFERENCES.md", "STATE.md")
 
 EXCLUDED_SUFFIXES = {
     ".a", ".bin", ".dbr", ".dmg", ".dylib", ".img", ".ipsw", ".macho", ".o", ".raw", ".tar"
