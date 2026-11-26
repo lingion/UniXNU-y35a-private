@@ -1,0 +1,43 @@
+{
+  "kind": "R208 TF SD native build plan",
+  "source_ref": "494ffe1c29d37ca720c37328feb83069c9641b67",
+  "patches": [
+    {
+      "order": 0,
+      "path": "patches/arm-driver-4903/0001-armdt-ownership.patch",
+      "sha256": "9feb8f558124f4a76e9df92dbf78a7c94b48d6cf4895ce4717c4c16eae4914a2"
+    },
+    {
+      "order": 1,
+      "path": "patches/arm-driver-4903/0002-armcpu-boot-only.patch",
+      "sha256": "6e6a94546b6e3958928783513ed05f3a3e3d02ba2bcf337e2e4db53dfa6d90ca"
+    },
+    {
+      "order": 2,
+      "path": "patches/arm-driver-4903/0003-kernel-personalities.patch",
+      "sha256": "5f89b26aa1c39c79306fa0fcb5e26109b963016487e76d494ffcfdca82ade033"
+    },
+    {
+      "order": 3,
+      "path": "patches/arm-driver-4903/0004-armcpu-sgi-probe-constraints.patch",
+      "sha256": "cbbcb0286f87220b75d447158464d5cdb6bb01d8b62cae0326536251da9fd287"
+    },
+    {
+      "order": 4,
+      "path": "patches/arm-driver-4903/0005-qcom-sdcc-personality.patch",
+      "sha256": "9fac5ea8e9d090a73f974643201cb23d66ba646b2958db4726716a6409d1a8db"
+    },
+    {
+      "order": 5,
+      "path": "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch",
+      "sha256": "c243eb2991bc707ad30bd22f0ca1b27b129f0beeec85995eefaf5849909347fa"
+    }
+  ],
+  "build": {
+    "jobs": 4,
+    "flags": [
+      "--y35a-a53",
+      "--phase-a-amfi"
+    ]
+  }
+}
