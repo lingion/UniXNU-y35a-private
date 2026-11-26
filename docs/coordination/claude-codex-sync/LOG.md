@@ -2883,3 +2883,11 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 事实: 主线当前目标切换到 R208 TF/SD 启动链和 GitHub Actions native-build。R207 v2 PID 90604 只等待终态，不再启动第二个本地 builder。R208 已通过 SD host suite、sdhc2 ADT contract、lk2nd SD_BOOT apply-check，私有仓库 manifest `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` 绑定 exact XNU ref 和六个 arm-driver patch；macOS plan-only run `45812745086` 成功。
 限制: NativeSdcard object compile、XNU link、package/probe、TF GPT/APFS、root mount、eMMC fallback 和设备证据仍未完成。
 裁决: `device_run_allowed=false`。下一步只走 GitHub Actions object compile/static gates 和离线 TF layout，不写 TF、不操作设备。
+
+
+## 2026-11-26T12:10:00Z — 停止机械盘本地编译
+
+类型: DECISION / BLOCKER
+事实: 用户要求取消所有 `/Volumes/Mobile/unixnu-research` 上的 UniXNU 本地编译，以 CI 为唯一编译来源。已终止 R207 v2 builder PID 90604 及其父进程；无 provenance、kernel artifact 或设备操作产生。扫描确认没有剩余 UniXNU build-xnu、make、clang 或 linker 进程。
+裁决: 机械盘只保存源码缓存、run root、产物、备份和 raw。R208 NativeSdcard object compile、XNU link、package/probe 和静态门禁全部交给 GitHub Actions。`device_run_allowed=false` 保持。
+下一步: 使用私有仓库的 R208 manifest 做 CI plan-only、object compile 和 static gates，不恢复本地 builder。

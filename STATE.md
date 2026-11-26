@@ -1,7 +1,7 @@
 # UniXNU Y35A state
 
 Updated: 2026-11-26T12:00:00Z
-Milestone: R208 TF/SD offline CI gate passed; R207 v2 builder is still slowly scanning external SDK inputs.
+Milestone: R208 TF/SD offline CI gate passed; all UniXNU mechanical-disk local compilation is disabled.
 Authority: /Volumes/Mobile/unixnu-research/UniXNU-y35a; historical /Volumes/UniXNU-Workspace is stale.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
 Workspace: /Volumes/Mobile/unixnu-research; local UniXNU builds disabled; external Git metadata restored, core.filemode=false, and fsck passed.
@@ -12,13 +12,13 @@ SD qualification: current lk2nd/XNU path is still sdhc1 eMMC-only; SD boot, sdhc
 Current gates:
 - R206 offline/binding gates passed; R206 paired MVE failed after candidate boot. Do not repeat R206.
 - R207 v1 was rejected before make due to corrupt patch hunk. R207 v2 patch SHA `05e9822905d6187a22009d957ffa350354ff11f53bd31b846b754b41f8f88f84` passes apply-check against R206 staged source.
-- R207 v2 builder PID 90604 remains live in external preparation; two read-only lsof snapshots show FD 3 advancing through different SDK header files while CPU time barely changes. No provenance/kernel artifact yet; do not restart it.
+- R207 v2 external builder PID 90604 was terminated per user instruction. It produced no provenance or kernel artifact. Do not restart local mechanical-disk compilation.
 - R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, read-only NativeSdcard source, and lk2nd SD_BOOT patch gates are in progress; no kernel/package/device evidence yet.
 - R208 CI plan commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds exact XNU ref and six arm-driver patches; macOS plan-only run `45812745086` passed. NativeSdcard compile, kernel link, package/probe, TF image and root mount remain pending.
 
 Next:
-1. Let PID 90604 reach a terminal result; do not start another builder.
-2. If build passes, verify no slot-0x52 writer, package fresh probes, and require all offline gates before considering a control MVE.
-3. Keep runtime qualification false; AMFI, launchd, SpringBoard, touch, storage, and drivers remain unverified.
+1. Run R208 NativeSdcard object compile and static gates in GitHub Actions only.
+2. Complete TF GPT/APFS, eMMC fallback, card-detect and root-selection contracts offline.
+3. Keep runtime qualification and device_run_allowed false; do not start mechanical-disk compilation.
 
 Active agents: none. Persistent writes: none.

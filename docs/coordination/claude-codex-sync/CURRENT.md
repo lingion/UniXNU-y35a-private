@@ -1336,3 +1336,8 @@ Offline comparison found R204b final fresh `PEBARGRT`, proving the external carr
 ## 2026-11-26 R208 current target supersedes R207 queue
 
 The active target is now the R208 TF/SD offline path with GitHub Actions native-build as the compilation route. R207 v2 PID 90604 remains a background process waiting for terminal provenance and must not be restarted or duplicated. R208 has passed the SD protocol host suite, sdhc2 ADT contract and lk2nd SD_BOOT patch apply-check. Private manifest commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds the exact XNU ref and six arm-driver patches. macOS plan-only run `45812745086` passed. NativeSdcard object compilation, XNU link, package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain pending. Keep `device_run_allowed=false`.
+
+
+## 2026-11-26 机械盘本地编译已关闭
+
+用户要求取消所有 `/Volumes/Mobile/unixnu-research` 上的 UniXNU 编译。R207 v2 builder PID 90604 已终止，未生成 provenance 或 kernel artifact。后续编译、NativeSdcard object、XNU link、package/probe 和静态门禁全部走 GitHub Actions；机械盘只保存缓存、run roots、产物、备份和 raw。`device_run_allowed=false`。

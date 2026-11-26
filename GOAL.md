@@ -50,7 +50,7 @@ Phase A 只追求 D1 和 D2。允许的 stub、绕过和硬编码必须登记为
 
 同步策略：`https://github.com/lingion/UniXNU-y35a-private` 是当前私有同步仓库，Git remote 名为 `github`，并设置为默认 push 目标。旧 `origin` 继续保留为参考源。代码、目标、SOP、skill、脚本、CI、实验合同和证据元数据持续同步到 GitHub。移动硬盘只保存大体积源码缓存、run root、构建产物、设备备份和 raw。
 
-能在 GitHub Actions 上重现的 lint、contract gate、单元测试、静态分析、文档检查和主机编译必须通过 CI 运行。只有真机 USB、设备锁、私有本地输入或 CI 无法提供的工具链才留在本机。CI workflow 失败时先修 CI 或记录明确阻塞原因，不能默默退回本机编译。
+能在 GitHub Actions 上重现的 lint、contract gate、单元测试、静态分析、文档检查和主机编译必须通过 CI 运行。`/Volumes/Mobile/unixnu-research` 上禁止运行任何 UniXNU 编译、链接或大规模构建。移动硬盘只保存源码缓存、run root、构建产物、设备备份和 raw。只有真机 USB、设备锁、私有本地输入或 CI 无法提供的设备动作留在本机。CI workflow 失败时先修 CI 或记录明确阻塞原因，不能退回机械盘本地编译。
 
 当前平台路线优先级：GitHub Actions native build、host test、static gate、package/probe plan 和 artifact hash closure 优先于本地外置盘编译。TF/SD 启动路线优先于继续重复已失败的 RAM-only boot-args 候选。TF 路线必须同时保留 eMMC 回退，完成 sdhc2 协议、card-detect、GPT/APFS、root selection、回退路径和完整 artifact 闭包后才允许设备写卡或启动。
 
