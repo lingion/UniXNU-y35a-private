@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "candidate": "R208-tf-apfs-device-package",
+  "kind": "tf-apfs-device-package",
+  "status": "design-only",
+  "qualification": {
+    "device_run_allowed": false,
+    "runtime_qualified": false,
+    "device_ready": false
+  },
+  "native": {
+    "manifest": "ci/native-build-manifest.r208.json",
+    "kernel_artifact_schema": 2,
+    "build_plan_required": true,
+    "linked_gate_required": true
+  },
+  "device_tree": {
+    "source_type_required": "stock-qcdt",
+    "derived_qcdt_allowed_for": "offline-control-only",
+    "status": "unverified",
+    "sha256": null
+  },
+  "tf_image": {
+    "partition_scheme": "GPT",
+    "root_filesystem": "APFS",
+    "card_binding_required": true,
+    "status": "unverified",
+    "sha256": null
+  },
+  "root_selection": {
+    "coordinator_symbol": "native_storage_select_root",
+    "linked_implementation_required": true,
+    "tf_selector": "boot-uuid",
+    "emmc_selector": "boot-uuid",
+    "status": "unverified"
+  },
+  "fallback": {
+    "patch": {
+      "path": "patches/xnu/native-y35a-tf-emmc-root-fallback.patch",
+      "sha256": "f886e829b94999e79af06964ee274992d975382827191912d2ab8c8a8bd291eb"
+    },
+    "feature_macro": "XNU_Y35A_STORAGE_FALLBACK",
+    "boot_arg": "emmc-boot-uuid",
+    "required_tf_failure_states": [
+      "card_absent",
+      "init_failed",
+      "first_read_failed"
+    ],
+    "emmc_ready_path_required": true,
+    "linked_implementation_status": "unverified"
+  },
+  "package": {
+    "kernel_sha256": null,
+    "boot_image_sha256": null,
+    "manifest_sha256": null,
+    "status": "unverified"
+  },
+  "probe": {
+    "regular_sha256": null,
+    "clear_sha256": null,
+    "fresh_baseline_required": true,
+    "status": "unverified"
+  },
+  "device_run_blockers": [
+    "native kernel artifact and build plan are not yet bound",
+    "stock QCDT provenance is not yet bound",
+    "GPT/APFS TF image and exact card binding are not yet present",
+    "linked root coordinator and first-read fallback implementation are not verified",
+    "package and probe hashes are not yet bound"
+  ]
+}

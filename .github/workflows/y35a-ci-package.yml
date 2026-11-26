@@ -6,6 +6,7 @@ on:
       - '.github/workflows/y35a-ci-package.yml'
       - '.github/workflows/unixnu-native-build.yml'
       - 'ci/manifests/r208-tf-sd-driver.json'
+      - 'ci/manifests/r208-tf-apfs-package-contract.json'
       - 'ci/native-build-manifest.r208.json'
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
@@ -26,13 +27,16 @@ on:
       - 'scripts/y35a/boot_layout.py'
       - 'scripts/y35a/make_adt.py'
       - 'scripts/y35a/package_native.py'
+      - 'scripts/y35a/verify_r208_tf_apfs_package_contract.py'
       - 'tests/test_ci_y35a_package.py'
       - 'tests/test_ci_native_input_prep.py'
+      - 'tests/test_r208_tf_apfs_package_contract.py'
   pull_request:
     paths:
       - '.github/workflows/y35a-ci-package.yml'
       - '.github/workflows/unixnu-native-build.yml'
       - 'ci/manifests/r208-tf-sd-driver.json'
+      - 'ci/manifests/r208-tf-apfs-package-contract.json'
       - 'ci/native-build-manifest.r208.json'
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
@@ -53,8 +57,10 @@ on:
       - 'scripts/y35a/boot_layout.py'
       - 'scripts/y35a/make_adt.py'
       - 'scripts/y35a/package_native.py'
+      - 'scripts/y35a/verify_r208_tf_apfs_package_contract.py'
       - 'tests/test_ci_y35a_package.py'
       - 'tests/test_ci_native_input_prep.py'
+      - 'tests/test_r208_tf_apfs_package_contract.py'
   workflow_dispatch:
     inputs:
       native_run_id:
@@ -92,7 +98,11 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test package contracts
-        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py
+        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_tf_apfs_package_contract.py
+      - name: Validate R208 TF/APFS device-package design contract
+        run: |
+          python3 scripts/y35a/verify_r208_tf_apfs_package_contract.py \
+            --contract ci/manifests/r208-tf-apfs-package-contract.json
       - name: Resolve successful native run
         id: native
         if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
