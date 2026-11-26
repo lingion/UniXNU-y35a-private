@@ -16,7 +16,7 @@
 - 当前 `device_run_allowed=false`。R207 不再是当前主线目标，不能抢占 R208 的 CI 和 TF/SD 工作。
 - R208 已完成 SD 协议 host suite、sdhc2 ADT contract、read-only NativeSdcard scaffold 和 lk2nd `SD_BOOT` patch apply-check。NativeSdcard object compile、XNU link、package/probe、TF GPT/APFS image 和设备运行仍未完成。
 - TF/SD 设备路线当前只允许离线工作。TF 卡容量、sdhc2 协议、card-detect、root mount、回退到 eMMC 和真实卡绑定都没有实机证据。
-- R208 CI manifest 已绑定 exact XNU ref、六个 arm-driver patch 的 SHA 和 native build profile。plan-only run `45812745086` 只证明计划校验通过。最新 native run `45831371261`（commit `794c5a7624b2ddfa0991971b6284e1971f348652`）于 `Generate exact XNU headers` 因缺少 `availability.pl` 失败，`Compile NativeSdcard object` 被跳过。失败仍位于 XNU host-header 生成阶段，不能据此判定 NativeSdcard 源码编译结果。当前没有通过验证的 object artifact。
+- R208 CI manifest 已绑定 exact XNU ref、六个 arm-driver patch 的 SHA 和 native build profile。plan-only run `45812745086` 只证明计划校验通过。Runs `45838744656` and `45838740886` on commit `4c817f03fbd5a0611fadfd2675381c32ae995363` both passed `Generate exact XNU headers` and failed at `Compile NativeSdcard object`. No source compile result or verified object artifact is established. No same-commit run remains in progress.
 
 ## 同步和编译策略
 

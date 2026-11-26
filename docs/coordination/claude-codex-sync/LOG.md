@@ -2905,3 +2905,23 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 类型: CI-STATUS
 事实: GitHub Actions run `45831371261`，head `794c5a7624b2ddfa0991971b6284e1971f348652`。manifest、SD host suite、ADT contract 和 exact XNU checkout 均通过。`Generate exact XNU headers` 因找不到 Xcode SDK 内的 `availability.pl` 失败，`Compile NativeSdcard object` 被跳过。
 裁决: 该 run 没有验证 NativeSdcard 源码编译，也没有生成可绑定 object artifact。继续由主线修复 CI host-header 前置，不在本机编译，不据此得出驱动源码好坏结论。
+
+## 2026-11-26T14:20:10Z — R208 CI run 45836093761 stopped before driver compile
+
+事实: GitHub Actions run `45836093761` on commit `fa9cea7cd836b96b5189bff6d52d3cc4255fa2b1` completed with failure. Manifest validation, SD host suite, ADT contract and exact XNU checkout passed. `Generate exact XNU headers` failed and `Compile NativeSdcard object` was skipped.
+裁决: This run contains no NativeSdcard source compile result or verified object artifact. The source compile, XNU link, package/probe, TF image and device stages remain pending. This entry records the observed run state only and does not attribute a new root cause.
+
+## 2026-11-26T14:21:53Z — R208 headers passed, object step failed
+
+事实: GitHub Actions run `45837906898` on commit `0b1a7fd0f23679a73442941607c79d17833600c3` passed exact XNU header generation, then failed at `Compile NativeSdcard object`. Earlier manifest, SD host, ADT and exact-XNU-fetch steps passed.
+裁决: The run does not establish a successful NativeSdcard compile or verified object artifact. XNU link and later packaging/device gates remain pending.
+
+## 2026-11-26T14:28:23Z — R208 same-commit compile runs
+
+事实: Run `45838744656` on commit `4c817f03fbd5a0611fadfd2675381c32ae995363` passed exact XNU header generation and failed at `Compile NativeSdcard object`. Run `45838740886` used the same commit and was still in progress at the latest status query.
+裁决: No successful NativeSdcard object or artifact hash is established. Do not launch a third equivalent run while the same-commit run remains active; record its eventual result before revising the compile path again.
+
+## 2026-11-26T14:32:39Z — Both R208 same-commit runs failed at object step
+
+事实: Runs `45838744656` and `45838740886` used commit `4c817f03fbd5a0611fadfd2675381c32ae995363`. GitHub reports that both passed exact XNU header generation and failed at `Compile NativeSdcard object`; both runs are now completed.
+裁决: The duplicate same-commit runs provide no successful NativeSdcard object or artifact hash. Keep the source compile result unverified until a later CI run actually emits and binds the object.
