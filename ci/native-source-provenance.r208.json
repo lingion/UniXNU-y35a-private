@@ -16,6 +16,10 @@
     {"order": 6, "path": "patches/xnu/local-availability.patch", "sha256": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0"}
   ],
   "source_diff": null,
+  "kernel_dependency_versions": {
+    "libdispatch": "libdispatch-913.60.2",
+    "libplatform": "libplatform-177.270.1"
+  },
   "build_policy": {
     "executor": "GitHub Actions",
     "local_build_allowed": false,

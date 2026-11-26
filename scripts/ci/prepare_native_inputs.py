@@ -116,12 +116,25 @@ def build_cc_kext(xnu: Path, llvm: Path, libc: Path, fakeroot: Path,
     return commands
 
 
-def build_firehose(xnu: Path, libdispatch: Path, fakeroot: Path, clang: str) -> list[str]:
+def build_firehose(xnu: Path, libdispatch: Path, libplatform: Path,
+                   fakeroot: Path, clang: str) -> list[str]:
     objects = fakeroot / ".ci-firehose-objects"
     objects.mkdir(parents=True, exist_ok=True)
     private_header = fakeroot / "usr/local/include/kernel/os/firehose_buffer_private.h"
     private_header.parent.mkdir(parents=True, exist_ok=True)
     commands = preprocess_dispatch_headers(libdispatch, fakeroot, clang)
+    atomic_source = libplatform / "private/os/internal/atomic.h"
+    lock_source = libplatform / "private/os/lock_private.h"
+    atomic_target = fakeroot / "usr/local/include/os/internal/atomic.h"
+    lock_target = fakeroot / "usr/local/include/os/lock_private.h"
+    if not atomic_source.is_file() or not lock_source.is_file():
+        raise SystemExit(
+            f"libplatform atomic/lock private headers missing: {atomic_source}, {lock_source}"
+        )
+    atomic_target.parent.mkdir(parents=True, exist_ok=True)
+    lock_target.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(atomic_source, atomic_target)
+    shutil.copy2(lock_source, lock_target)
     atomic_header = fakeroot / "usr/local/include/kernel/os/atomic_private.h"
     if not atomic_header.is_file():
         raise SystemExit(f"XNU installhdrs did not produce {atomic_header}")
@@ -194,6 +207,7 @@ def main() -> int:
     parser.add_argument("--xnu-source", type=Path, required=True)
     parser.add_argument("--availability-source", type=Path, required=True)
     parser.add_argument("--libdispatch-source", type=Path, required=True)
+    parser.add_argument("--libplatform-source", type=Path, required=True)
     parser.add_argument("--llvm-source", type=Path, required=True)
     parser.add_argument("--libc-source", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, required=True)
@@ -205,6 +219,7 @@ def main() -> int:
     args = parser.parse_args()
 
     inputs = [args.xnu_source, args.availability_source, args.libdispatch_source,
+              args.libplatform_source,
               args.llvm_source, args.libc_source, args.repo_root, args.developer_dir,
               args.iphoneos_sdk, args.macosx_sdk]
     for path in inputs:
@@ -256,7 +271,8 @@ def main() -> int:
         copied_headers = copy_sdk_public_headers(args.iphoneos_sdk, fakeroot)
         build_cc_kext(header_source, args.llvm_source, args.libc_source, fakeroot,
                       args.iphoneos_sdk, clang)
-        build_firehose(header_source, args.libdispatch_source, fakeroot, clang)
+        build_firehose(header_source, args.libdispatch_source, args.libplatform_source,
+                       fakeroot, clang)
         make_overlay(args.iphoneos_sdk, fakeroot, overlay)
     finally:
         run(["git", "-C", str(header_source), "apply", "--reverse", str(local_patch)])

@@ -79,8 +79,11 @@ jobs:
           git -C "$RUNNER_TEMP/AvailabilityVersions" fetch --depth=1 origin AvailabilityVersions-33.200.7
           git -C "$RUNNER_TEMP/AvailabilityVersions" checkout --detach AvailabilityVersions-33.200.7
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/libdispatch.git "$RUNNER_TEMP/libdispatch"
-          git -C "$RUNNER_TEMP/libdispatch" fetch --depth=1 origin libdispatch-1477.100.9
-          git -C "$RUNNER_TEMP/libdispatch" checkout --detach libdispatch-1477.100.9
+          git -C "$RUNNER_TEMP/libdispatch" fetch --depth=1 origin libdispatch-913.60.2
+          git -C "$RUNNER_TEMP/libdispatch" checkout --detach libdispatch-913.60.2
+          git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/libplatform.git "$RUNNER_TEMP/libplatform"
+          git -C "$RUNNER_TEMP/libplatform" fetch --depth=1 origin libplatform-177.270.1
+          git -C "$RUNNER_TEMP/libplatform" checkout --detach libplatform-177.270.1
           git clone --filter=blob:none --no-checkout https://github.com/llvm/llvm-project.git "$RUNNER_TEMP/llvm-project"
           git -C "$RUNNER_TEMP/llvm-project" fetch --depth=1 origin 58c46bae21181fb4240cf964461bea738d96d50e
           git -C "$RUNNER_TEMP/llvm-project" checkout --detach 58c46bae21181fb4240cf964461bea738d96d50e
@@ -104,6 +107,7 @@ jobs:
             --xnu-source "$RUNNER_TEMP/xnu" \
             --availability-source "$RUNNER_TEMP/AvailabilityVersions" \
             --libdispatch-source "$RUNNER_TEMP/libdispatch" \
+            --libplatform-source "$RUNNER_TEMP/libplatform" \
             --llvm-source "$RUNNER_TEMP/llvm-project" \
             --libc-source "$RUNNER_TEMP/Libc" \
             --repo-root "$GITHUB_WORKSPACE" \

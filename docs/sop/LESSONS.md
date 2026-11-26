@@ -141,3 +141,13 @@
 - 证据：run `45873852552` failed at `Prepare exact native inputs`; log reports `firehose_buffer.c:21:10: fatal error: 'os/atomic_private.h' file not found`.
 - 自动化入口：`scripts/ci/prepare_native_inputs.py`。
 - 下一次触发：任何 XNU kernel private header consumer。
+
+## L-2026-11-26-14 Darwin dependency generation mismatch
+
+- 现象：XNU headers and `libcc_kext.a` preparation passed, but libfirehose from libdispatch 1477 failed on missing `os/atomic_private.h`.
+- 根因：libdispatch 1477 expects a newer private atomic interface absent from XNU 4903/Darwin 18; the same-generation libdispatch 913 path uses `os/internal/atomic.h`, supplied by libplatform 177 private headers.
+- 影响：native inputs and kernel link remained unverified.
+- 正确做法：pin libdispatch 913.60.2 and libplatform 177.270.1 for the XNU 4903 native input recipe, copy their private atomic/lock headers, and record both versions in provenance.
+- 证据：run `45876628778` failed at `Prepare exact native inputs`; `firehose_buffer.c` included `os/atomic_private.h`, absent from the XNU 4903 and libdispatch 1477 trees.
+- 自动化入口：`scripts/ci/prepare_native_inputs.py` and native input manifest.
+- 下一次触发：任何 cross-generation Darwin dependency selection.

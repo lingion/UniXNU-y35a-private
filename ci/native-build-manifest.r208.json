@@ -10,7 +10,8 @@
   },
   "native_inputs": {
     "availability_tag": "AvailabilityVersions-33.200.7",
-    "libdispatch_tag": "libdispatch-1477.100.9",
+    "libdispatch_tag": "libdispatch-913.60.2",
+    "libplatform_tag": "libplatform-177.270.1",
     "llvm_commit": "58c46bae21181fb4240cf964461bea738d96d50e",
     "libc_commit": "899a3b2d52d95d75e05fb286a5e64975ec3de757"
   },
