@@ -1,6 +1,9 @@
 name: UniXNU native build
 
 on:
+  push:
+    paths:
+      - '.github/workflows/unixnu-native-build.yml'
   workflow_dispatch:
     inputs:
       manifest:
@@ -27,6 +30,7 @@ concurrency:
 
 jobs:
   native-build:
+    if: github.event_name == 'workflow_dispatch'
     runs-on: macos-14
     timeout-minutes: 360
     env:
