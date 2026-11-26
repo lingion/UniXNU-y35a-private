@@ -32,3 +32,16 @@ jobs:
           /tmp/sdcard_host_test
       - name: Run ADT contract
         run: (cd scripts/y35a && python3 -m unittest -v test_board_adt)
+      - name: Compile NativeSdcard object
+        run: |
+          python scripts/ci/compile_r208_sdcard.py \
+            --xnu-source "$RUNNER_TEMP/xnu" \
+            --repo-root "$GITHUB_WORKSPACE" \
+            --output "$RUNNER_TEMP/r208/NativeSdcard.o"
+      - name: Upload R208 compile artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r208-native-sdcard-${{ github.run_id }}
+          path: ${{ runner.temp }}/r208/
+          if-no-files-found: warn
