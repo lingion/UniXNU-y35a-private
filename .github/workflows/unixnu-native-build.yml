@@ -155,3 +155,54 @@ jobs:
             ${{ runner.temp }}/unixnu-native-build/**/build-provenance.json
             ${{ runner.temp }}/unixnu-native-build/**/logs/**
           if-no-files-found: warn
+      - name: Prepare kernel artifact contract
+        if: ${{ inputs.execute == true && success() }}
+        env:
+          NATIVE_RUN_ROOT: ${{ env.RUN_ROOT }}
+          RUN_ID: ${{ github.run_id }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          KERNEL="$NATIVE_RUN_ROOT/obj/DEVELOPMENT_ARM64_T7001/mach.development.t7001.unstripped"
+          PROVENANCE="$NATIVE_RUN_ROOT/build-provenance.json"
+          test -f "$KERNEL"
+          test -f "$PROVENANCE"
+          mkdir -p "$RUNNER_TEMP/unixnu-kernel-artifact/kernel"
+          cp "$KERNEL" "$RUNNER_TEMP/unixnu-kernel-artifact/kernel/mach.development.t7001.unstripped"
+          cp "$PROVENANCE" "$RUNNER_TEMP/unixnu-kernel-artifact/build-provenance.json"
+          KERNEL_SHA=$(shasum -a 256 "$KERNEL" | awk '{print $1}')
+          PROVENANCE_SHA=$(shasum -a 256 "$PROVENANCE" | awk '{print $1}')
+          KERNEL_SIZE=$(stat -f '%z' "$KERNEL")
+          python3 - "$RUNNER_TEMP/unixnu-kernel-artifact/kernel-artifact.json" "$PROVENANCE" "$KERNEL_SHA" "$PROVENANCE_SHA" "$KERNEL_SIZE" "$RUN_ID" "$HEAD_SHA" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          out, provenance_path, kernel_sha, provenance_sha, size, run_id, head_sha = sys.argv[1:]
+          data = json.loads(Path(provenance_path).read_text())
+          if data.get("status") != "complete":
+              raise SystemExit(f"build provenance is not complete: {data.get('status')!r}")
+          static = data.get("kernel_static_verification", {})
+          if static.get("status") != "passed":
+              raise SystemExit(f"kernel static verification is not passed: {static}")
+          artifact = data.get("kernel_artifact", {})
+          if artifact.get("sha256") != kernel_sha or int(artifact.get("bytes", -1)) != int(size):
+              raise SystemExit("provenance kernel artifact does not match copied kernel")
+          Path(out).write_text(json.dumps({
+              "schema": 1,
+              "status": "success",
+              "run_id": int(run_id),
+              "head_sha": head_sha,
+              "artifact_path": "kernel/mach.development.t7001.unstripped",
+              "kernel_sha256": kernel_sha,
+              "kernel_size": int(size),
+              "build_provenance_path": "build-provenance.json",
+              "build_provenance_sha256": provenance_sha,
+              "kernel_static_verification": static,
+          }, indent=2, sort_keys=True) + "\n")
+          PY
+      - name: Upload kernel artifact contract
+        if: ${{ inputs.execute == true && success() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixnu-kernel-${{ github.run_id }}
+          path: ${{ runner.temp }}/unixnu-kernel-artifact
+          if-no-files-found: error
