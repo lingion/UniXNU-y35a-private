@@ -2943,3 +2943,11 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 
 事实: R208 TF validation run `45855811648` and Docs run `45855811845`, both on commit `ba4854d4cb076388f61cb2bcdbdf13efb8404dc5`, completed successfully. R208 validation covers manifest, SD host suite, ADT, root-selection contract, exact XNU and IOStorageFamily inputs, installhdrs, NativeSdcard object and deterministic IOStorage archive. Docs covers the historical absolute-path dead-link handling.
 裁决: Offline R208 source/host/root-selection/storage/archive/docs gates are green. Kernel link still lacks CI-bound native fakeroot/SDK overlay/source provenance; package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain unverified. No local build or device operation occurred; `device_run_allowed=false`.
+
+## L-2026-11-26T16:42:00Z-codex — R208 CI-only policy and temporary staging
+
+类型: DECISION / BLOCKER
+REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-STATE.md`。
+事实: 私有镜像当前可读写，`HEAD=5213a62d0e9efc8baeaf4c1c0c3668c916b62739`。GitHub Actions validation `45855811648` 的 `host-validation` job 和 Docs `45855811845` 的 `build` job 均成功，绑定 commit `ba4854d4cb076388f61cb2bcdbdf13efb8404dc5`。本机进程核对未发现 UniXNU compile、link 或 large-build 进程。对 `/Volumes/Mobile` 的浅层访问返回 `Input/output error`，本轮未继续扫描或写入。
+裁决: 所有 UniXNU 编译、链接、host verification、静态门禁、package/probe plan 和 hash closure 继续只由 GitHub Actions 执行。`/Volumes/Mobile` 只保存缓存、CI 输入快照、CI 下载产物、备份和 raw；`/Volumes/Portable` 允许作为临时 staging，但不是 canonical 工作树，禁止在其上运行本地 UniXNU 编译。`device_run_allowed=false`，persistent writes 为 none。
+下一步: 在 CI 中补齐 native kernel-link 的 fakeroot、SDK overlay、wrapper、source provenance 和 driver archive 输入闭包；外置卷恢复可读后再做定点只读对账，不覆盖或删除历史产物。

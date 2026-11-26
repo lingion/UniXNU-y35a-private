@@ -9,8 +9,14 @@ R205b preclear and baseline completed with fresh zero target windows and `PSTCOP
 当前参考根：`/Volumes/Mobile/unixnu-research/UniXNU-y35a/upstream-refresh/2026-11-11/sources/`。
 当前设备锁：`/Volumes/Mobile/unixnu-research/UniXNU-y35a/.device.lock`。
 当前备份根：`/Volumes/Mobile/unixnu-research/device-backups/efff9d92-20261119/`。
-Xcode 仅由 GitHub Actions runner 用于 UniXNU 构建。外置卷只保存源码缓存、run roots、CI 下载产物、备份和 raw；本机任何磁盘均不运行 UniXNU 编译或链接。
+Xcode 仅由 GitHub Actions runner 用于 UniXNU 构建。`/Volumes/Mobile` 只保存源码缓存、CI 输入快照、CI 下载产物、备份和 raw；`/Volumes/Portable` 仅作临时 staging。本机任何磁盘均不运行 UniXNU 编译或链接。
 历史条目中的旧路径保持原样，作为当时证据位置，不代表当前活动路径。
+
+## 2026-11-26 R208 CI-only and temporary staging handoff
+
+R208 validation `45855811648` (`host-validation`) and Docs `45855811845` (`build`) passed on commit `ba4854d4cb076388f61cb2bcdbdf13efb8404dc5`. NativeSdcard, IOStorageFamily archive, root-selection and documentation gates are green. Kernel link, package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain pending.
+
+The local process check found no UniXNU build, link or large-build process. `/Volumes/Mobile` returned `Input/output error` during a shallow read, so no further scan or write was attempted. `/Volumes/Portable` is permitted as temporary staging only; it is not the canonical tree and must not be used for local UniXNU compilation. `device_run_allowed=false`; persistent writes remain none.
 ## 2026-11-25 R204b adjudication
 
 R204b used the required maximum contiguous memory profile (`owned_memory=0x5fe00000`, `memory_profile=max-contiguous-measured`) and completed one four-stage RAM-only paired MVE. The device returned to verified `efff9d92 / lk2nd-msm8916` unlocked fastboot with `persistent_writes=false`. Fresh final contains `PEBARGRT` immediately after `args = PE_boot_args()` inside `PE_parse_boot_argn_internal`, but not `ARMDFPAR` after the caller returns. The strongest boundary is after `PE_boot_args()` returns and before the first command-line dereference / parser return, at or before `if (*args == '\0')`.

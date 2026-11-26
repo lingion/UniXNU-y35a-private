@@ -74,7 +74,7 @@ Phase A 只追求 D1 和 D2。允许的 stub、绕过和硬编码必须登记为
 2. `REFERENCE` 读取 `REFERENCES.md`，检索相关本地仓库，记录 `REF path:line commit` 或 `NONE-FOUND query scope`。
 3. `DESIGN` 写单一假设、变量、成功条件、失败条件、不可判定条件、次数、时间上限和回退方式。
 4. `SOURCE` 固定源树、commit、patch 链和每个 patch 的 SHA，执行精确源树 `git apply --check`。
-5. `BUILD` 在独立外置 run root 构建。只有 provenance 成功、产物存在、大小和 SHA 已记录才算完成。
+5. `BUILD` 只提交到 GitHub Actions 执行。CI run 必须绑定精确源树、输入 manifest、构建命令、provenance、退出状态和产物大小及 SHA-256。所有本机磁盘均禁止运行 UniXNU 编译或链接；CI 缺少输入或失败时修复 CI 或记录 blocker，不回退到本机构建。
 6. `LINKED-GATE` 对实际链接产物反汇编和符号检查，确认顺序、调用契约、地址、owner、segment 和边界。
 7. `PACKAGE-GATE` 绑定 kernel、entry、container、DT、rootfs、trustcache、boot args 和 manifest 的完整哈希与来源类型。
 8. `PROBE-GATE` 绑定 regular/clear probe、manifest、物理地址、长度、清零窗口、transport 和负对照。

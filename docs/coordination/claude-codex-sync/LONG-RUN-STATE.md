@@ -9,8 +9,14 @@ R205b preclear and baseline completed with fresh zero target windows and `PSTCOP
 当前参考根：`/Volumes/Mobile/unixnu-research/UniXNU-y35a/upstream-refresh/2026-11-11/sources/`。
 当前设备锁：`/Volumes/Mobile/unixnu-research/UniXNU-y35a/.device.lock`。
 当前备份根：`/Volumes/Mobile/unixnu-research/device-backups/efff9d92-20261119/`。
-Xcode 目标：本机 `/Applications/Xcode.app`；UniXNU 构建输入和产物全部留在外置盘。
+Xcode 目标：由 GitHub Actions runner 用于 UniXNU 构建；`/Volumes/Mobile` 保存源码缓存、CI 输入快照、CI 下载产物、备份和 raw，`/Volumes/Portable` 仅作临时 staging。本机任何磁盘不运行 UniXNU 编译或链接。
 历史条目中的旧路径保持原样，作为当时证据位置，不代表当前活动路径。
+
+## 2026-11-26 R208 CI-only and temporary staging handoff
+
+R208 validation `45855811648` (`host-validation`) and Docs `45855811845` (`build`) passed on commit `ba4854d4cb076388f61cb2bcdbdf13efb8404dc5`. NativeSdcard, IOStorageFamily archive, root-selection and documentation gates are green. Kernel link, package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain pending.
+
+No UniXNU build, link or large-build process was found locally. `/Volumes/Mobile` returned `Input/output error` during a shallow read; no further scan or write was attempted. `/Volumes/Portable` is temporary staging only and is not a local build root. `device_run_allowed=false`; persistent writes remain none.
 ## 2026-11-25 R204b boundary
 
 R204b used maximum memory (`0x5fe00000`) and added PEBARGRT after `args = PE_boot_args()`. Fresh final contains PEBARGRT but not ARMDFPAR or ARMDFRET. The measured boundary is after PE_boot_args returns and before the first command-line dereference / parser return. Preclear and baseline carrier windows were zero, final was fresh and nonzero, and the device returned to verified unlocked fastboot without persistent writes.
