@@ -63,7 +63,7 @@
     "path": "patches/lk2nd/msm8916-sd-boot.patch",
     "sha256": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc"
   },
-  "manifest_revision": "xnu-installhdrs-passed-and-compile-generated-include-fix",
+  "manifest_revision": "iostoragefamily-191-headers-bound",
   "patches": [
     {
       "order": 0,
@@ -88,7 +88,7 @@
     "patches/xnu/local-availability.patch": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0",
     "scripts/build-xnu-4903-native.py": "684312fe12799519adaef13b73d08353015e128994eee5ab51ee074269e1535a",
     "scripts/build-xnu-4k-baseline.sh": "ac959683bf4e9f792f261aa02a729a012b8704b75261c8599ced7ef37d25fc2b",
-    "scripts/ci/compile_r208_sdcard.py": "1089f17daf8a8fd585aca6870522b38cea251253a8413d73401f3609f2add75f",
+    "scripts/ci/compile_r208_sdcard.py": "d4f7b5e4ad35e9bb5d670e2af565bb2e7cb0636fea382f36f8cb20164669fb19",
     "scripts/ci/patch_xnu_host_tools.py": "a626197ff726a6c5a091be59b5bf775db8168c34e9ae9eccf6e23818c45e078e",
     "scripts/y35a/build_arm_driver_4903.py": "993dee39fc4a1b3a12b1c966a54b995e2ddb64d2f80e8977f253da6e642d56b9",
     "scripts/y35a/make_adt.py": "72bcafc305f3a1cc1cbe9899e5df3e326da91c42a76595cde9f376a5936f4847",

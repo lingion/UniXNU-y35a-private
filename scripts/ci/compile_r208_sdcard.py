@@ -8,6 +8,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import shutil
 
 
 def sha256(path: Path) -> str:
@@ -29,12 +30,14 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--xnu-source", type=Path, required=True)
     parser.add_argument("--generated-headers", type=Path, required=True)
+    parser.add_argument("--iostorage-source", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
 
     xnu = args.xnu_source.resolve(strict=True)
     generated = args.generated_headers.resolve(strict=True)
+    iostorage = args.iostorage_source.resolve(strict=True)
     repo = args.repo_root.resolve(strict=True)
     source = repo / "drivers/QcomSdcard/NativeSdcard.cpp"
     if not source.is_file():
@@ -43,6 +46,29 @@ def main() -> int:
     expected = "494ffe1c29d37ca720c37328feb83069c9641b67"
     if commit != expected:
         raise SystemExit(f"XNU checkout {commit} does not match {expected}")
+    iostorage_commit = run(["git", "-C", str(iostorage), "rev-parse", "HEAD"])
+    expected_iostorage = "c95d31401f0ff950a883727f5e47d313685fde33"
+    if iostorage_commit != expected_iostorage:
+        raise SystemExit(f"IOStorageFamily checkout {iostorage_commit} does not match {expected_iostorage}")
+    iostorage_headers = generated / "r208-iostorage-headers/IOKit/storage"
+    iostorage_headers.mkdir(parents=True, exist_ok=True)
+    header_names = (
+        "IOAppleLabelScheme.h", "IOApplePartitionScheme.h", "IOBlockStorageDevice.h",
+        "IOBlockStorageDriver.h", "IOFDiskPartitionScheme.h", "IOFilterScheme.h",
+        "IOGUIDPartitionScheme.h", "IOMedia.h", "IOMediaBSDClient.h",
+        "IOPartitionScheme.h", "IOStorage.h", "IOStorageDeviceCharacteristics.h",
+        "IOStorageProtocolCharacteristics.h", "IOStorageControllerCharacteristics.h",
+        "IOStorageCardCharacteristics.h",
+    )
+    missing = []
+    for name in header_names:
+        source_header = iostorage / name
+        if not source_header.is_file():
+            missing.append(str(source_header))
+        else:
+            shutil.copy2(source_header, iostorage_headers / name)
+    if missing:
+        raise SystemExit("missing IOStorageFamily headers: " + ", ".join(missing))
 
     env = os.environ.copy()
     env["DEVELOPER_DIR"] = env.get("DEVELOPER_DIR", "/Applications/Xcode.app/Contents/Developer")
@@ -78,6 +104,7 @@ def main() -> int:
     if missing_generated:
         raise SystemExit("missing required generated Kernel headers: " + ", ".join(missing_generated))
     include_roots += [path for path in generated_roots if path.is_dir()]
+    include_roots.append(generated / "r208-iostorage-headers")
     for include in include_roots:
         if not include.is_dir():
             raise SystemExit(f"missing XNU include root: {include}")
@@ -88,6 +115,7 @@ def main() -> int:
     report = {
         "source": str(source), "source_sha256": sha256(source),
         "xnu_source": str(xnu), "xnu_commit": commit,
+        "iostorage_source": str(iostorage), "iostorage_commit": iostorage_commit,
         "clang": clang, "clang_version": version, "sdk": sdk,
         "argv": command, "exit_code": result.returncode,
     }
