@@ -2858,3 +2858,10 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 事实: `scripts/y35a/make_adt.py` 增加 derived `sdhc2` 节点，使用 stock DTS 的 0x07864900/0x07864000、4-bit、card-detect GPIO38 active-low、slot=2、poll-only；`scripts/y35a/test_board_adt.py` 10 项通过。
 事实: 新 lk2nd patch `reboot-checkpoints/R208-tf-sd-protocol-design-20261126-01/inputs/lk2nd-msm8916-sd-boot.patch` SHA-256 `8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc`，`git apply --check` 通过。它默认保持 eMMC，仅在 `SD_BOOT=1` 时选择 sdhc2/4-bit/50MHz。
 限制: 尚未实现 NativeSdcard XNU bus adapter、IOBlockStorage link、TF GPT/APFS root packaging，未构建 kernel，未写 TF，未操作设备。R207 PID 90604 仍独立运行，不启动第二构建。
+
+## L-2026-11-26T11:06:49Z-codex — R208 sdhc2 driver scaffold
+
+事实: `drivers/QcomSdcard/SdCardBus.h` and `NativeSdcard.cpp` now provide a polling-only, read-only `IOBlockStorageDevice` path for derived `sdhc2`; the driver is intentionally not yet built or linked. It matches the ADT `unixnu,slot=2` contract and records `native_sdcard_*` witnesses. Card-detect is explicitly marked unbound; the first runtime gate is bounded SD command failure, not a guessed TLMM read.
+事实: `scripts/y35a/build_arm_driver_4903.py`, `scripts/build-xnu-4903-native.py`, `scripts/build-xnu-4k-baseline.sh`, `components.toml`, and personality input now carry a `QcomSdcard`/`tf-storage` integration path. The exact personality patch applies to the pinned source snapshot; the existing R207 builder is not reused or restarted.
+验证: SD host protocol suite passed; ADT suite 10/10 passed; lk2nd SD_BOOT patch apply-check passed; Python syntax checks passed.
+限制: NativeSdcard object compile, XNU link, package/probe, TF GPT/APFS image preparation, and device run remain pending. R207 PID 90604 remains the only active builder; no second builder, device lock, SD write, or fastboot operation was started.
