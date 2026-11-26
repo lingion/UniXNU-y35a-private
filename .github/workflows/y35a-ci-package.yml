@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/y35a-ci-package.yml'
       - '.github/workflows/unixnu-native-build.yml'
+      - 'ci/manifests/r208-tf-sd-driver.json'
       - 'ci/native-build-manifest.r208.json'
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
@@ -19,13 +20,19 @@ on:
       - 'scripts/build-xnu-4903-native.py'
       - 'scripts/stage-ios12-root.py'
       - 'scripts/unixnu/ipsw.py'
+      - 'scripts/unixnu/devicetree.py'
+      - 'scripts/unixnu/udif.py'
+      - 'scripts/unixnu/util.py'
       - 'scripts/y35a/boot_layout.py'
+      - 'scripts/y35a/make_adt.py'
       - 'scripts/y35a/package_native.py'
       - 'tests/test_ci_y35a_package.py'
+      - 'tests/test_ci_native_input_prep.py'
   pull_request:
     paths:
       - '.github/workflows/y35a-ci-package.yml'
       - '.github/workflows/unixnu-native-build.yml'
+      - 'ci/manifests/r208-tf-sd-driver.json'
       - 'ci/native-build-manifest.r208.json'
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
@@ -40,9 +47,14 @@ on:
       - 'scripts/build-xnu-4903-native.py'
       - 'scripts/stage-ios12-root.py'
       - 'scripts/unixnu/ipsw.py'
+      - 'scripts/unixnu/devicetree.py'
+      - 'scripts/unixnu/udif.py'
+      - 'scripts/unixnu/util.py'
       - 'scripts/y35a/boot_layout.py'
+      - 'scripts/y35a/make_adt.py'
       - 'scripts/y35a/package_native.py'
       - 'tests/test_ci_y35a_package.py'
+      - 'tests/test_ci_native_input_prep.py'
   workflow_dispatch:
     inputs:
       native_run_id:
