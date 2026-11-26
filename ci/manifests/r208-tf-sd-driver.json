@@ -14,6 +14,10 @@
       "slot": 2
     }
   },
+  "availability_versions": {
+    "repository": "apple-oss-distributions/AvailabilityVersions",
+    "tag": "AvailabilityVersions-33.200.7"
+  },
   "board_evidence": {
     "official_capacity": "up to 128GB TF",
     "official_spec_url": "https://www.vivo.com.cn/vivo/param/y35a",
@@ -48,12 +52,18 @@
     "package_sha256": null,
     "probe_sha256": null
   },
+  "host_compat_patches": [
+    {
+      "path": "patches/xnu/local-availability.patch",
+      "sha256": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0"
+    }
+  ],
   "lk2nd_patch": {
     "apply_check": "passed",
     "path": "patches/lk2nd/msm8916-sd-boot.patch",
     "sha256": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc"
   },
-  "manifest_revision": "xnu-installhdrs-host-tool-python3-compat",
+  "manifest_revision": "exact-xnu-availability-pl-compat-patch",
   "patches": [
     {
       "order": 0,
@@ -75,6 +85,7 @@
     "components.toml": "abc2efe231e7903dceaf3889b3f329b0819c1bb4980b004de5fec2e81a1cd390",
     "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch": "c243eb2991bc707ad30bd22f0ca1b27b129f0beeec85995eefaf5849909347fa",
     "patches/lk2nd/msm8916-sd-boot.patch": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc",
+    "patches/xnu/local-availability.patch": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0",
     "scripts/build-xnu-4903-native.py": "684312fe12799519adaef13b73d08353015e128994eee5ab51ee074269e1535a",
     "scripts/build-xnu-4k-baseline.sh": "ac959683bf4e9f792f261aa02a729a012b8704b75261c8599ced7ef37d25fc2b",
     "scripts/ci/compile_r208_sdcard.py": "40919ad6bde732290e8c90083377be2f573b8ca0010a5a6199335370ff7c182c",
