@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "candidate": "R208-tf-sd",
+  "priority": ["tf", "emmc"],
+  "roots": {
+    "tf": {
+      "selector": "boot-uuid",
+      "source_type": "derived-until-stock-bound",
+      "status": "offline-only"
+    },
+    "emmc": {
+      "selector": "boot-uuid",
+      "source_type": "stock-required",
+      "status": "offline-only"
+    }
+  },
+  "failure_policy": {
+    "tf_card_absent": "fallback-to-emmc-if-ready",
+    "tf_init_failed": "fallback-to-emmc-if-ready",
+    "tf_first_read_failed": "fallback-to-emmc-if-ready",
+    "emmc_failed": "fail-closed",
+    "both_failed": "fail-closed",
+    "unknown": "unverified"
+  },
+  "implementation": {
+    "coordinator_symbol": "native_storage_select_root",
+    "status": "unverified",
+    "reason": "SD and eMMC drivers currently register independently; no linked root coordinator is present"
+  },
+  "device_run_allowed": false
+}

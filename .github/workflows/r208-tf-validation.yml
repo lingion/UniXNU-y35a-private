@@ -9,6 +9,9 @@ on:
       - 'drivers/QcomSdcard/**'
       - 'scripts/y35a/make_adt.py'
       - 'scripts/y35a/test_board_adt.py'
+      - 'scripts/y35a/verify_sd_root_fallback_contract.py'
+      - 'tests/test_y35a_sd_root_fallback_contract.py'
+      - 'ci/manifests/r208-root-fallback-contract.json'
       - 'patches/lk2nd/msm8916-sd-boot.patch'
       - 'patches/arm-driver-4903/0006-qcom-sdcard-personality.patch'
 
@@ -39,6 +42,11 @@ jobs:
         run: (cd scripts/y35a && python3 -m unittest -v test_board_adt)
       - name: Run root-selection contract tests
         run: python3 -m unittest -v tests/test_y35a_root_selection_contract.py
+      - name: Run TF and eMMC fallback contract
+        run: |
+          python3 -m unittest -v tests/test_y35a_sd_root_fallback_contract.py
+          python3 scripts/y35a/verify_sd_root_fallback_contract.py \
+            --contract ci/manifests/r208-root-fallback-contract.json
       - name: Fetch exact XNU source
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/xnu.git "$RUNNER_TEMP/xnu"

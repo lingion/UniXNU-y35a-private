@@ -88,6 +88,11 @@
     "requires": "GPT/APFS image, root selection, eMMC fallback, matching package/probe",
     "status": "unverified"
   },
+  "root_fallback_contract": {
+    "path": "ci/manifests/r208-root-fallback-contract.json",
+    "script": "scripts/y35a/verify_sd_root_fallback_contract.py",
+    "status": "contract-green-implementation-unverified"
+  },
   "schema_version": 1,
   "source": {
     "commit": "494ffe1c29d37ca720c37328feb83069c9641b67",
