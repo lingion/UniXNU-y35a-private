@@ -2951,3 +2951,9 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 事实: 私有镜像当前可读写，`HEAD=5213a62d0e9efc8baeaf4c1c0c3668c916b62739`。GitHub Actions validation `45855811648` 的 `host-validation` job 和 Docs `45855811845` 的 `build` job 均成功，绑定 commit `ba4854d4cb076388f61cb2bcdbdf13efb8404dc5`。本机进程核对未发现 UniXNU compile、link 或 large-build 进程。对 `/Volumes/Mobile` 的浅层访问返回 `Input/output error`，本轮未继续扫描或写入。
 裁决: 所有 UniXNU 编译、链接、host verification、静态门禁、package/probe plan 和 hash closure 继续只由 GitHub Actions 执行。`/Volumes/Mobile` 只保存缓存、CI 输入快照、CI 下载产物、备份和 raw；`/Volumes/Portable` 允许作为临时 staging，但不是 canonical 工作树，禁止在其上运行本地 UniXNU 编译。`device_run_allowed=false`，persistent writes 为 none。
 下一步: 在 CI 中补齐 native kernel-link 的 fakeroot、SDK overlay、wrapper、source provenance 和 driver archive 输入闭包；外置卷恢复可读后再做定点只读对账，不覆盖或删除历史产物。
+
+## L-2026-11-26T16:47:27Z-codex — temporary staging manifest verified
+
+类型: DECISION / EVIDENCE
+事实: `/Volumes/Mobile` 仍未继续扫描或写入，因为浅层访问返回 `Input/output error`。临时 staging `/Volumes/Portable/UniXNU-staging-20261127-0042` 来自私有镜像提交 `68b2cf91038fedb1ccacdc5950223ef618d8215e`，manifest SHA-256 为 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`。逐文件复核 1424/1424 项，missing=0、mismatch=0；manifest 标记 `canonical=false`、`local_build_allowed=false`、`device_run_allowed=false`。
+裁决: `/Volumes/Portable` 仅作为临时 staging，不是 Git 真源，不运行 UniXNU compile/link/large build，不操作设备或持久存储。

@@ -16,6 +16,7 @@
 - 当前 `device_run_allowed=false`。R207 不再是当前主线目标，不能抢占 R208 的 CI 和 TF/SD 工作。
 - R208 已完成 SD 协议 host suite、sdhc2 ADT contract、root-selection positive/negative contract、NativeSdcard object compile、IOStorageFamily-191 combine、确定性 archive 和 Docs CI。最新 validation run `45855811648` 的 `host-validation` job 成功；Docs run `45855811845` 的 `build` job 成功，二者绑定 commit `ba4854d4cb076388f61cb2bcdbdf13efb8404dc5`。XNU kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback 和设备运行仍未完成。
 - 本轮对 `/Volumes/Mobile` 的访问返回 `Input/output error`，未对该卷继续扫描或写入。`/Volumes/Portable` 已确认可用，仅作为临时 staging 盘；它不是 canonical 工作树，也不运行 UniXNU 编译。
+- 临时 staging `/Volumes/Portable/UniXNU-staging-20261127-0042` 已按提交 `68b2cf91038fedb1ccacdc5950223ef618d8215e` 导出；manifest SHA-256 为 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`，逐文件校验 1424/1424 通过。
 - TF/SD 设备路线当前只允许离线工作。TF 卡容量、sdhc2 协议、card-detect、root mount、回退到 eMMC 和真实卡绑定都没有实机证据。
 - R208 CI manifest 已绑定 exact XNU ref、六个 arm-driver patch 的 SHA 和 native build profile。NativeSdcard object SHA-256 为 `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`，combined object SHA-256 为 `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`，确定性 archive SHA-256 为 `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`。较早的 object/header 失败 runs 保留在 `LOG.md`，不再作为当前状态。
 

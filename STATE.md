@@ -1,10 +1,11 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-26T16:42:00Z
+Updated: 2026-11-26T16:47:27Z
 Milestone: R208 TF/SD source, host, root-selection, NativeSdcard object, IOStorageFamily archive and Docs gates passed in CI; native kernel link and TF root path remain pending. All local UniXNU compilation is disabled on every disk.
 Authority: intended /Volumes/Mobile/unixnu-research/UniXNU-y35a; current writable metadata mirror /Users/lingion_k/unixnu-y35a-private-sync; /Volumes/Mobile currently returns I/O errors.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
 Workspace: /Volumes/Mobile/unixnu-research stores source caches, run roots, CI artifacts, backups and raw only when readable; /Volumes/Portable is temporary staging only. No local UniXNU compilation, linking or large builds. External Git metadata restored, core.filemode=false, and fsck passed.
+Staging: /Volumes/Portable/UniXNU-staging-20261127-0042; manifest SHA a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538; source commit 68b2cf91038fedb1ccacdc5950223ef618d8215e; 1424/1424 verified.
 LKG: /Volumes/Mobile/unixnu-research/device-backups/efff9d92-20261119/ has only boot.current.img and lk2nd.current.img; full backup and EDL/firehose remain unverified.
 Storage candidate: user authorized future writes to the phone TF/SD card. Official Y35A data says 16GB ROM and up to 128GB TF expansion; stock dtb10 exposes removable sdhc2 with 4-bit bus and card-detect GPIO38.
 SD qualification: current lk2nd/XNU path is still sdhc1 eMMC-only; SD boot, sdhc2 protocol, root mount, and exact card binding remain unverified. No SD/device write occurred.

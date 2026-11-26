@@ -17,6 +17,7 @@ Xcode 目标：由 GitHub Actions runner 用于 UniXNU 构建；`/Volumes/Mobile
 R208 validation `45855811648` (`host-validation`) and Docs `45855811845` (`build`) passed on commit `ba4854d4cb076388f61cb2bcdbdf13efb8404dc5`. NativeSdcard, IOStorageFamily archive, root-selection and documentation gates are green. Kernel link, package/probe, TF GPT/APFS image, root mount, eMMC fallback and device evidence remain pending.
 
 No UniXNU build, link or large-build process was found locally. `/Volumes/Mobile` returned `Input/output error` during a shallow read; no further scan or write was attempted. `/Volumes/Portable` is temporary staging only and is not a local build root. `device_run_allowed=false`; persistent writes remain none.
+Staging is `/Volumes/Portable/UniXNU-staging-20261127-0042`, exported from private-mirror commit `68b2cf91038fedb1ccacdc5950223ef618d8215e`; manifest SHA-256 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`; 1424/1424 files verified.
 ## 2026-11-25 R204b boundary
 
 R204b used maximum memory (`0x5fe00000`) and added PEBARGRT after `args = PE_boot_args()`. Fresh final contains PEBARGRT but not ARMDFPAR or ARMDFRET. The measured boundary is after PE_boot_args returns and before the first command-line dereference / parser return. Preclear and baseline carrier windows were zero, final was fresh and nonzero, and the device returned to verified unlocked fastboot without persistent writes.
