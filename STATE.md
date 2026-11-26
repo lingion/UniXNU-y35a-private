@@ -14,7 +14,7 @@ Current gates:
 - R207 v1 was rejected before make due to corrupt patch hunk. R207 v2 patch SHA `05e9822905d6187a22009d957ffa350354ff11f53bd31b846b754b41f8f88f84` passes apply-check against R206 staged source.
 - R207 v2 external builder PID 90604 was terminated per user instruction. It produced no provenance or kernel artifact. Do not restart it or run any local UniXNU build on any disk.
 - R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, NativeSdcard scaffold, and lk2nd SD_BOOT patch gates passed their recorded offline checks. The final NativeSdcard CI compile result and bound artifact are not yet confirmed; no verified kernel/package/device evidence is recorded.
-- R208 CI plan commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds exact XNU ref and six arm-driver patches; macOS plan-only run `45812745086` passed. NativeSdcard compile, kernel link, package/probe, TF image and root mount remain pending.
+- R208 CI plan commit `bc1dacf822dd1a2d013716dca50cbf07a09ab7c8` binds exact XNU ref and six arm-driver patches; macOS plan-only run `45812745086` passed. NativeSdcard object and IOStorageFamily closure now pass CI run 45845189179; kernel link, package/probe, TF image and root mount remain pending.
 - Native runs `45838744656` and `45838740886` on commit `4c817f03fbd5a0611fadfd2675381c32ae995363` both passed `Generate exact XNU headers` but failed at `Compile NativeSdcard object`. This does not establish a NativeSdcard source compile result or verified object artifact.
 
 Next:

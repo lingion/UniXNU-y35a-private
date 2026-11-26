@@ -34,7 +34,7 @@
   "candidate": "R208-tf-sd",
   "device_run_allowed": false,
   "driver": {
-    "compile_status": "pending",
+    "compile_status": "ci-passed-object-and-storage-closure",
     "component": "QcomSdcard",
     "requires_native_headers": true,
     "role": "tf-storage",
@@ -58,12 +58,24 @@
       "sha256": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0"
     }
   ],
+  "latest_ci": {
+    "archive_sha256": "d29ce062965b0fdc2d6b1e72df6fd2046a076c053a8b42894c197905354bac18",
+    "archive_size": 286912,
+    "combined_object_sha256": "0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd",
+    "combined_object_size": 250040,
+    "commit": "a4eb164947229ca53a33754f1f75325be864400f",
+    "native_sdcard_object_sha256": "47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e",
+    "native_sdcard_object_size": 36288,
+    "run_id": 45845189179,
+    "status": "success"
+  },
   "lk2nd_patch": {
     "apply_check": "passed",
     "path": "patches/lk2nd/msm8916-sd-boot.patch",
     "sha256": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc"
   },
   "manifest_revision": "iostoragefamily-base-combine-contract",
+  "next_stage": "XNU kernel link against archive; package/probe and TF GPT/APFS remain pending",
   "patches": [
     {
       "order": 0,

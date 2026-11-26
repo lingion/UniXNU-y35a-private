@@ -2925,3 +2925,8 @@ R207 v2 builder PID 90604 is active in a new external run root `/Volumes/Mobile/
 
 事实: Runs `45838744656` and `45838740886` used commit `4c817f03fbd5a0611fadfd2675381c32ae995363`. GitHub reports that both passed exact XNU header generation and failed at `Compile NativeSdcard object`; both runs are now completed.
 裁决: The duplicate same-commit runs provide no successful NativeSdcard object or artifact hash. Keep the source compile result unverified until a later CI run actually emits and binds the object.
+
+## L-2026-11-26T15:06:00Z-codex — R208 NativeSdcard storage closure passed
+
+事实: GitHub Actions run `45845189179` on commit `a4eb164947229ca53a33754f1f75325be864400f` passed exact XNU headers, exact IOStorageFamily-191 checkout, NativeSdcard object compile and IOStorageFamily base-object combine/archive. NativeSdcard object SHA `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`, size 36,288; combined relocatable object SHA `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`, size 250,040; archive SHA `d29ce062965b0fdc2d6b1e72df6fd2046a076c053a8b42894c197905354bac18`, size 286,912. Exact XNU commit `494ffe1c29d37ca720c37328feb83069c9641b67`; IOStorageFamily commit `c95d31401f0ff950a883727f5e47d313685fde33`.
+裁决: R208 source/host/storage object closure is green. Kernel link, linked gate, package/probe, TF GPT/APFS image, root selection, eMMC fallback and device evidence remain pending. `device_run_allowed=false`; no TF write or device operation occurred.
