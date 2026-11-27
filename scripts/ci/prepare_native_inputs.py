@@ -25,6 +25,14 @@ PROFILE_SOURCES = (
 )
 LLVM_COMMIT = "58c46bae21181fb4240cf964461bea738d96d50e"
 LIBC_COMMIT = "899a3b2d52d95d75e05fb286a5e64975ec3de757"
+SOURCE_COMMITS = {
+    "xnu": "494ffe1c29d37ca720c37328feb83069c9641b67",
+    "availability": "f17c3d161f882128fb55324d3fb92adb6a7a6f7b",
+    "libdispatch": "30fe6a7d945340ce69cef121132f049e810089a5",
+    "libplatform": "26a76f6563c7bf6472159b772349ff1ca599f8fb",
+    "llvm": LLVM_COMMIT,
+    "libc": LIBC_COMMIT,
+}
 
 
 def sha256(path: Path) -> str:
@@ -60,6 +68,14 @@ def tree_sha256(path: Path) -> str:
 def run(command: list[str], *, cwd: Path | None = None, env: dict[str, str] | None = None) -> None:
     print("$", " ".join(str(part) for part in command), flush=True)
     subprocess.run(command, cwd=cwd, env=env, check=True)
+
+
+def git_commit(path: Path) -> str:
+    result = subprocess.run(["git", "-C", str(path), "rev-parse", "HEAD"],
+                            capture_output=True, text=True, check=False)
+    if result.returncode:
+        raise SystemExit(f"source checkout is not a readable Git tree: {path}")
+    return result.stdout.strip()
 
 
 @contextmanager
@@ -274,6 +290,19 @@ def main() -> int:
     for path in inputs:
         if not path.exists():
             raise SystemExit(f"missing input: {path}")
+    source_roots = {
+        "xnu": args.xnu_source,
+        "availability": args.availability_source,
+        "libdispatch": args.libdispatch_source,
+        "libplatform": args.libplatform_source,
+        "llvm": args.llvm_source,
+        "libc": args.libc_source,
+    }
+    for name, path in source_roots.items():
+        actual = git_commit(path)
+        if actual != SOURCE_COMMITS[name]:
+            raise SystemExit(
+                f"{name} source commit mismatch: expected {SOURCE_COMMITS[name]}, found {actual}")
     root = args.run_root.resolve()
     if root.exists():
         raise SystemExit(f"refusing to overwrite native input root: {root}")
@@ -339,10 +368,14 @@ def main() -> int:
     wrapper.chmod(0o755)
     manifest = {
         "schema": 1,
-        "source": {"xnu_commit": "494ffe1c29d37ca720c37328feb83069c9641b67",
+        "source": {"xnu_commit": SOURCE_COMMITS["xnu"],
                     "availability_tag": "AvailabilityVersions-33.200.7",
+                    "availability_commit": SOURCE_COMMITS["availability"],
                     "libdispatch_tag": "libdispatch-1477.100.9",
-                    "llvm_commit": LLVM_COMMIT, "libc_commit": LIBC_COMMIT},
+                    "libdispatch_commit": SOURCE_COMMITS["libdispatch"],
+                    "libplatform_tag": "libplatform-177.270.1",
+                    "libplatform_commit": SOURCE_COMMITS["libplatform"],
+                    "llvm_commit": SOURCE_COMMITS["llvm"], "libc_commit": SOURCE_COMMITS["libc"]},
         "paths": {"fakeroot": str(fakeroot), "sdk_overlay": str(overlay), "xcrun_wrapper": str(wrapper)},
         "trees": {"fakeroot_sha256": tree_sha256(fakeroot), "sdk_overlay_sha256": tree_sha256(overlay),
                   "xcrun_wrapper_sha256": sha256(wrapper)},

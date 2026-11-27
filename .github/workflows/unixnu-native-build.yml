@@ -23,12 +23,17 @@ on:
       driver_run_id:
         description: Existing successful R208 driver artifact run
         required: true
-        default: '45963287517'
+        default: '45979988462'
         type: string
       driver_artifact_name:
         description: Driver archive artifact name
         required: true
-        default: r208-native-sdcard-45963287517
+        default: r208-native-sdcard-45979988462
+        type: string
+      driver_head_branch:
+        description: Branch that produced the pinned driver artifact
+        required: true
+        default: codex/unixnu-ci-package-v2
         type: string
 
 permissions:
@@ -47,6 +52,9 @@ jobs:
     env:
       SOURCE_REF: ${{ inputs.source_ref }}
       BUILD_MANIFEST: ${{ inputs.manifest }}
+      DRIVER_RUN_ID: ${{ inputs.driver_run_id }}
+      DRIVER_ARTIFACT_NAME: ${{ inputs.driver_artifact_name }}
+      DRIVER_HEAD_BRANCH: ${{ inputs.driver_head_branch }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -54,8 +62,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Test native input restoration
-        run: python -m unittest -v tests/test_ci_native_input_prep.py
+      - name: Test native build and input contracts
+        run: python -m unittest -v tests/test_ci_native_input_prep.py tests/test_native_xnu_build_contract.py tests/test_ci_native_build_gate.py
       - name: Select Xcode
         id: xcode
         run: |
@@ -91,10 +99,50 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          set -euo pipefail
+          python3 - "$BUILD_MANIFEST" "$SOURCE_REF" "$DRIVER_RUN_ID" "$DRIVER_ARTIFACT_NAME" "$DRIVER_HEAD_BRANCH" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+          manifest_path, source_ref, run_id, artifact_name, head_branch = sys.argv[1:]
+          manifest = json.loads(Path(manifest_path).read_text())
+          driver = manifest.get("driver_artifact", {})
+          if manifest.get("source_ref") != source_ref:
+              raise SystemExit("workflow source_ref does not match native build manifest")
+          if (driver.get("run_id") != int(run_id) or driver.get("name") != artifact_name
+                  or driver.get("head_branch") != head_branch):
+              raise SystemExit("selected driver run/artifact does not match native build manifest")
+          for key in ("sha256", "source_sha256", "head_sha", "xnu_commit", "iostorage_commit", "driver_manifest_sha256"):
+              if not isinstance(driver.get(key), str) or not driver[key]:
+                  raise SystemExit(f"native manifest driver_artifact.{key} is required")
+          PY
+          gh run view "$DRIVER_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,conclusion,headBranch,headSha > "$RUNNER_TEMP/driver-run.json"
+          jq -e --arg id "$DRIVER_RUN_ID" \
+            --arg name "$DRIVER_ARTIFACT_NAME" \
+            --arg branch "$DRIVER_HEAD_BRANCH" \
+            --arg expected_sha "$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["driver_artifact"]["head_sha"])' "$BUILD_MANIFEST")" '
+            .databaseId == ($id | tonumber)
+            and .workflowName == "R208 TF validation"
+            and .conclusion == "success"
+            and .headBranch == $branch
+            and .headSha == $expected_sha
+            and (.headSha | test("^[0-9a-f]{40}$"))
+          ' "$RUNNER_TEMP/driver-run.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$DRIVER_RUN_ID/artifacts" \
+            > "$RUNNER_TEMP/driver-artifacts.json"
+          EXPECTED_DRIVER_ARTIFACT_ID=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["driver_artifact"]["artifact_id"])' "$BUILD_MANIFEST")
+          EXPECTED_DRIVER_ARTIFACT_DIGEST=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["driver_artifact"]["artifact_zip_digest"])' "$BUILD_MANIFEST")
+          jq -e --arg name "$DRIVER_ARTIFACT_NAME" \
+            --arg digest "$EXPECTED_DRIVER_ARTIFACT_DIGEST" \
+            --argjson id "$EXPECTED_DRIVER_ARTIFACT_ID" \
+            '[.artifacts[] | select(.name == $name and .expired == false)] as $matches
+             | ($matches | length) == 1 and $matches[0].id == $id and $matches[0].digest == $digest' \
+            "$RUNNER_TEMP/driver-artifacts.json" > /dev/null
           mkdir -p "$RUNNER_TEMP/r208-driver"
-          gh run download "${{ inputs.driver_run_id }}" \
+          gh run download "$DRIVER_RUN_ID" \
             --repo "${{ github.repository }}" \
-            --name "${{ inputs.driver_artifact_name }}" \
+            --name "$DRIVER_ARTIFACT_NAME" \
             --dir "$RUNNER_TEMP/r208-driver"
           test -f "$RUNNER_TEMP/r208-driver/libQcomSdcard.a"
           test -f "$RUNNER_TEMP/r208-driver/driver-manifest.json"
@@ -121,6 +169,11 @@ jobs:
             --run-root "$RUNNER_TEMP/unixnu-native-build" \
             --developer-dir "$DEVELOPER_DIR" \
             --repo-root "$GITHUB_WORKSPACE" \
+            --source-ref "$SOURCE_REF" \
+            --native-inputs-manifest "$RUNNER_TEMP/native-inputs/native-inputs-manifest.json" \
+            --driver-run-id "$DRIVER_RUN_ID" \
+            --driver-artifact-name "$DRIVER_ARTIFACT_NAME" \
+            --driver-head-branch "$DRIVER_HEAD_BRANCH" \
             --fakeroot "$RUNNER_TEMP/native-inputs/fakeroot" \
             --sdk-overlay "$RUNNER_TEMP/native-inputs/sdk-overlay" \
             --xcrun-wrapper "$RUNNER_TEMP/native-inputs/compat/bin/xcrun" \
@@ -136,6 +189,11 @@ jobs:
             --run-root "$RUNNER_TEMP/unixnu-native-build" \
             --developer-dir "$DEVELOPER_DIR" \
             --repo-root "$GITHUB_WORKSPACE" \
+            --source-ref "$SOURCE_REF" \
+            --native-inputs-manifest "$RUNNER_TEMP/native-inputs/native-inputs-manifest.json" \
+            --driver-run-id "$DRIVER_RUN_ID" \
+            --driver-artifact-name "$DRIVER_ARTIFACT_NAME" \
+            --driver-head-branch "$DRIVER_HEAD_BRANCH" \
             --fakeroot "$RUNNER_TEMP/native-inputs/fakeroot" \
             --sdk-overlay "$RUNNER_TEMP/native-inputs/sdk-overlay" \
             --xcrun-wrapper "$RUNNER_TEMP/native-inputs/compat/bin/xcrun" \
@@ -154,6 +212,7 @@ jobs:
             ${{ runner.temp }}/unixnu-native-build/**/*.filelist
             ${{ runner.temp }}/unixnu-native-build/**/*.linkarguments
             ${{ runner.temp }}/unixnu-native-build/**/link.filelist
+            ${{ runner.temp }}/unixnu-native-build/inputs/staged-source-compatibility.diff
           if-no-files-found: warn
       - name: Capture native link symbol diagnostics
         if: always()

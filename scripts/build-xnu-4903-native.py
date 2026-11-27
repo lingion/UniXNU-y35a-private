@@ -306,7 +306,12 @@ def make_step_command(
     return command
 
 
-def validate_driver_manifest(manifest_path: Path, archive_paths: list[Path]) -> dict:
+def validate_driver_manifest(
+    manifest_path: Path,
+    archive_paths: list[Path],
+    *,
+    expected: dict[str, object] | None = None,
+) -> dict:
     data = json.loads(manifest_path.read_text())
     integration = data.get("integration", {})
     role = integration.get("role")
@@ -318,14 +323,57 @@ def validate_driver_manifest(manifest_path: Path, archive_paths: list[Path]) -> 
     if integration.get("force_load") is not True:
         raise SystemExit("driver manifest must require force_load=true")
     archive = data.get("archive", {})
-    expected = archive.get("sha256")
-    if not expected or len(archive_paths) != 1:
+    archive_sha = archive.get("sha256")
+    if not archive_sha or len(archive_paths) != 1:
         raise SystemExit("driver manifest must bind exactly one archive")
     actual = sha256_file(archive_paths[0])
-    if actual != expected:
+    if actual != archive_sha:
         raise SystemExit(
-            f"driver archive SHA-256 {actual} does not match manifest {expected}"
+            f"driver archive SHA-256 {actual} does not match manifest {archive_sha}"
         )
+    if archive_paths[0].name != Path(archive.get("path", archive_paths[0].name)).name:
+        raise SystemExit("driver archive filename does not match its producer manifest")
+    if expected is not None:
+        expected_archive = expected.get("sha256")
+        if actual != expected_archive:
+            raise SystemExit("driver archive SHA-256 does not match native build manifest")
+        if archive_paths[0].name != expected.get("archive"):
+            raise SystemExit("driver archive name does not match native build manifest")
+        expected_ci = {
+            "run_id": expected.get("run_id"),
+            "artifact_name": expected.get("name"),
+            "head_sha": expected.get("head_sha"),
+            "head_branch": expected.get("head_branch"),
+            "workflow_name": "R208 TF validation",
+        }
+        actual_ci = data.get("ci_provenance", {})
+        for key, value in expected_ci.items():
+            if value is not None and actual_ci.get(key) != value:
+                raise SystemExit(f"driver producer {key} does not match native build manifest")
+        expected_source = {
+            "sha256": expected.get("source_sha256"),
+            "xnu_commit": expected.get("xnu_commit"),
+            "iostorage_commit": expected.get("iostorage_commit"),
+        }
+        actual_source = {
+            "sha256": data.get("source", {}).get("sha256"),
+            "xnu_commit": data.get("xnu", {}).get("commit"),
+            "iostorage_commit": data.get("iostorage", {}).get("commit"),
+        }
+        if actual_source != expected_source:
+            raise SystemExit("driver source/XNU/IOStorage provenance does not match native build manifest")
+        if sha256_file(manifest_path) != expected.get("driver_manifest_sha256"):
+            raise SystemExit("driver manifest SHA-256 does not match native build manifest")
+        abi = data.get("kext_abi", {})
+        expected_abi = {
+            "status": "passed", "config_embedded": 1,
+            "apple_kext_vtable_padding": 0, "apple_kext_align_containers": 1,
+        }
+        if any(abi.get(key) != value for key, value in expected_abi.items()):
+            raise SystemExit("driver KEXT ABI contract does not match embedded XNU ABI")
+        archive_abi = data.get("archive_kext_abi", {})
+        if archive_abi.get("status") != "passed" or archive_abi.get("reserved_abi_imports") != []:
+            raise SystemExit("driver archive has no passing reserved-slot ABI audit")
     return data
 
 
@@ -358,14 +406,18 @@ def audit_driver_kernel(kernel: Path, manifest: dict) -> dict:
     }
 
 
-def load_driver_integration(archive_paths: list[Path], manifest_path: Path | None) -> dict | None:
+def load_driver_integration(
+    archive_paths: list[Path], manifest_path: Path | None,
+    *, expected: dict[str, object] | None = None,
+) -> dict | None:
     if archive_paths and manifest_path is None:
         raise SystemExit("--driver-archive requires --driver-manifest")
     if manifest_path is not None and not archive_paths:
         raise SystemExit("--driver-manifest requires --driver-archive")
     if manifest_path is None:
         return None
-    return validate_driver_manifest(manifest_path.resolve(strict=True), archive_paths)
+    return validate_driver_manifest(
+        manifest_path.resolve(strict=True), archive_paths, expected=expected)
 
 
 def _capture(command: list[str], *, env: dict[str, str] | None = None) -> str:
@@ -557,6 +609,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="archive to force-load into the 4903 kernel; repeatable")
     parser.add_argument("--driver-manifest", type=Path,
                         help="archive-builder manifest binding the force-loaded integration")
+    parser.add_argument("--driver-contract", type=Path,
+                        help="native-build manifest pinning the exact driver producer artifact")
     parser.add_argument("--plan-only", action="store_true",
                         help="validate inputs and print argv without creating output or running make")
     return parser.parse_args(argv)
@@ -724,6 +778,22 @@ def _execute_run(
         }
         provenance["staged_source_compatibility"] = compatibility
         _write_json(provenance_path, provenance)
+    compatibility_diff = run_root / "inputs/staged-source-compatibility.diff"
+    diff_result = subprocess.run(
+        ["git", "-C", str(staged_source), "diff", "--binary", "HEAD"],
+        capture_output=True, check=False,
+    )
+    if diff_result.returncode:
+        raise SystemExit("could not capture staged XNU compatibility diff")
+    compatibility_diff.write_bytes(diff_result.stdout)
+    provenance["staged_inputs"]["source_tree_after_compatibility_sha256"] = tree_sha256(staged_source)
+    provenance["staged_inputs"]["source_compatibility_diff"] = {
+        "path": str(compatibility_diff), "sha256": sha256_file(compatibility_diff),
+        "bytes": compatibility_diff.stat().st_size,
+    }
+    provenance["staged_source_compatibility"]["final_tree_sha256"] = \
+        provenance["staged_inputs"]["source_tree_after_compatibility_sha256"]
+    _write_json(provenance_path, provenance)
     provenance["status"] = "prepared"
     _write_json(provenance_path, provenance)
 
@@ -815,7 +885,15 @@ def main(argv: list[str] | None = None) -> int:
     if args.jobs < 1:
         raise SystemExit("--jobs must be a positive integer")
     driver_archives = [Path(path).resolve(strict=True) for path in args.driver_archive]
-    driver_manifest = load_driver_integration(driver_archives, args.driver_manifest)
+    if driver_archives and args.driver_contract is None:
+        raise SystemExit("--driver-archive requires --driver-contract")
+    if driver_archives and args.driver_manifest is None:
+        raise SystemExit("--driver-archive requires --driver-manifest")
+    driver_contract = json.loads(args.driver_contract.resolve(strict=True).read_text()) \
+        if args.driver_contract else None
+    driver_manifest = load_driver_integration(
+        driver_archives, args.driver_manifest,
+        expected=driver_contract.get("driver_artifact") if driver_contract else None)
     source = args.source.resolve(strict=True)
     source_identity = validate_source_tree(source)
     source_diff = args.source_diff.resolve(strict=True) if args.source_diff else None
@@ -845,6 +923,9 @@ def main(argv: list[str] | None = None) -> int:
         "driver_manifest": ({"path": str(args.driver_manifest.resolve(strict=True)),
                              "sha256": sha256_file(args.driver_manifest.resolve(strict=True))}
                             if args.driver_manifest else None),
+        "driver_contract": ({"path": str(args.driver_contract.resolve(strict=True)),
+                             "sha256": sha256_file(args.driver_contract.resolve(strict=True))}
+                            if args.driver_contract else None),
     }
     if args.plan_only:
         plan_root = Path("/tmp/<new-xnu4903-native-run>")
@@ -888,6 +969,8 @@ def main(argv: list[str] | None = None) -> int:
     ]
     if args.driver_manifest:
         input_paths.append(args.driver_manifest.resolve(strict=True))
+    if args.driver_contract:
+        input_paths.append(args.driver_contract.resolve(strict=True))
     run_root = allocate_isolated_run_root(
         explicit=args.run_root, parent=args.run_parent, input_paths=input_paths,
     )

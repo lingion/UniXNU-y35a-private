@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import os
@@ -239,6 +240,14 @@ def main() -> int:
         "source": {"path": str(source), "sha256": sha256(source)},
         "xnu": {"commit": commit},
         "iostorage": {"commit": iostorage_commit},
+        "ci_provenance": {
+            "run_id": int(os.environ["GITHUB_RUN_ID"]),
+            "artifact_name": f"r208-native-sdcard-{os.environ['GITHUB_RUN_ID']}",
+            "head_sha": os.environ["GITHUB_SHA"],
+            "head_branch": os.environ["GITHUB_REF_NAME"],
+            "workflow_name": "R208 TF validation",
+            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+        },
         "kext_abi": abi_contract,
         "archive_kext_abi": archive_abi,
         "object": report["object"],

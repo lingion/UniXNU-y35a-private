@@ -13,6 +13,11 @@ on:
       - 'scripts/y35a/verify_sd_root_fallback_contract.py'
       - 'tests/test_y35a_sd_root_fallback_contract.py'
       - 'tests/test_r208_storage_abi_contract.py'
+      - 'tests/test_native_xnu_build_contract.py'
+      - 'tests/test_ci_native_build_gate.py'
+      - 'scripts/ci/run_native_build.py'
+      - 'scripts/ci/prepare_native_inputs.py'
+      - 'scripts/build-xnu-4903-native.py'
       - 'ci/manifests/r208-root-fallback-contract.json'
       - 'patches/lk2nd/msm8916-sd-boot.patch'
       - 'patches/arm-driver-4903/0006-qcom-sdcard-personality.patch'
@@ -34,6 +39,39 @@ jobs:
           echo "DEVELOPER_DIR=$(xcode-select -p)" >> "$GITHUB_ENV"
           xcodebuild -version
           xcrun --sdk iphoneos --show-sdk-version
+      - name: Emit manifest source hash audit
+        run: |
+          python3 - "$GITHUB_WORKSPACE" ci/manifests/r208-tf-sd-driver.json "$RUNNER_TEMP/r208-source-hash-audit.json" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+          root, manifest_path, output_path = map(Path, sys.argv[1:])
+          manifest = json.loads(manifest_path.read_text())
+          names = set(manifest.get("source_files", {}))
+          names.update({
+              "scripts/ci/run_native_build.py",
+              "tests/test_native_xnu_build_contract.py",
+              "tests/test_ci_native_build_gate.py",
+              "ci/native-source-provenance.r208.json",
+          })
+          result = {}
+          for name in sorted(names):
+              path = root / name
+              if path.is_file():
+                  result[name] = hashlib.sha256(path.read_bytes()).hexdigest()
+              else:
+                  result[name] = None
+          output_path.write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+          print(json.dumps(result, indent=2, sort_keys=True))
+          PY
+      - name: Upload manifest source hash audit
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: r208-source-hash-audit-${{ github.run_id }}
+          path: ${{ runner.temp }}/r208-source-hash-audit.json
+          if-no-files-found: warn
       - name: Validate manifest
         run: python scripts/ci/validate_r208_tf_manifest.py --manifest ci/manifests/r208-tf-sd-driver.json --repo-root .
       - name: Run SD host suite
@@ -51,6 +89,8 @@ jobs:
             --contract ci/manifests/r208-root-fallback-contract.json
       - name: Test embedded KEXT ABI contract
         run: python3 -m unittest -v tests/test_r208_storage_abi_contract.py
+      - name: Test native link input binding contracts
+        run: python3 -m unittest -v tests/test_native_xnu_build_contract.py tests/test_ci_native_build_gate.py
       - name: Fetch exact XNU source
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/xnu.git "$RUNNER_TEMP/xnu"
@@ -99,6 +139,54 @@ jobs:
             --iostorage-source "$RUNNER_TEMP/IOStorageFamily" \
             --repo-root "$GITHUB_WORKSPACE" \
             --output "$RUNNER_TEMP/r208/NativeSdcard.o"
+      - name: Verify produced driver artifact against pinned contract
+        run: |
+          python3 - "$GITHUB_WORKSPACE/ci/manifests/r208-tf-sd-driver.json" \
+            "$RUNNER_TEMP/r208/compile-report.json" "$RUNNER_TEMP/r208/driver-manifest.json" <<'PY'
+          import hashlib
+          import json
+          import sys
+          from pathlib import Path
+          manifest_path, report_path, driver_manifest_path = map(Path, sys.argv[1:])
+          contract = json.loads(manifest_path.read_text())
+          report = json.loads(report_path.read_text())
+          driver = json.loads(driver_manifest_path.read_text())
+          expected = contract["expected"]["driver_archive_sha256"]
+          archive = report.get("archive", {})
+          if archive.get("sha256") != expected:
+              raise SystemExit("produced driver archive SHA does not match the R208 manifest")
+          if archive.get("bytes", 0) <= 0:
+              raise SystemExit("produced driver archive has invalid size")
+          if driver.get("archive", {}).get("sha256") != archive.get("sha256"):
+              raise SystemExit("driver manifest archive hash differs from compile report")
+          if report.get("source_sha256") != contract["driver"]["source_sha256"]["drivers/QcomSdcard/NativeSdcard.cpp"]:
+              raise SystemExit("compiled NativeSdcard source hash does not match the R208 manifest")
+          if report.get("xnu_commit") != contract["source"]["commit"]:
+              raise SystemExit("driver compile XNU commit does not match the R208 manifest")
+          if report.get("iostorage_commit") != "0e637763592184691a0e51a0995f10fa110f0780":
+              raise SystemExit("driver compile IOStorageFamily commit does not match the R208 pin")
+          abi = driver.get("kext_abi", {})
+          if (abi.get("status") != "passed" or abi.get("config_embedded") != 1
+                  or abi.get("apple_kext_vtable_padding") != 0
+                  or abi.get("apple_kext_align_containers") != 1):
+              raise SystemExit("driver manifest has no passing embedded KEXT ABI binding")
+          if driver.get("archive_kext_abi", {}).get("reserved_abi_imports") != []:
+              raise SystemExit("driver archive has reserved KEXT ABI imports")
+          provenance = driver.get("ci_provenance", {})
+          if (provenance.get("run_id") != int(__import__("os").environ["GITHUB_RUN_ID"])
+                  or provenance.get("head_sha") != __import__("os").environ["GITHUB_SHA"]
+                  or provenance.get("head_branch") != __import__("os").environ["GITHUB_REF_NAME"]
+                  or provenance.get("workflow_name") != "R208 TF validation"):
+              raise SystemExit("driver producer provenance does not bind this Actions run")
+          print(json.dumps({
+              "ok": True,
+              "run_id": provenance["run_id"],
+              "head_sha": provenance["head_sha"],
+              "archive_sha256": archive["sha256"],
+              "archive_bytes": archive["bytes"],
+              "driver_manifest_sha256": hashlib.sha256(driver_manifest_path.read_bytes()).hexdigest(),
+          }, indent=2))
+          PY
       - name: Upload R208 compile artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -106,3 +194,4 @@ jobs:
           name: r208-native-sdcard-${{ github.run_id }}
           path: ${{ runner.temp }}/r208/
           if-no-files-found: warn
+          retention-days: 90

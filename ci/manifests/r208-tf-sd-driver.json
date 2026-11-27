@@ -47,7 +47,7 @@
     }
   },
   "expected": {
-    "driver_archive_sha256": "74f9b7263b8b0a55c2ca4d1577cfc4a2ab1d4002f9ca925803368d167b565293",
+    "driver_archive_sha256": "c7b344cfbf6d4b528ceed16164cbb541278c3b5eb2c1ab3d4b87030f7147ae4a",
     "kernel_sha256": null,
     "package_sha256": null,
     "probe_sha256": null
@@ -59,15 +59,18 @@
     }
   ],
   "latest_ci": {
-    "archive_sha256": "74f9b7263b8b0a55c2ca4d1577cfc4a2ab1d4002f9ca925803368d167b565293",
-    "archive_size": 292216,
-    "combined_object_sha256": "5088646bd769ffb15bbee9942fae82e1b19627892641ee1693f2b6379a5caf31",
-    "combined_object_size": 250040,
-    "commit": "3538cccc70e4b3490f7b65e9042713e6266b8c4e",
-    "driver_manifest_sha256": "56f12c2c1989976df237e53166a1f86faad50205926d30a043ee611a11d9aaf9",
-    "native_sdcard_object_sha256": "ecfb8fcdbe00354223a47e92b94c3f9ae8aee40f7c7f77375f9af5c81dac241a",
-    "native_sdcard_object_size": 36320,
-    "run_id": 45963287517,
+    "archive_sha256": "c7b344cfbf6d4b528ceed16164cbb541278c3b5eb2c1ab3d4b87030f7147ae4a",
+    "archive_size": 217912,
+    "combined_object_sha256": "b756ed200263ae999aa69eb9ee33b20548ea846cf3a6eafe74ae7a899cc0b175",
+    "combined_object_size": 194120,
+    "commit": "c055cc5828cbcb87a4373519c713d4fedefae59b",
+    "head_branch": "codex/unixnu-ci-package-v2",
+    "driver_manifest_sha256": "410f5ba77736547208389d5c038b11b2c27bff157234fbbb8bb4ed06c7df6f60",
+    "native_sdcard_object_sha256": "a58aa07cd9b52c6486748cab35c9773990dd9f30985ba0f2d9ce7f5ffb6060ce",
+    "native_sdcard_object_size": 25568,
+    "run_id": 45979988462,
+    "artifact_id": 15189211165,
+    "artifact_zip_digest": "sha256:fccad17f47f17865e0a80a235bd6207bf3dc432eb0c2947cff62813d72e06935",
     "status": "success"
   },
   "lk2nd_patch": {
@@ -104,22 +107,29 @@
     "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch": "51a61655b607b10bb913da3b7d969a3e933fffeaad1ff0146cdfb0d2cc33e93d",
     "patches/lk2nd/msm8916-sd-boot.patch": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc",
     "patches/xnu/local-availability.patch": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0",
-    "scripts/build-xnu-4903-native.py": "2deeede1352bea837186df58af709ea1dadd6e33184ce5711e04e57a81db97ee",
+    "scripts/build-xnu-4903-native.py": "51290f48fa2f8118433454e0aa55ac040ad1c4141da9071b3246b221b617717b",
     "scripts/build-xnu-4k-baseline.sh": "ac959683bf4e9f792f261aa02a729a012b8704b75261c8599ced7ef37d25fc2b",
-    "scripts/ci/compile_r208_sdcard.py": "e7ba3c9b561383483a4aec592d0e85c17c9ca1ce6f1679d6a1c2c8d9ad9ca946",
+    "scripts/ci/compile_r208_sdcard.py": "54e3e32655d40ff28cfc6fe1d5b51b623245d0aa90b485cd7926ae0b2860d27a",
     "scripts/ci/patch_xnu_host_tools.py": "a626197ff726a6c5a091be59b5bf775db8168c34e9ae9eccf6e23818c45e078e",
     "scripts/y35a/build_arm_driver_4903.py": "993dee39fc4a1b3a12b1c966a54b995e2ddb64d2f80e8977f253da6e642d56b9",
     "scripts/y35a/make_adt.py": "72bcafc305f3a1cc1cbe9899e5df3e326da91c42a76595cde9f376a5936f4847",
     "scripts/y35a/test_board_adt.py": "02b5a58e74df2c2308d6b4ee81b241821533484147b2328ded2e9c477ec9fbce",
-    "scripts/ci/prepare_native_inputs.py": "cd1b5605cc02de906b593fec1b0a73ffb92c84ce974886099d1af746a5658187",
+    "scripts/ci/prepare_native_inputs.py": "0940ee46b9ee703b19f941f83da2771293dc7f3b3529d5d0db94ffe65b1ae4a3",
+    "scripts/ci/run_native_build.py": "9a64246124836202e646159c22f3d778823ab0e7187058d438c917659cc8bd88",
+    "scripts/ci/validate_r208_tf_manifest.py": "c42118e6cc83f7364b303778a4166d61a1530930e65ec76c412ab6f4adb3241c",
+    "ci/native-source-provenance.r208.json": "53d2d6fcfbe76721a8c1fed7ad7b2fcad3b8e7b92154b6220f084635ef0b4452",
+    "tests/test_ci_native_build_gate.py": "63cd287dc11ae1395ebe59e6e22d19981fcd8221d990311d7ff4f0a4b665ee87",
+    "tests/test_native_xnu_build_contract.py": "86eeea26bcccd6d9a8a17dca950aaf2df6dcf4ff091f5864ab6b597e38c2f7dd",
+    ".github/workflows/unixnu-native-build.yml": "a52e490115ca16de658c1c189522e450b543cf028db8c0e8ac69235e4e507ace",
+    ".github/workflows/r208-tf-validation.yml": "e414e49af97a438dfd4ff5b768732f423aa8a18414018905c2dd897d9abd6ccf",
     "tests/test_r208_storage_abi_contract.py": "65baf370282e099ff3a7693f5ad08217ca03304c3e0fd6ad8171b1280b7d470b"
   },
   "status": "offline-plan-only",
   "toolchain": {
-    "build": "14E300c",
-    "developer_dir": "/Applications/Xcode.app/Contents/Developer",
-    "iphoneos_sdk": "16.4",
+    "build": "16F6",
+    "developer_dir": "/Applications/Xcode_16.4.app/Contents/Developer",
+    "iphoneos_sdk": "18.5",
     "native_runner": "scripts/build-xnu-4903-native.py",
-    "xcode": "14.3.1"
+    "xcode": "16.4"
   }
 }

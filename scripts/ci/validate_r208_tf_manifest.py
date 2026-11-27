@@ -42,6 +42,16 @@ def main():
         p=root/path
         if not p.is_file(): errors.append(f'missing source file: {path}')
         elif sha(p)!=digest: errors.append(f'source file hash mismatch: {path}')
+    expected_archive = m.get('expected',{}).get('driver_archive_sha256')
+    latest = m.get('latest_ci',{})
+    if not expected_archive or expected_archive != latest.get('archive_sha256'):
+        errors.append('expected driver archive SHA does not match latest CI artifact record')
+    if latest.get('status') == 'success':
+        if not isinstance(latest.get('run_id'), int) or not isinstance(latest.get('commit'), str):
+            errors.append('latest CI success must bind a run_id and full commit SHA')
+        if (latest.get('archive_size', 0) <= 0 or latest.get('driver_manifest_sha256') is None
+                or latest.get('artifact_id') is None or not latest.get('artifact_zip_digest')):
+            errors.append('latest CI success must bind archive size, artifact identity/digest, and producer manifest SHA')
     adt=m.get('adt',{})
     for key in ('script','contract_test'):
         p=root/adt[key]; expected=adt[key+'_sha256']

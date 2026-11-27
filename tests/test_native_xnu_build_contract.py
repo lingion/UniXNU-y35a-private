@@ -71,6 +71,44 @@ class NativeXnuBuildContractTest(unittest.TestCase):
             with self.assertRaisesRegex(SystemExit, 'does not match manifest'):
                 MODULE.validate_driver_manifest(manifest, [archive])
 
+    def test_driver_manifest_binds_exact_ci_producer_and_embedded_abi(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "libQcomSdcard.a"
+            archive.write_bytes(b"archive")
+            manifest_path = root / "driver-manifest.json"
+            data = {
+                "integration": {"role": "tf-storage", "force_load": True},
+                "archive": {"path": "libQcomSdcard.a", "sha256": MODULE.sha256_file(archive)},
+                "source": {"sha256": "a" * 64},
+                "xnu": {"commit": "xnu-pin"},
+                "iostorage": {"commit": "iostorage-pin"},
+                "ci_provenance": {
+                    "run_id": 123, "artifact_name": "r208-native-sdcard-123",
+                    "head_sha": "b" * 40, "head_branch": "topic",
+                    "workflow_name": "R208 TF validation",
+                },
+                "kext_abi": {
+                    "status": "passed", "config_embedded": 1,
+                    "apple_kext_vtable_padding": 0, "apple_kext_align_containers": 1,
+                },
+                "archive_kext_abi": {"status": "passed", "reserved_abi_imports": []},
+            }
+            manifest_path.write_text(json.dumps(data))
+            expected = {
+                "run_id": 123, "name": "r208-native-sdcard-123", "head_sha": "b" * 40,
+                "head_branch": "topic",
+                "sha256": MODULE.sha256_file(archive), "archive": "libQcomSdcard.a",
+                "source_sha256": "a" * 64, "xnu_commit": "xnu-pin",
+                "iostorage_commit": "iostorage-pin",
+                "driver_manifest_sha256": MODULE.sha256_file(manifest_path),
+            }
+            MODULE.validate_driver_manifest(manifest_path, [archive], expected=expected)
+            data["ci_provenance"]["run_id"] = 124
+            manifest_path.write_text(json.dumps(data))
+            with self.assertRaisesRegex(SystemExit, "producer run_id"):
+                MODULE.validate_driver_manifest(manifest_path, [archive], expected=expected)
+
     def test_driver_archive_requires_manifest(self):
         with self.assertRaisesRegex(SystemExit, 'requires --driver-manifest'):
             MODULE.load_driver_integration([Path('/tmp/libQcomSdcc.a')], None)

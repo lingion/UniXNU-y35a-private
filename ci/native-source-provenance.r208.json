@@ -22,6 +22,13 @@
     "libdispatch": "libdispatch-1477.100.9",
     "libplatform": "libplatform-177.270.1"
   },
+  "native_input_commits": {
+    "availability": "f17c3d161f882128fb55324d3fb92adb6a7a6f7b",
+    "libdispatch": "30fe6a7d945340ce69cef121132f049e810089a5",
+    "libplatform": "26a76f6563c7bf6472159b772349ff1ca599f8fb",
+    "llvm": "58c46bae21181fb4240cf964461bea738d96d50e",
+    "libc": "899a3b2d52d95d75e05fb286a5e64975ec3de757"
+  },
   "build_policy": {
     "executor": "GitHub Actions",
     "local_build_allowed": false,
