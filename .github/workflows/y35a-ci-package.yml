@@ -132,7 +132,7 @@ on:
         default: ''
         type: string
       control_package_artifact_digest:
-        description: Exact artifact API digest, including sha256: prefix
+        description: 'Exact artifact API digest, including sha256: prefix'
         required: false
         default: ''
         type: string
@@ -142,7 +142,7 @@ on:
         default: ''
         type: string
       control_root_tree_artifact_digest:
-        description: Exact root-tree.tar artifact API digest, including sha256: prefix
+        description: 'Exact root-tree.tar artifact API digest, including sha256: prefix'
         required: false
         default: ''
         type: string
