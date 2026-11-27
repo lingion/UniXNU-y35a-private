@@ -1,8 +1,8 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-27T07:33:09Z
+Updated: 2026-11-27T07:44:47Z
 Mission: IN_PROGRESS (D1 NOT_MET, D2 NOT_MET, D3 NOT_MET). The milestone below is offline only and is not mission completion.
-Milestone: `NATIVE_BUILD_REPAIR`. Native run `45956827212` on `bd7615046eb01a42e74fa0a3e6194331e0557a29` failed during the actual build and emitted no kernel artifact. Mainline is repairing the libdispatch 1477 Firehose/atomic-private input closure for the next exact-SHA CI run. Actions starts successfully. Package run `45957683974` validated contracts but skipped native resolution and package/TF jobs because it was a push event without native artifact inputs. All local UniXNU compilation is disabled on every disk.
+Milestone: `NATIVE_BUILD_RUNNING`. Native run `45956827212` on `bd7615046eb01a42e74fa0a3e6194331e0557a29` failed during the actual build and emitted no kernel artifact. Repair commit `e007c2ed6cf09038ed32d6e99c6d394f50628606` restores the libdispatch 1477 Firehose API and adds a provenance-bound atomic-private compatibility header. Native execute run `45960088944` is in progress on that exact SHA at `Fetch native input sources`; TF validation `45960008744` passed. Package dispatch SHA binding exists, but consumption of a successful native artifact remains unverified. All local UniXNU compilation is disabled on every disk.
 Authority: intended /Volumes/Mobile/unixnu-research/UniXNU-y35a; current writable metadata mirror /Users/lingion_k/unixnu-y35a-private-sync; /Volumes/Mobile currently returns I/O errors.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
 Workspace: /Volumes/Mobile/unixnu-research stores source caches, run roots, CI artifacts, backups and raw only when readable; /Volumes/Portable is temporary staging only. No local UniXNU compilation, linking or large builds. External Git metadata restored, core.filemode=false, and fsck passed.

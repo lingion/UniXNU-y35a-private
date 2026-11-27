@@ -3078,3 +3078,9 @@ device_run_allowed=false；persistent writes: none；未触碰设备、未本机
 事实: Native run `45956827212` 绑定 package branch commit `bd7615046eb01a42e74fa0a3e6194331e0557a29`，进入实际 native build 后失败，未产出 kernel artifact。日志与主线最新消息表明 genassym、monotonic header、patch 和 manifest 前置检查已通过，剩余失败指向 XNU 4903 所需 Firehose 配置 API 与 selected libdispatch 输入不匹配。主线正在恢复 libdispatch 1477 API 并加入 provenance-bound atomic-private compatibility header。Actions 已成功启动。package contract run `45957683974` 成功，但因 push 事件没有 native artifact 输入，native resolution 和 package/TF jobs skipped。package branch commit `c30f085` 加入显式 native branch/SHA dispatch inputs，真实成功 native artifact 的消费仍待验证。
 修订: 移除 LIVE-TARGET 和 STATE 中已过期的 Billing blocker 与下一步，补充当前 run、实际 build 失败、活动修复及 package workflow 验证边界。清理 LIVE-TARGET 重复标题。GOAL 将“两轮无设备验证即停并请求用户决策”改为停止重复的无进展子任务、继续其他可执行路径，只有缺少具体用户输入且没有替代路径时才请求用户处理。
 裁决: Mission `IN_PROGRESS`; D1/D2/D3 `NOT_MET`; `device_run_allowed=false`. 本次只更新目标、状态与审计文档，未运行 UniXNU build、测试、静态门禁或设备操作。
+
+## 2026-11-27T07:44:47Z — Firehose 输入修复已派发 native CI
+
+类型: CI-STATUS / MILESTONE
+事实: package branch commit `e007c2ed6cf09038ed32d6e99c6d394f50628606` 统一 libdispatch 1477 Firehose API，并加入 provenance-bound atomic-private compatibility header。Native execute run `45960088944` 绑定该完整 SHA，当前状态 `in_progress`，当前步骤 `Fetch native input sources`。TF validation run `45960008744` 成功。Main documentation commit `580330d49ea04b94445d56be60d466f29b35d716` 已推送，GitHub validation run `45960185781` 与 Docs run `45960185715` 均成功。
+裁决: 45960088944 尚无终态，不能据此认定 native build 或 kernel artifact 成功。Mission `IN_PROGRESS`; D1/D2/D3 `NOT_MET`; `device_run_allowed=false`。本次更新实时目标快照与状态索引，没有执行本机 UniXNU build、测试、静态门禁或设备操作。

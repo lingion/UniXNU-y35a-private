@@ -1,6 +1,6 @@
 # UniXNU 当前实时目标
 
-更新时间：2026-11-27。每次恢复和每轮开始先读此文件。本文只描述当前阶段，阶段变化必须同步 `STATE.md`、`CURRENT.md`、`LONG-RUN-STATE.md` 和 `LOG.md`。
+更新时间：2026-11-27 07:44 UTC。每次恢复和每轮开始先读此文件。本文只描述当前阶段，阶段变化必须同步 `STATE.md`、`CURRENT.md`、`LONG-RUN-STATE.md` 和 `LOG.md`。
 
 ## 任务状态（最高优先级，不随阶段变化）
 
@@ -17,10 +17,11 @@ MISSION: IN_PROGRESS | D1 NOT_MET | D2 NOT_MET | D3 NOT_MET
 ## 当前执行状态
 
 - 截至 2026-11-27 07:33 UTC，MISSION 为 `IN_PROGRESS`，D1、D2、D3 均为 `NOT_MET`，`device_run_allowed=false`。
-- Native execute run `45956827212` 绑定提交 `bd7615046eb01a42e74fa0a3e6194331e0557a29`，已在实际 native build 步骤失败，没有 kernel artifact。失败后的主线修复正在将 Firehose 输入切回包含 XNU 4903 所需配置 API 的 libdispatch 1477，并为其 atomic private header 补兼容输入。
+- Native execute run `45956827212` 绑定提交 `bd7615046eb01a42e74fa0a3e6194331e0557a29`，已在实际 native build 步骤失败，没有 kernel artifact。修复已推送到 package 分支提交 `e007c2ed6cf09038ed32d6e99c6d394f50628606`，统一采用 libdispatch 1477 Firehose API，并加入 provenance-bound atomic-private compatibility header。
+- 当前 native execute run `45960088944` 绑定 `e007c2ed6cf09038ed32d6e99c6d394f50628606`，状态为 `in_progress`，当前步骤为 `Fetch native input sources`。同提交的 TF validation run `45960008744` 成功。等待该唯一 native run 进入实际 build 并取得终态。
 - Package 分支最新已推送提交为 `c30f0852346a7ec1b9cfcb8c04c83b7fb431a102`。package workflow 的合同验证 run `45957683974` 成功，但 native-run 校验步骤以及 package 和 TF/APFS jobs 被跳过。`workflow_dispatch` 对真实成功 native artifact 的消费仍待验证。
 - GitHub Actions 当前能够启动。Billing 不再是当前阻塞条件。stock PD1502A QCDT 仍未取得可核验来源，Mobile 卷读取曾返回 I/O error。该输入影响后续 TF/APFS 设备包闭环，不阻止 native kernel build 继续推进。
-- 当前下一步是完成 Firehose 1477 与 atomic compatibility 输入修复，推送后由 GitHub Actions 验证，再以新 native run 的真实终态决定下一步。只有成功且哈希绑定的 kernel artifact 才能进入 package/probe 流程。
+- 当前下一步是跟踪 `45960088944` 的输入准备、实际 build 和产物闭包。若生成成功且哈希绑定的 kernel artifact，再用 package workflow 的显式 native run、branch 和 SHA 输入验证消费路径。
 - 真机、TF 卡、USB、fastboot、adb 和串口目前均未操作。native build、package、TF/APFS、root selection、eMMC fallback 和设备运行仍需各自证据闭环。
 
 ## 历史事实与边界
