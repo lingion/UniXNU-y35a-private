@@ -1380,3 +1380,14 @@ Main `43ae09a` adds the opt-in `XNU_Y35A_STORAGE_FALLBACK` candidate patch, boun
 ## 2026-11-26 R208 native execute source-tree cleanliness blocker
 
 Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e378f61` reached `Run native build` but stopped before kernel compilation because `run_native_build.py` rejected `/Users/runner/work/_temp/xnu` as dirty. The preceding host-tool preparation rewrote `bsd/kern/makekdebugevents.py` without a verified restore in the executed input path. No kernel artifact was emitted. This is a CI preparation failure; the isolated restoration fix must pass a new run before another execute build. `device_run_allowed=false`.
+## 2026-11-28 R208 package offline-control status
+
+The final project goal remains an iOS 12.4.1 boot on vivo Y35A with D1/D2/D3 device evidence; none is met. This entry supersedes the older R208 summaries below for current package work.
+
+On topic commit `a739997574207411b916c0c04b10849f3e9ac508`, host-validation run `46047857330` passed. Package workflow run `46047857312` passed its contract validation (63 tests) but skipped the actual package jobs because it was push-triggered. Manual run `46047971221` successfully verified/downloaded package run `46038856167` artifacts `15218633072` and `15219732795`, created/attached the APFS image, copied the root tree, then failed when `hdiutil pmap -simple` tried to open the still-attached image (`Resource temporarily unavailable`). No offline-control artifact was uploaded.
+
+Commit `518f8f4` unmounts and detaches the image before reading its pmap and adds a command-order regression test. It is not yet validated by Actions. Derived-QCDT output remains offline-control-only; stock PD1502A QCDT provenance, root selection/fallback implementation, device package and runtime qualification remain open. `device_run_allowed=false`; no device or TF operation occurred.
+
+Next: commit/push the exact ordering fix and record, wait for exact-SHA Actions validation, then dispatch one offline-control run using the same still-valid package/root-tree artifact pair. Do not treat that result as device readiness.
+
+## 2026-11-26 R205b paired MVE adjudication

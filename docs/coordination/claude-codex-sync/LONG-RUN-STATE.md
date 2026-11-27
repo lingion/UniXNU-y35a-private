@@ -1138,3 +1138,14 @@ Main `43ae09a` adds the opt-in `XNU_Y35A_STORAGE_FALLBACK` candidate patch, boun
 ## 2026-11-26 R208 native execute source-tree cleanliness blocker
 
 Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e378f61` stopped before kernel compilation because the staged XNU checkout was dirty after host-tool preparation. No kernel artifact was emitted. The next CI input revision must restore `bsd/kern/makekdebugevents.py` before the native runner snapshots the source tree, then pass a new execute run; keep package/probe and device stages pending.
+## Current queue — 2026-11-28 R208 offline-control
+
+The overall Y35A iOS 12.4.1 goal is still unmet: D1/D2/D3 remain `IN_PROGRESS / NOT_MET`, with no verified iOS or interactive SpringBoard boot. Current side task is only the CI-generated derived-QCDT GPT/APFS offline-control intermediate.
+
+Commit `a739997574207411b916c0c04b10849f3e9ac508`: host-validation `46047857330` passed; package workflow `46047857312` ran 63 contract tests successfully but skipped actual package jobs. Manual offline-control `46047971221` passed artifact identity/download and APFS/root-tree preparation, then failed at pmap because the image remained attached (`Resource temporarily unavailable`). No control artifact was emitted.
+
+Commit `518f8f4` moves `hdiutil pmap` after successful unmount/detach and adds a command-order test. Next: push and require exact-SHA Actions validation, then one offline-control dispatch using verified inputs from package run `46038856167` (artifact IDs `15218633072`, `15219732795`). Keep `device_run_allowed=false`; no local validation, device or TF operations.
+
+Open downstream inputs: stock PD1502A QCDT provenance, kernel-linked TF root selection and eMMC fallback, TF system package/probe, card binding and device evidence. Derived QCDT remains offline-only.
+
+## R205b queue (historical)

@@ -1,27 +1,32 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-26T20:29:24Z
-Milestone: R208 TF/SD source, host, root-selection, NativeSdcard object, IOStorageFamily archive and Docs gates passed in CI; native execute build is blocked in CI input preparation before kernel link. All local UniXNU compilation is disabled on every disk.
-Authority: intended /Volumes/Mobile/unixnu-research/UniXNU-y35a; current writable metadata mirror /Users/lingion_k/unixnu-y35a-private-sync; /Volumes/Mobile currently returns I/O errors.
-Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
-Workspace: /Volumes/Mobile/unixnu-research stores source caches, run roots, CI artifacts, backups and raw only when readable; /Volumes/Portable is temporary staging only. No local UniXNU compilation, linking or large builds. External Git metadata restored, core.filemode=false, and fsck passed.
-Staging: /Volumes/Portable/UniXNU-staging-20261127-0042; manifest SHA a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538; source commit 68b2cf91038fedb1ccacdc5950223ef618d8215e; 1424/1424 verified.
-LKG: /Volumes/Mobile/unixnu-research/device-backups/efff9d92-20261119/ has only boot.current.img and lk2nd.current.img; full backup and EDL/firehose remain unverified.
-Storage candidate: user authorized future writes to the phone TF/SD card. Official Y35A data says 16GB ROM and up to 128GB TF expansion; stock dtb10 exposes removable sdhc2 with 4-bit bus and card-detect GPIO38.
-SD qualification: current lk2nd/XNU path is still sdhc1 eMMC-only; SD boot, sdhc2 protocol, root mount, and exact card binding remain unverified. No SD/device write occurred.
+Updated: 2026-11-28
+Final goal: iOS 12.4.1 running on Y35A; D1/D2/D3 IN_PROGRESS / NOT_MET. No verified iOS or interactive SpringBoard boot is recorded.
+Current stage: R208 package CI, offline derived-QCDT GPT/APFS control image only.
+Current branch: `codex/unixnu-ci-package-v2`; source fix commit `518f8f4` contains the detach-before-pmap change; Actions validation pending.
+Device: not queried this turn; no device/USB/fastboot/adb/serial/TF operation performed. `device_run_allowed=false`.
+Persistent writes: none this turn. Full partition backup and EDL/firehose recovery remain unverified.
 
-Current gates:
-- R206 offline/binding gates passed; R206 paired MVE failed after candidate boot. Do not repeat R206.
-- R207 v1 was rejected before make due to corrupt patch hunk. R207 v2 patch SHA `05e9822905d6187a22009d957ffa350354ff11f53bd31b846b754b41f8f88f84` passes apply-check against R206 staged source.
-- R207 v2 external builder PID 90604 was terminated per user instruction. It produced no provenance or kernel artifact. Do not restart it or run any local UniXNU build on any disk.
-- R208 TF candidate is offline-only: SD protocol host suite, sdhc2 ADT contract, root-selection positive/negative contract, TF/eMMC fallback contract, NativeSdcard object, IOStorageFamily combine/archive and Docs gates are green. Main validation run `45884101324` (`host-validation`) and Docs run `45884101618` (`build`) passed; latest TF validation `45887232679` passed all jobs on main commit `425ec007c2973fc14c81f64f14898138340cca3c`. No verified kernel/package/device evidence is recorded.
-- R208 object closure is bound by NativeSdcard object `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`, combined object `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`, and deterministic archive `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`. Native plan-only run `45882865622` passed on main commit `53966d60ea558dae8a12c795736e8418bcc8cca9`; no kernel artifact exists because execute=false. Fallback implementation remains unverified even though its offline contract is green; candidate patch `native-y35a-tf-emmc-root-fallback.patch` is apply-check verified but not in native build inputs.
-- Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e378f61` failed before kernel build because `run_native_build.py` found the staged XNU checkout dirty after host-tool preparation; no kernel artifact was emitted. This is a CI input-preparation blocker, not a kernel or driver result. The isolated fix must restore `bsd/kern/makekdebugevents.py` before source snapshot and pass a new CI run.
-- Historical failures: Native runs `45838744656` and `45838740886` on commit `4c817f03fbd5a0611fadfd2675381c32ae995363` failed at `Compile NativeSdcard object`; later successful runs supersede them.
+## Latest CI facts
 
-Next:
-1. Land and validate the isolated native-input restoration fix, then run one `execute=true` native build on the exact package-stage SHA.
-2. Use that successful run's `unixnu-kernel-${run_id}` artifact as the only package input; package/probe and TF/root/fallback gates remain downstream.
-3. Keep runtime qualification and device_run_allowed false; do not run local UniXNU compilation on any disk.
+- `46047857330` on `a739997` passed `host-validation`.
+- `46047857312` on `a739997` passed `Test package contracts` and design contract; its package, TF intermediate and offline-control jobs were skipped because this was a push event.
+- `46047971221` on `a739997` ran `tf-apfs-offline-control`. Package identity and both artifact downloads passed; image creation, APFS attach, root-tree copy and earlier metadata checks proceeded. It failed at `hdiutil pmap -simple` with `Resource temporarily unavailable` because the image was still attached. No offline-control artifact was uploaded.
+- Inputs were package run `46038856167`, package artifact `15218633072` / `sha256:620a39a1d222fb2c2ae2bbe62ad180ca103984e9c325bea870a0aba2e341ea76`, and root-tree artifact `15219732795` / `sha256:2437d3f1cb521dc9a6f39918e4ff6de5dc6171019cc652f9e7f236c19a4638bc`.
 
-Active agents: none. Persistent writes: none.
+## Current work and gates
+
+- Commit `518f8f4` unmounts and detaches the APFS image before reading `hdiutil pmap`; a regression test asserts command order. This exact change still needs CI validation.
+- Current `hdiutil pmap` parser accepts only an explicit top-level GPT/GUID scheme. GPT, APFS, and whole-disk/volume/parent identity are separate required facts.
+- Xattr CLI fallback now uses `xattr -px` and decodes raw bytes before hashing. The structural fallback test passed in the 63-test Actions validation on `a739997`; the byte-equivalence change is pending Actions validation.
+- Derived QCDT control images must remain `offline-control-only`, `bootable=false`, `ios_system_image=false`, and `device_run_allowed=false`.
+- Trusted stock PD1502A QCDT provenance remains unavailable. No true TF system package, kernel-linked root selection, eMMC fallback implementation, card binding, or device qualification is established.
+- No local UniXNU build, test, lint, diff-check, static gate, package or image validation is allowed. Accidental local `git diff --check` output from this turn is explicitly excluded as evidence.
+
+## Next actions
+
+1. Commit/push the detach-before-pmap ordering fix and its CI regression test; wait for exact-SHA host/package validation.
+2. If validation passes, run one offline-control dispatch against the same verified package and root-tree artifacts; record actual job result and artifact hashes.
+3. Keep the main goal D1/D2/D3 unmet. Do not claim device readiness or start device/TF work from an offline-control result.
+
+Workspace: `/Users/lingion_k/unixnu-ci-package-worktree` is the active package topic worktree. `/Volumes/Mobile` has previously returned I/O errors; do not scan or write it. `/Volumes/Portable` is temporary staging only.

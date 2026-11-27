@@ -1,47 +1,32 @@
-# UniXNU 当前实时目标
+# UniXNU 实时目标
 
-更新时间：2026-11-27。每次恢复和每轮开始先读此文件。本文只描述当前阶段，阶段变化必须同步 `STATE.md`、`CURRENT.md`、`LONG-RUN-STATE.md` 和 `LOG.md`。
+更新时间：2026-11-28。项目最终目标是 iOS 12.4.1 在 vivo Y35A 真机启动并可用；当前未证明真机进入 iOS 或可交互 SpringBoard。D1、D2、D3 均为 `IN_PROGRESS / NOT_MET`。
 
-## 当前主目标
+## 最终验收
 
-完成 R208 TF/SD 启动链的离线闭环。所有可复现的 UniXNU 编译、链接、主机验证、静态门禁、package/probe plan 和产物 hash closure 只在 GitHub Actions 执行，并以真实 CI run 及其绑定产物为准。任何本机磁盘都不得运行 UniXNU 编译、链接或大规模构建。R205、R205b、R205c、R206 均为历史候选，不得重跑。R207 v2 builder 已终止，禁止重启。
+- D1：同一确定镜像在 Y35A 上连续三次进入 launchd，每次稳定运行十分钟，并有绑定该镜像的现场证据。
+- D2：进入 SpringBoard，显示真实系统界面，触摸与实体按键可交互。
+- D3：按项目目标完成其余系统/驱动稳定性验收。
+- 离线门、CI 绿灯、RAM diagnostic package、APFS control image 都是中间产物，不代表任何设备启动完成。
 
-## 当前事实
+## 当前子任务：R208 离线 GPT/APFS 控制镜像
 
-- R206 已通过 build、static verification、linked guard/order、binding、package 和 probe gates。
-- R206 唯一一次 RAM-only paired MVE 在 candidate boot 后断联，candidate/final raw 缺失，设备已回到 `efff9d92 / lk2nd-msm8916 / unlocked fastboot`，无持久写入。
-- R204b fresh final 含 `PEBARGRT`，R206 slot `0x52` 无重复 writer，marker carrier transport 尚未被证据定位为根因。
-- R207 设计保留首次 `*args` 读取和空值分支，移除 `ARG1RD00` 写入。设计文件为 `/Volumes/Mobile/unixnu-research/reboot-checkpoints/R207-bootargs-read-no-marker-control-design-20261126-01/R207-control-plan-v2.json`。
-- R207 v1 已因损坏 patch 失败。R207 v2 外置盘 builder PID 90604 已按用户要求终止，未产生 provenance 或 kernel artifact。R207 不得重启或在任何本机磁盘重新构建。
-- 当前 `device_run_allowed=false`。R207 不再是当前主线目标，不能抢占 R208 的 CI 和 TF/SD 工作。
-- R208 已完成 SD 协议 host suite、sdhc2 ADT contract、root-selection positive/negative contract、TF/eMMC fallback contract、NativeSdcard object compile、IOStorageFamily-191 combine、确定性 archive 和 Docs CI。main 的 validation run `45884101324` 与 Docs run `45884101618` 均成功；最新 TF validation `45887232679` 全绿，绑定 main commit `425ec007c2973fc14c81f64f14898138340cca3c`; this state correction is included in main `2b45f50`. XNU kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback implementation 和设备运行仍未完成。候选 XNU fallback patch 已单独通过 pinned XNU apply-check，但尚未进入 native manifest。
-- 本轮对 `/Volumes/Mobile` 的访问返回 `Input/output error`，未对该卷继续扫描或写入。`/Volumes/Portable` 已确认可用，仅作为临时 staging 盘；它不是 canonical 工作树，也不运行 UniXNU 编译。
-- 临时 staging `/Volumes/Portable/UniXNU-staging-20261127-0042` 已按提交 `68b2cf91038fedb1ccacdc5950223ef618d8215e` 导出；manifest SHA-256 为 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`，逐文件校验 1424/1424 通过。
-- native-link 当前状态：plan-only run `45882865622` 在 commit `53966d60ea558dae8a12c795736e8418bcc8cca9` 通过，但 execute run `45888048634` 在 CI 输入准备后发现 XNU checkout dirty，未进入 kernel build，也没有 kernel artifact。当前必须先验证 host-tool 临时改写的恢复闭包，再对包含 package stage 的精确 SHA 执行一次 `execute=true` native build。package workflow 仍等待 successful execute run artifact。
-- TF/SD 设备路线当前只允许离线工作。TF 卡容量、sdhc2 协议、card-detect、root mount、回退到 eMMC 和真实卡绑定都没有实机证据。
-- R208 CI manifest 已绑定 exact XNU ref、六个 arm-driver patch 的 SHA 和 native build profile。NativeSdcard object SHA-256 为 `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`，combined object SHA-256 为 `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`，确定性 archive SHA-256 为 `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`。较早的 object/header 失败 runs 保留在 `LOG.md`，不再作为当前状态。
+所有 UniXNU 编译、测试、静态验证、package 与 image 验证只允许在 GitHub Actions。本机只编辑和被动读取，不运行任何本地 UniXNU 验证命令。设备、USB、fastboot、adb、串口、TF 卡和持久分区本轮均未操作；`device_run_allowed=false`。
 
-## 同步和编译策略
+当前 topic 分支为 `codex/unixnu-ci-package-v2`。提交 `fdb347873c765cec278cb1c4ac554606a7e9f711` 加入 GPT scheme 与设备关系校验、xattr fallback 字节一致性；`a739997574207411b916c0c04b10849f3e9ac508` 同步 SOP/lessons；`518f8f4` 修复 pmap 查询时镜像仍 attached 的时序。后两项 run `46047857330` host validation 成功，`46047857312` package contract 成功并运行 63 个测试，但其实际 package jobs 按 push 事件跳过。`518f8f4` 的具体 Actions 验证仍待执行。
 
-私有同步仓库为 `https://github.com/lingion/UniXNU-y35a-private`。代码、目标、SOP、skills、CI 配置和证据元数据持续同步到该仓库。移动硬盘只承载源码缓存、run roots、CI 下载产物、设备备份和 raw。所有可复现构建与验证走 GitHub Actions。真机 USB、设备锁和 CI 无法访问的本地输入留在本机，不能触发本地 UniXNU 编译。
+手动 offline-control run `46047971221` 使用已绑定输入：package run `46038856167`、RAM artifact `15218633072`，root-tree artifact `15219732795`。输入身份、下载、APFS image 创建、root-tree 写入和前置 metadata 检查均通过；在 image 仍 attached 时调用 `hdiutil pmap -simple` 失败，stderr 为 `Resource temporarily unavailable`。没有上传 control artifact。提交 `518f8f4` 已改为先成功 unmount/detach，再读取 image partition map，并加入命令顺序测试；仍待 Actions 验证。
 
-## 本轮允许的动作
+该控制镜像使用 derived QCDT，只能标为 `offline-control-only`。stock PD1502A QCDT provenance、生产系统 root、kernel root selection、TF 卡绑定、eMMC fallback 实现、真正 TF/APFS system package、boot/probe 资格仍未闭合。不得称为可上机包或 iOS 启动成功。
 
-1. 保持 R207 builder 已终止，不在任何本机磁盘重启构建。
-2. 在 GitHub Actions 上补齐 native kernel-link 所需的 fakeroot、SDK overlay、wrapper、source provenance 和 driver archive 输入闭包。
-3. 完成 TF GPT/APFS layout、eMMC fallback、sdhc2 card-detect 和 root selection contract 的离线验证。
-4. 生成 R208 package/probe plan 和 artifact hash closure，保持 `device_run_allowed=false`。
-5. 主线或独立 evidence agent 完成后，更新状态摘要和 lessons。
+## 下一步
 
-## 本轮禁止的动作
+1. 将 detach-before-pmap 修复与 R208 状态记录提交并推送私有 topic 分支。
+2. 先确认该精确 SHA 的 Actions validation 成功，再用同一已验证 package/root-tree artifacts 跑一次离线控制镜像。
+3. 按 run 的真实终态更新状态和账本。若 control image 上传成功，仍保持 offline-only；下一关键外部输入是可信 stock PD1502A QCDT 来源及 kernel 内 TF root/fallback 实现闭环。
 
-- 重跑 R205、R205b、R205c 或 R206。
-- 在任何本机磁盘复制构建输入后启动 UniXNU 本地编译、链接或大规模构建。
-- 操作 Y35A、USB、fastboot、adb、串口或持久分区。
-- 在 CI manifest、package、probe、TF image 和回退方案全部通过前写 TF 卡或启动 TF 候选。
-- 使用旧 manifest、旧 probe、旧地址或旧 gate SHA 冒充 R207 结果。
-- 把 derived DT 或缺失 stock boot provenance 写成 stock 证据。
+## 持久化和恢复边界
 
-## 下一条可执行动作
-
-根据 R208 GitHub Actions 结果修正 native input preparation 的源树恢复闭包，再执行一次精确绑定的 native link；随后补齐 package/probe 和 hash closure。失败先追加 lessons，再修正 CI 或输入。NativeSdcard、TF image、root mount 和 fallback 未闭合前不写卡、不启动设备。任何本机磁盘上的 UniXNU 编译保持关闭。
+- 所有本机磁盘禁止 UniXNU 编译、链接、测试、静态门禁、package/image 验证；CI 失败时修复 CI，不回退本地。
+- `device_run_allowed=false`。不写 TF、eMMC、GPT 或启动链，不操作设备。
+- 备份目录目前只有旧的 `boot.current.img` 与 `lk2nd.current.img` 候选；全分区备份及 EDL/firehose 恢复仍未验证，任何持久写入继续禁止。

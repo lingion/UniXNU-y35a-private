@@ -320,7 +320,7 @@
 - 影响：The GPT scheme could not be read and no offline-control image artifact was uploaded. This run does not show an invalid GPT image or a failure in root-tree copy.
 - 正确做法：After sync and diskutil info capture, successfully unmount the APFS volume and detach the image, then read `hdiutil pmap -simple` from the backing file. If unmount or detach fails, stop before scheme validation and keep cleanup best-effort in `finally`.
 - 证据：GitHub Actions run `46047971221`, commit `a739997574207411b916c0c04b10849f3e9ac508`, step `Build non-bootable derived-QCDT control image`; stderr was `hdiutil: pmap: unable to open ... - Resource temporarily unavailable`.
-- 自动化入口：`detach_and_read_partition_map()` and `test_partition_map_read_waits_for_unmount_and_detach` in the TF/APFS builder and tests.
+- 自动化入口：Commit `518f8f4` adds `detach_and_read_partition_map()` and `test_partition_map_read_waits_for_unmount_and_detach` in the TF/APFS builder and tests.
 - 下一次触发：Any hdiutil operation that reads an image backing file after a mounted image was modified.
 
 ## L-2026-11-28-09 hdiutil pmap requires the image to be detached
