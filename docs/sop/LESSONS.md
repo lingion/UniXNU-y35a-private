@@ -221,3 +221,24 @@
 - 证据：Codex local session command history for this task; no claim is derived from its result.
 - 自动化入口：`.github/workflows/unixnu-validation.yml` and the candidate-specific GitHub Actions workflows.
 - 下一次触发：Any UniXNU change review or pre-commit check.
+
+## L-2026-11-27-05 GitHub artifact directories do not preserve filesystem metadata
+
+- 现象：R208 的 RAM package 上传 `root-tree/` 目录供后续 TF/APFS job 使用，但 APFS root tree 的可执行位、owner、ACL 和 extended attributes 会参与 tree identity 与启动语义；普通目录 artifact 的传输模型不能作为文件系统快照。
+- 根因：package job 的 `tree_sha256` 覆盖内容和元数据，而 Actions artifact 目录传输不保证保留 Unix mode。后续 runner 若直接使用下载目录，无法把原始构建树与恢复后的树等同。
+- 影响：TF/APFS 中间镜像可能从被改变权限或 ACL 的树构造，或者跨 runner 的哈希比较拒绝有效输入；目录存在和文件内容 SHA 一致不足以闭合 filesystem provenance。
+- 正确做法：将 root tree 封装为单个 PAX tar 作为权威传输输入；使用 `actions/upload-artifact@v7` 的 `archive: false` 单文件 artifact，并由 `actions/download-artifact@v8` 直接取回；附逐路径 metadata manifest 和 archive SHA；在 macOS producer 端用 metadata-aware extraction 做 round-trip tree hash。macOS 用 `--mac-metadata` 保存原生 ACL/resource metadata，另保存 xattrs 和 file flags，不用 `--acls` 把扩展 ACL 转换成 NFSv4 表示。consumer 校验 package run、两个 artifact ID/API digest、branch/commit、archive SHA 和恢复树 manifest 后才构建。普通目录 artifact 仅作浏览副本。
+- 边界：derived-QCDT 生成的 GPT/APFS 镜像必须标记为 offline-control-only、non-bootable、non-system-image、`device_run_allowed=false`，不得覆盖 stock QCDT 或 TF 设备资格。
+- 证据：GitHub Actions upload-artifact 官方说明的 file-permission limitation；R208 package run `46008544189` 成功上传 RAM package、而 `tf-apfs-intermediate` 被 skipped，未产生 TF/APFS 运行证据。
+- 自动化入口：`scripts/ci/build_y35a_ci_package.py`、`scripts/ci/build_y35a_tf_apfs_image.py`、`.github/workflows/y35a-ci-package.yml` 与 `tests/test_y35a_tf_apfs_image.py`。
+- 下一次触发：任何从 GitHub Actions artifact 把系统树交给另一个 runner、container builder 或镜像封装阶段的任务。
+
+## L-2026-11-28-01 local UniXNU diff checks are excluded
+
+- 现象：在 CI-only 项目工作树上再次执行了本机 `git diff --check`。
+- 根因：把通用 Git 文本检查误当成不属于项目静态门禁；实际目标合同明确本机不运行任何 UniXNU 静态验证。
+- 影响：本机命令结果不得作为本次改动通过的证据；当前分支仍需精确 SHA 的 GitHub Actions 验证。
+- 正确做法：本机只做编辑和只读人工代码审阅；所有 diff 检查、测试、门禁和构建都放入 GitHub Actions。提交信息不得写入这次本地命令为验证结果。
+- 证据：本轮本机命令记录；命令退出状态不纳入验收，不据此得出通过结论。
+- 自动化入口：`.github/workflows/y35a-ci-package.yml`。
+- 下一次触发：任何 UniXNU package/workflow 改动的提交或验证。

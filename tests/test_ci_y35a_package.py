@@ -28,6 +28,20 @@ class PackageToolchainContractTest(unittest.TestCase):
         self.assertIn("-Werror for all other diagnostics", workflow)
         self.assertIn("DTC_REVISION: 2d10aa2afe35527728db30b35ec491ecb6959e5c", workflow)
 
+    def test_offline_tf_control_uses_metadata_archive_and_stays_non_device_ready(self):
+        workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
+        self.assertIn("root-tree.tar", workflow)
+        self.assertIn("artifact-ids: ${{ inputs.control_package_artifact_id }}", workflow)
+        self.assertIn("tf-apfs-offline-control:", workflow)
+        self.assertIn("--offline-control-derived-qcdt", workflow)
+        self.assertIn("uses: actions/upload-artifact@v7", workflow)
+        self.assertIn("archive: false", workflow)
+        self.assertIn("uses: actions/download-artifact@v8", workflow)
+        self.assertIn("name: root-tree.tar", workflow)
+        self.assertIn("control_root_tree_artifact_id", workflow)
+        self.assertIn(".device_run_allowed == false", workflow)
+        self.assertIn(".bootable == false", workflow)
+
     def test_toolchain_manifest_binds_pinned_ndk_paths_versions_and_hashes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

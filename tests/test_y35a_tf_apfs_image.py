@@ -1,8 +1,13 @@
 import importlib.util
 import json
+import io
+import os
 from pathlib import Path
+import tarfile
 import tempfile
+import sys
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -16,6 +21,114 @@ SPEC.loader.exec_module(MODULE)
 
 
 class TfApfsImageInputTest(unittest.TestCase):
+    def test_main_offline_control_binds_arguments_by_name(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            archive = root / "root-tree.tar"
+            archive.write_bytes(b"archive")
+            metadata = root / "root-tree.metadata.json"
+            metadata.write_text("{}")
+            qcdt = root / "y35a.qcdt"
+            qcdt.write_bytes(b"qcdt")
+            qcdt_provenance = root / "y35a.qcdt.json"
+            qcdt_provenance.write_text("{}")
+            package_root = root / "package"
+            package_root.mkdir()
+            package_provenance = package_root / "package-provenance.json"
+            package_provenance.write_text("{}")
+            run_json = root / "run.json"
+            run_json.write_text("{}")
+            package_artifact_json = root / "package-artifact.json"
+            package_artifact_json.write_text("{}")
+            tree_artifact_json = root / "tree-artifact.json"
+            tree_artifact_json.write_text("{}")
+            output = root / "image.apfs.img"
+            restored_tree = root / "restored"
+            restored_tree.mkdir()
+            binding = {"tree_sha256": "a" * 64}
+
+            argv = [
+                "build_y35a_tf_apfs_image.py",
+                "--root-tree-archive", str(archive),
+                "--root-tree-metadata", str(metadata),
+                "--qcdt", str(qcdt), "--qcdt-provenance", str(qcdt_provenance),
+                "--output", str(output), "--offline-control-derived-qcdt",
+                "--control-package-provenance", str(package_provenance),
+                "--control-package-root", str(package_root),
+                "--control-package-run-json", str(run_json),
+                "--control-package-artifact-json", str(package_artifact_json),
+                "--control-root-tree-artifact-json", str(tree_artifact_json),
+                "--control-package-branch", "codex/test",
+                "--control-package-run-id", "12345",
+                "--control-package-artifact-name", "y35a-ramboot-12345",
+                "--control-package-artifact-id", "77",
+                "--control-package-artifact-digest", "sha256:" + "b" * 64,
+                "--control-root-tree-artifact-id", "78",
+                "--control-root-tree-artifact-digest", "sha256:" + "c" * 64,
+            ]
+            with mock.patch.object(sys, "argv", argv), \
+                    mock.patch.object(MODULE, "extract_root_tree_archive", return_value=restored_tree), \
+                    mock.patch.object(MODULE, "verify_root_tree_metadata", return_value=binding), \
+                    mock.patch.object(MODULE, "validate_control_package", return_value={"qualification": "offline-control-only"}) as validate, \
+                    mock.patch.object(MODULE, "build_image", return_value={"status": "intermediate-built"}) as build:
+                self.assertEqual(MODULE.main(), 0)
+            validate.assert_called_once()
+            self.assertEqual(validate.call_args.kwargs["root_tree"], restored_tree)
+            self.assertEqual(validate.call_args.kwargs["qcdt_path"], qcdt)
+            self.assertEqual(validate.call_args.kwargs["qcdt_provenance_path"], qcdt_provenance)
+            self.assertEqual(validate.call_args.kwargs["root_tree_archive_path"], archive)
+            self.assertEqual(validate.call_args.kwargs["root_tree_transport"], binding)
+            build.assert_called_once()
+            self.assertEqual(build.call_args.args[0:3], (restored_tree, qcdt, qcdt_provenance))
+            self.assertEqual(build.call_args.kwargs["root_tree_transport"], binding)
+
+    @staticmethod
+    def derived_qcdt(path: Path, provenance_path: Path) -> None:
+        payload = bytearray(b"QCDT" + (3).to_bytes(4, "little") + (1).to_bytes(4, "little") + bytes(40))
+        payload[12:24] = (206).to_bytes(4, "little") + (8).to_bytes(4, "little") + (23).to_bytes(4, "little")
+        payload[44:48] = (2048).to_bytes(4, "little")
+        payload[48:52] = (40).to_bytes(4, "little")
+        payload.extend(bytes(2048 - len(payload)))
+        payload.extend(b"\xd0\x0d\xfe\xed" + bytes(36))
+        path.write_bytes(payload)
+        provenance_path.write_text(json.dumps({
+            "schema_version": 1,
+            "source_type": "derived",
+            "dts_path": "board.dts",
+            "dts_sha256": "a" * 64,
+            "dtc_sha256": "b" * 64,
+            "dtc_revision": "pinned-dtc-commit",
+            "dtb_sha256": "c" * 64,
+            "qcdt_path": path.name,
+            "qcdt_sha256": MODULE.sha256(path),
+            "qcdt_version": 3,
+            "qcdt_entry": {"platform_id": 206, "variant_id": 8, "subtype_id": 23},
+        }))
+
+    def test_derived_qcdt_is_accepted_only_for_offline_control(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "y35a.qcdt"
+            provenance = Path(directory) / "y35a.qcdt.json"
+            self.derived_qcdt(path, provenance)
+            parsed = MODULE.parse_qcdt(path, provenance, offline_control_derived=True)
+            self.assertEqual(parsed["source_type"], "derived")
+            self.assertEqual(parsed["entries"][0]["platform_id"], 206)
+            with self.assertRaisesRegex(ValueError, "stock-qcdt"):
+                MODULE.parse_qcdt(path, provenance)
+
+    def test_stock_qcdt_cannot_be_labeled_as_derived_control(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "stock.qcdt"
+            provenance = Path(directory) / "stock.json"
+            self.derived_qcdt(path, provenance)
+            value = json.loads(provenance.read_text())
+            value.update({"source_type": "stock-qcdt", "board": "PD1502A",
+                          "origin": "stock-boot-image", "sha256_scope": "qcdt-bytes",
+                          "sha256": value["qcdt_sha256"]})
+            provenance.write_text(json.dumps(value))
+            with self.assertRaisesRegex(ValueError, "refuses stock"):
+                MODULE.parse_qcdt(path, provenance, offline_control_derived=True)
+
     def test_non_qcdt_input_is_rejected_before_hdiutil(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "not-qcdt.bin"
@@ -94,6 +207,234 @@ class TfApfsImageInputTest(unittest.TestCase):
             first = MODULE.tree_sha256(root)
             file.chmod(0o755)
             second = MODULE.tree_sha256(root)
+            self.assertNotEqual(first, second)
+
+    def test_root_tree_archive_rejects_parent_traversal(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "unsafe.tar"
+            with tarfile.open(archive, "w") as output:
+                member = tarfile.TarInfo("root-tree/../../outside")
+                member.size = 1
+                import io
+                output.addfile(member, io.BytesIO(b"x"))
+            with self.assertRaisesRegex(ValueError, "unsafe path"):
+                MODULE.validate_root_tree_archive(archive)
+
+    def test_root_tree_archive_preserves_absolute_symlink_semantics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "unsafe-link.tar"
+            with tarfile.open(archive, "w") as output:
+                root = tarfile.TarInfo("root-tree/")
+                root.type = tarfile.DIRTYPE
+                output.addfile(root)
+                link = tarfile.TarInfo("root-tree/escape")
+                link.type = tarfile.SYMTYPE
+                link.linkname = "/private/var"
+                output.addfile(link)
+            result = MODULE.validate_root_tree_archive(archive)
+            self.assertEqual(result["symlinks"], 1)
+
+    def test_root_tree_metadata_manifest_binds_archive_and_restored_tree(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tree = root / "root-tree"
+            tree.mkdir()
+            (tree / "launchd").write_bytes(b"launchd")
+            archive = root / "root-tree.tar"
+            with tarfile.open(archive, "w", format=tarfile.PAX_FORMAT) as output:
+                output.add(tree, arcname="root-tree")
+            manifest = {
+                **MODULE.tree_metadata_manifest(tree),
+                "archive_path": archive.name,
+                "archive_bytes": archive.stat().st_size,
+                "archive_sha256": MODULE.sha256(archive),
+            }
+            metadata_path = root / "root-tree.metadata.json"
+            metadata_path.write_text(json.dumps(manifest, sort_keys=True))
+            result = MODULE.verify_root_tree_metadata(archive, metadata_path, tree)
+            self.assertEqual(result["round_trip"], "passed")
+            (tree / "launchd").write_bytes(b"changed")
+            with self.assertRaisesRegex(ValueError, "restoration differs"):
+                MODULE.verify_root_tree_metadata(archive, metadata_path, tree)
+
+    def test_root_tree_archive_rejects_duplicate_paths(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "duplicate.tar"
+            with tarfile.open(archive, "w") as output:
+                root = tarfile.TarInfo("root-tree/")
+                root.type = tarfile.DIRTYPE
+                output.addfile(root)
+                for content in (b"one", b"two"):
+                    member = tarfile.TarInfo("root-tree/file")
+                    member.size = len(content)
+                    output.addfile(member, io.BytesIO(content))
+            with self.assertRaisesRegex(ValueError, "duplicate path"):
+                MODULE.validate_root_tree_archive(archive)
+
+    def test_package_artifact_api_binding_requires_exact_run_and_digest(self):
+        run = {"databaseId": 12345, "workflowName": "Y35A CI RAM-boot package",
+               "conclusion": "success", "headBranch": "codex/test", "headSha": "b" * 40}
+        artifact = {"id": 77, "name": "y35a-ramboot-12345", "expired": False,
+                    "digest": "sha256:" + "a" * 64,
+                    "workflow_run": {"id": 12345, "head_sha": "b" * 40}}
+        MODULE.validate_package_artifact_api(
+            run, artifact, package_run_id="12345", artifact_id=77,
+            artifact_name="y35a-ramboot-12345", artifact_digest="sha256:" + "a" * 64,
+            expected_branch="codex/test",
+        )
+        bad_artifact = dict(artifact, digest="sha256:" + "b" * 64)
+        with self.assertRaisesRegex(ValueError, "metadata does not match"):
+            MODULE.validate_package_artifact_api(
+                run, bad_artifact, package_run_id="12345", artifact_id=77,
+                artifact_name="y35a-ramboot-12345", artifact_digest="sha256:" + "a" * 64,
+                expected_branch="codex/test",
+            )
+        with self.assertRaisesRegex(ValueError, "selected package Actions run"):
+            MODULE.validate_package_artifact_api(
+                dict(run, headBranch="main"), artifact, package_run_id="12345", artifact_id=77,
+                artifact_name="y35a-ramboot-12345", artifact_digest="sha256:" + "a" * 64,
+                expected_branch="codex/test",
+            )
+        with self.assertRaisesRegex(ValueError, "metadata does not match"):
+            MODULE.validate_package_artifact_api(
+                run, dict(artifact, expired=True), package_run_id="12345", artifact_id=77,
+                artifact_name="y35a-ramboot-12345", artifact_digest="sha256:" + "a" * 64,
+                expected_branch="codex/test",
+            )
+
+    def test_package_control_binding_checks_package_tree_qcdt_run_and_artifact(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            tree = root / "root-tree"
+            (tree / "sbin").mkdir(parents=True)
+            (tree / "usr/lib").mkdir(parents=True)
+            (tree / "sbin/launchd").write_bytes(b"launchd")
+            (tree / "usr/lib/dyld").write_bytes(b"dyld")
+
+            qcdt_path = root / "y35a.qcdt"
+            qcdt_provenance = root / "y35a.qcdt.json"
+            self.derived_qcdt(qcdt_path, qcdt_provenance)
+            archive_path = root / "root-tree.tar"
+            with tarfile.open(archive_path, "w", format=tarfile.PAX_FORMAT) as archive:
+                archive.add(tree, arcname="root-tree")
+
+            qcdt_bytes = qcdt_path.stat().st_size
+            qcdt_provenance_bytes = qcdt_provenance.stat().st_size
+            archive_bytes = archive_path.stat().st_size
+            tree_digest = MODULE.tree_sha256(tree)
+            metadata = {
+                **MODULE.tree_metadata_manifest(tree),
+                "archive_path": archive_path.name,
+                "archive_bytes": archive_bytes,
+                "archive_sha256": MODULE.sha256(archive_path),
+                "entries_sha256": hashlib.sha256(
+                    json.dumps(MODULE.tree_metadata_manifest(tree)["entries"],
+                               sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest(),
+                "round_trip": "passed",
+            }
+            metadata_path = root / "root-tree.metadata.json"
+            metadata_path.write_text(json.dumps(metadata, sort_keys=True))
+            restored_tree_binding = MODULE.verify_root_tree_metadata(archive_path, metadata_path, tree)
+
+            files = {
+                "y35a.qcdt": {"bytes": qcdt_bytes, "sha256": MODULE.sha256(qcdt_path)},
+                "y35a.qcdt.json": {"bytes": qcdt_provenance_bytes,
+                                    "sha256": MODULE.sha256(qcdt_provenance)},
+                "root-tree.tar": {"bytes": archive_bytes, "sha256": MODULE.sha256(archive_path)},
+                "root-tree.metadata.json": {"bytes": metadata_path.stat().st_size,
+                                             "sha256": MODULE.sha256(metadata_path),
+                                             "entries_sha256": metadata["entries_sha256"]},
+            }
+            package_provenance = {
+                "status": "offline-package-complete",
+                "candidate_kind": "launchd-diagnostic-ramboot",
+                "package_source": {"workflow_run_id": "12345", "commit": "b" * 40},
+                "native_build": {"run_id": "23456", "kernel_sha256": "c" * 64},
+                "qualification": {"runtime_qualified": False, "device_run_allowed": False,
+                                  "springboard_included": False,
+                                  "touch_runtime_validated": False, "device_boot": "not-run"},
+                "device_tree": {
+                    "source_type": "derived",
+                    "qcdt_sha256": MODULE.sha256(qcdt_path),
+                    "dts_sha256": json.loads(qcdt_provenance.read_text())["dts_sha256"],
+                    "dtc_sha256": json.loads(qcdt_provenance.read_text())["dtc_sha256"],
+                    "dtc_revision": json.loads(qcdt_provenance.read_text())["dtc_revision"],
+                },
+                "files": {
+                    **files,
+                    "kernel.macho": {"bytes": 1, "sha256": "c" * 64},
+                },
+                "rootfs": {
+                    "tree_sha256": tree_digest,
+                    "tree_archive": {"sha256": files["root-tree.tar"]["sha256"],
+                                     "bytes": archive_bytes,
+                                     "tree_sha256": tree_digest,
+                                     "entries_sha256": metadata["entries_sha256"],
+                                     "entries": metadata["entries"]},
+                },
+            }
+            provenance_path = root / "package-provenance.json"
+            provenance_path.write_text(json.dumps(package_provenance))
+            run = {"databaseId": 12345, "workflowName": "Y35A CI RAM-boot package",
+                   "conclusion": "success", "headBranch": "codex/test", "headSha": "b" * 40}
+            artifact = {"id": 77, "name": "y35a-ramboot-12345", "expired": False,
+                        "digest": "sha256:" + "a" * 64,
+                        "workflow_run": {"id": 12345, "head_sha": "b" * 40}}
+            root_artifact = {"id": 78, "name": "root-tree.tar", "expired": False,
+                             "digest": "sha256:" + "e" * 64,
+                             "workflow_run": {"id": 12345, "head_sha": "b" * 40}}
+            result = MODULE.validate_control_package(
+                tree, qcdt_path, qcdt_provenance, archive_path, provenance_path,
+                restored_tree_binding,
+                run, artifact, root_artifact, "12345", 77, "y35a-ramboot-12345",
+                "sha256:" + "a" * 64, 78, "sha256:" + "e" * 64, "codex/test",
+            )
+            self.assertEqual(result["qualification"], "offline-control-only")
+            self.assertEqual(result["package_source_sha"], "b" * 40)
+
+            metadata["entries"][0]["mode"] ^= 0o111
+            metadata["entries_sha256"] = hashlib.sha256(
+                json.dumps(metadata["entries"], sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
+            metadata_path.write_text(json.dumps(metadata, sort_keys=True))
+            package_provenance["files"]["root-tree.metadata.json"] = {
+                "bytes": metadata_path.stat().st_size,
+                "sha256": MODULE.sha256(metadata_path),
+                "entries_sha256": metadata["entries_sha256"],
+            }
+            provenance_path.write_text(json.dumps(package_provenance))
+            with self.assertRaisesRegex(ValueError, "metadata manifest does not match"):
+                MODULE.validate_control_package(
+                    tree, qcdt_path, qcdt_provenance, archive_path, provenance_path,
+                    restored_tree_binding, run, artifact, root_artifact, "12345", 77,
+                    "y35a-ramboot-12345", "sha256:" + "a" * 64, 78,
+                    "sha256:" + "e" * 64, "codex/test",
+                )
+
+            artifact["digest"] = "sha256:" + "d" * 64
+            with self.assertRaisesRegex(ValueError, "metadata does not match"):
+                MODULE.validate_control_package(
+                    tree, qcdt_path, qcdt_provenance, archive_path, provenance_path,
+                    restored_tree_binding,
+                    run, artifact, root_artifact, "12345", 77, "y35a-ramboot-12345",
+                    "sha256:" + "a" * 64, 78, "sha256:" + "e" * 64, "codex/test",
+                )
+
+    def test_tree_digest_changes_with_xattr_when_supported(self):
+        if not hasattr(os, "setxattr"):
+            self.skipTest("xattrs are unsupported")
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "root"
+            root.mkdir()
+            file = root / "launchd"
+            file.write_bytes(b"launchd")
+            try:
+                first = MODULE.tree_sha256(root)
+                os.setxattr(file, "user.unixnu-test", b"one", follow_symlinks=False)
+                second = MODULE.tree_sha256(root)
+            except (OSError, AttributeError):
+                self.skipTest("filesystem does not permit xattr fixtures")
             self.assertNotEqual(first, second)
 
 

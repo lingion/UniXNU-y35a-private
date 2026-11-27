@@ -24,7 +24,7 @@ import package_native
 
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 from build_y35a_qcdt import build_qcdt
-from build_y35a_tf_apfs_image import tree_sha256
+from build_y35a_tf_apfs_image import extract_root_tree_archive, tree_metadata_manifest, tree_sha256
 from extract_ios12_package_inputs import extract_inputs
 from verify_y35a_trustcache import verify_staged_root
 
@@ -49,6 +49,7 @@ PACKAGE_SOURCE_FILES = (
     "ci/y35a-ci-package-manifest.json",
     "ci/manifests/r208-tf-apfs-package-contract.json",
     "scripts/ci/build_y35a_ci_package.py",
+    "scripts/ci/build_y35a_tf_apfs_image.py",
     "scripts/ci/build_y35a_qcdt.py",
     "scripts/ci/extract_ios12_package_inputs.py",
     "scripts/ci/patch_xnu_host_tools.py",
@@ -440,6 +441,43 @@ def verify_hfs_ramdisk(path: Path) -> dict:
     }
 
 
+def build_metadata_preserving_root_tree_archive(root_tree: Path, archive_path: Path,
+                                                 output_root_tree: Path) -> dict:
+    """Create and round-trip a macOS tar carrying root-tree metadata for CI artifacts."""
+    tar = shutil.which("tar")
+    if not tar:
+        raise RuntimeError("macOS bsdtar is required to archive root-tree metadata")
+    root_tree = root_tree.resolve(strict=True)
+    archive_path = archive_path.resolve()
+    archive_path.parent.mkdir(parents=True, exist_ok=True)
+    subprocess.run(
+        [tar, "--format", "pax", "--xattrs", "--fflags", "--mac-metadata",
+         "--numeric-owner", "-cpf", str(archive_path),
+         "-C", str(root_tree.parent), root_tree.name],
+        check=True,
+    )
+    source_manifest = tree_metadata_manifest(root_tree)
+    with tempfile.TemporaryDirectory(prefix="y35a-root-tree-archive-", dir=archive_path.parent) as temporary:
+        extracted = extract_root_tree_archive(archive_path, Path(temporary))
+        extracted_manifest = tree_metadata_manifest(extracted)
+        if extracted_manifest["tree_sha256"] != source_manifest["tree_sha256"]:
+            raise ValueError("root-tree metadata archive round-trip changed the tree hash")
+        if output_root_tree.exists():
+            raise ValueError(f"refusing to overwrite existing root-tree output: {output_root_tree}")
+        shutil.move(str(extracted), str(output_root_tree))
+    return {
+        **extracted_manifest,
+        "path": archive_path.name,
+        "bytes": archive_path.stat().st_size,
+        "sha256": sha256(archive_path),
+        "entries_sha256": hashlib.sha256(
+            json.dumps(extracted_manifest["entries"], sort_keys=True, separators=(",", ":")).encode()
+        ).hexdigest(),
+        "metadata": ["numeric-owner", "posix-mode", "mac-acl", "extended-attributes", "symlinks"],
+        "round_trip": "passed",
+    }
+
+
 def build_package(args) -> dict:
     config_path = args.config.resolve(strict=True)
     config = load_json(config_path)
@@ -563,7 +601,9 @@ def build_package(args) -> dict:
         shutil.copy2(qcdt_path.with_suffix(qcdt_path.suffix + ".json"), output / "y35a.qcdt.json")
         shutil.copy2(firmware_dir / "firmware-inputs.json", output / "firmware-inputs.json")
         shutil.copy2(root_tree / "CLOSURE.json", output / "rootfs-closure.json")
-        shutil.copytree(root_tree, output / "root-tree", symlinks=True)
+        root_tree_archive = build_metadata_preserving_root_tree_archive(
+            root_tree, output / "root-tree.tar", output / "root-tree",
+        )
         shutil.copy2(rootfs_path, output / "ramdisk-hfs.raw")
         shutil.copy2(firmware_dir / "restore-trustcache.im4p", output / "restore-trustcache.im4p")
         shutil.copy2(firmware_dir / "restore-trustcache.bin", output / "restore-trustcache.bin")
@@ -582,10 +622,27 @@ def build_package(args) -> dict:
             raise ValueError("copied boot3.img differs from the validated Android container")
         components = copied_components
 
+        root_tree_metadata = {
+            "schema_version": 1,
+            "archive_path": root_tree_archive["path"],
+            "archive_bytes": root_tree_archive["bytes"],
+            "archive_sha256": root_tree_archive["sha256"],
+            "tree_sha256": root_tree_archive["tree_sha256"],
+            "entries_sha256": root_tree_archive["entries_sha256"],
+            "entries": root_tree_archive["entries"],
+            "metadata": root_tree_archive["metadata"],
+            "round_trip": root_tree_archive["round_trip"],
+        }
+        (output / "root-tree.metadata.json").write_text(
+            json.dumps(root_tree_metadata, indent=2, sort_keys=True) + "\n",
+        )
         files = {}
         for path in sorted(output.iterdir()):
             if path.is_file():
-                files[path.name] = {"bytes": path.stat().st_size, "sha256": sha256(path)}
+                record = {"bytes": path.stat().st_size, "sha256": sha256(path)}
+                if path.name == "root-tree.metadata.json":
+                    record["entries_sha256"] = root_tree_archive["entries_sha256"]
+                files[path.name] = record
         report = {
             "schema_version": 1,
             "status": "offline-package-complete",
@@ -612,8 +669,12 @@ def build_package(args) -> dict:
                 **rootfs_report,
                 "closure_sha256": sha256(output / "rootfs-closure.json"),
                 "scope": "launchd diagnostic closure",
-                "tree_artifact": "root-tree",
-                "tree_sha256": tree_sha256(output / "root-tree"),
+                "tree_artifact": "root-tree.tar",
+                "tree_sha256": root_tree_archive["tree_sha256"],
+                "tree_archive": {
+                    key: root_tree_archive[key]
+                    for key in ("path", "bytes", "sha256", "tree_sha256", "entries_sha256", "entries", "metadata", "round_trip")
+                },
             },
             "trust_cache": {
                 "restore": firmware_report["restore_trustcache_payload"],
