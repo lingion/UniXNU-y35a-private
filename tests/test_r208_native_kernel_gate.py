@@ -40,7 +40,9 @@ class R208NativeKernelGateTests(unittest.TestCase):
                 "status": "prepared",
                 "source_identity": {"commit": "494ffe1c29d37ca720c37328feb83069c9641b67"},
                 "build_profile": {"y35a_a53": True, "phase_a_amfi": True,
-                                   "other_cflags": ["-DXNU_Y35A_A53=1", "-DXNU_Y35A_PHASE_A_AMFI=1"]},
+                                   "y35a_storage_fallback": True,
+                                   "other_cflags": ["-DXNU_Y35A_A53=1", "-DXNU_Y35A_PHASE_A_AMFI=1",
+                                                    "-DXNU_Y35A_STORAGE_FALLBACK=1"]},
                 "staged_inputs": {
                     "source_tree_after_compatibility_sha256": MODULE.tree_sha256(staged_source),
                     "source_compatibility_diff": {
@@ -62,6 +64,9 @@ class R208NativeKernelGateTests(unittest.TestCase):
                     "missing_symbols": [],
                 },
                 "inputs": {
+                    "source_diff": [{
+                        "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
+                    }],
                     "driver_archives": [{"sha256": "a" * 64}],
                     "driver_manifest": {"sha256": driver_manifest_sha},
                 },
@@ -74,6 +79,29 @@ class R208NativeKernelGateTests(unittest.TestCase):
                     nm_symbols={"_native_sdcard_started", "_native_sdcard_ready"})
             self.assertTrue(result["ok"])
             self.assertEqual(result["missing_driver_symbols"], [])
+            data = json.loads(provenance.read_text())
+            data["build_profile"]["y35a_storage_fallback"] = False
+            data["build_profile"]["other_cflags"].remove("-DXNU_Y35A_STORAGE_FALLBACK=1")
+            provenance.write_text(json.dumps(data))
+            with mock.patch.object(MODULE, "parse_macho", return_value={
+                "base": 0xfffffff007004000, "entry": 0xfffffff007004100,
+            }):
+                with self.assertRaisesRegex(ValueError, "fallback-v3 source patch is present"):
+                    MODULE.verify(
+                        kernel, provenance, driver_manifest, staged_source,
+                        nm_symbols={"_native_sdcard_started", "_native_sdcard_ready"})
+            data = json.loads(provenance.read_text())
+            data["build_profile"]["y35a_storage_fallback"] = True
+            data["build_profile"]["other_cflags"].append("-DXNU_Y35A_STORAGE_FALLBACK=1")
+            data["inputs"]["source_diff"] = []
+            provenance.write_text(json.dumps(data))
+            with mock.patch.object(MODULE, "parse_macho", return_value={
+                "base": 0xfffffff007004000, "entry": 0xfffffff007004100,
+            }):
+                with self.assertRaisesRegex(ValueError, "fallback build macro is enabled without"):
+                    MODULE.verify(
+                        kernel, provenance, driver_manifest, staged_source,
+                        nm_symbols={"_native_sdcard_started", "_native_sdcard_ready"})
 
     def test_rejects_wrong_kernel_bytes_or_missing_force_loaded_symbol(self):
         with tempfile.TemporaryDirectory() as temp:

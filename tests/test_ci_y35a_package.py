@@ -479,12 +479,21 @@ class PackageSourceClosureTest(unittest.TestCase):
         self.assertIn("scripts/unixnu/util.py", package_ci.PACKAGE_SOURCE_FILES)
         self.assertIn("ci/native-build-manifest.r208-fallback-v2.json", package_ci.PACKAGE_SOURCE_FILES)
         self.assertIn("ci/native-source-provenance.r208-fallback-v2.json", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("ci/native-build-manifest.r208-fallback-v3.json", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("ci/native-source-provenance.r208-fallback-v3.json", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("ci/manifests/r208-tf-emmc-root-fallback-v3-candidate.json", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("scripts/ci/verify_r208_fallback_v3_source.py", package_ci.PACKAGE_SOURCE_FILES)
 
     def test_candidate_native_manifest_is_selectable_but_external_paths_are_not(self):
         candidate = package_ci.resolve_native_manifest(
             ROOT / "ci/native-build-manifest.r208-fallback-v2.json",
         )
         self.assertEqual(candidate.name, "native-build-manifest.r208-fallback-v2.json")
+        candidate_v3 = package_ci.resolve_native_manifest(
+            ROOT / "ci/native-build-manifest.r208-fallback-v3.json",
+        )
+        self.assertEqual(candidate_v3.name, "native-build-manifest.r208-fallback-v3.json")
         with tempfile.TemporaryDirectory() as directory:
             external = Path(directory) / "manifest.json"
             external.write_text("{}")
@@ -506,6 +515,7 @@ class PackageSourceClosureTest(unittest.TestCase):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
         self.assertIn("native_manifest_path:", workflow)
         self.assertIn("ci/native-build-manifest.r208-fallback-v2.json", workflow)
+        self.assertIn("ci/native-build-manifest.r208-fallback-v3.json", workflow)
         self.assertIn('--native-manifest "$NATIVE_BUILD_MANIFEST_PATH"', workflow)
 
 

@@ -44,6 +44,7 @@ REQUIRED_PACKAGE_COMPONENTS = (
 ALLOWED_NATIVE_MANIFESTS = {
     "ci/native-build-manifest.r208.json",
     "ci/native-build-manifest.r208-fallback-v2.json",
+    "ci/native-build-manifest.r208-fallback-v3.json",
 }
 PACKAGE_SOURCE_FILES = (
     ".github/workflows/y35a-ci-package.yml",
@@ -55,6 +56,11 @@ PACKAGE_SOURCE_FILES = (
     "ci/native-source-provenance.r208-fallback-v2.json",
     "patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch",
     "scripts/ci/verify_r208_fallback_v2_source.py",
+    "ci/native-build-manifest.r208-fallback-v3.json",
+    "ci/native-source-provenance.r208-fallback-v3.json",
+    "ci/manifests/r208-tf-emmc-root-fallback-v3-candidate.json",
+    "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
+    "scripts/ci/verify_r208_fallback_v3_source.py",
     "ci/y35a-ci-package-manifest.json",
     "ci/manifests/r208-tf-apfs-package-contract.json",
     "scripts/ci/build_y35a_ci_package.py",

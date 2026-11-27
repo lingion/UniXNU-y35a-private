@@ -11,11 +11,15 @@ on:
       - 'ci/native-build-manifest.r208-fallback-v2.json'
       - 'ci/native-source-provenance.r208-fallback-v2.json'
       - 'ci/manifests/r208-tf-emmc-root-fallback-v2-candidate.json'
+      - 'ci/native-build-manifest.r208-fallback-v3.json'
+      - 'ci/native-source-provenance.r208-fallback-v3.json'
+      - 'ci/manifests/r208-tf-emmc-root-fallback-v3-candidate.json'
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
       - 'scripts/ci/build_y35a_ci_package.py'
       - 'scripts/ci/build_y35a_tf_apfs_image.py'
       - 'scripts/ci/verify_r208_fallback_v2_source.py'
+      - 'scripts/ci/verify_r208_fallback_v3_source.py'
       - 'scripts/ci/build_y35a_qcdt.py'
       - 'scripts/ci/extract_ios12_package_inputs.py'
       - 'scripts/ci/verify_y35a_trustcache.py'
@@ -34,6 +38,7 @@ on:
       - 'scripts/y35a/make_adt.py'
       - 'scripts/y35a/package_native.py'
       - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch'
+      - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch'
       - 'scripts/y35a/verify_r208_tf_apfs_package_contract.py'
       - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch'
       - 'tests/test_ci_y35a_package.py'
@@ -41,6 +46,8 @@ on:
       - 'tests/test_r208_storage_abi_contract.py'
       - 'tests/test_r208_tf_apfs_package_contract.py'
       - 'tests/test_y35a_tf_apfs_image.py'
+      - 'tests/test_y35a_tf_emmc_root_fallback_v2_patch.py'
+      - 'tests/test_y35a_tf_emmc_root_fallback_v3_patch.py'
   pull_request:
     paths:
       - '.github/workflows/y35a-ci-package.yml'
@@ -51,11 +58,15 @@ on:
       - 'ci/native-build-manifest.r208-fallback-v2.json'
       - 'ci/native-source-provenance.r208-fallback-v2.json'
       - 'ci/manifests/r208-tf-emmc-root-fallback-v2-candidate.json'
+      - 'ci/native-build-manifest.r208-fallback-v3.json'
+      - 'ci/native-source-provenance.r208-fallback-v3.json'
+      - 'ci/manifests/r208-tf-emmc-root-fallback-v3-candidate.json'
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
       - 'scripts/ci/build_y35a_ci_package.py'
       - 'scripts/ci/build_y35a_tf_apfs_image.py'
       - 'scripts/ci/verify_r208_fallback_v2_source.py'
+      - 'scripts/ci/verify_r208_fallback_v3_source.py'
       - 'scripts/ci/build_y35a_qcdt.py'
       - 'scripts/ci/extract_ios12_package_inputs.py'
       - 'scripts/ci/verify_y35a_trustcache.py'
@@ -74,6 +85,7 @@ on:
       - 'scripts/y35a/make_adt.py'
       - 'scripts/y35a/package_native.py'
       - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch'
+      - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch'
       - 'scripts/y35a/verify_r208_tf_apfs_package_contract.py'
       - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch'
       - 'tests/test_ci_y35a_package.py'
@@ -81,6 +93,8 @@ on:
       - 'tests/test_r208_storage_abi_contract.py'
       - 'tests/test_r208_tf_apfs_package_contract.py'
       - 'tests/test_y35a_tf_apfs_image.py'
+      - 'tests/test_y35a_tf_emmc_root_fallback_v2_patch.py'
+      - 'tests/test_y35a_tf_emmc_root_fallback_v3_patch.py'
   workflow_dispatch:
     inputs:
       native_run_id:
@@ -208,9 +222,9 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test package contracts
-        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_storage_abi_contract.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py tests/test_y35a_tf_emmc_root_fallback_v2_patch.py
-      - name: Verify fallback v2 applies to exact XNU source
-        run: python scripts/ci/verify_r208_fallback_v2_source.py --manifest ci/native-build-manifest.r208-fallback-v2.json --repo-root .
+        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_storage_abi_contract.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py tests/test_y35a_tf_emmc_root_fallback_v2_patch.py tests/test_y35a_tf_emmc_root_fallback_v3_patch.py
+      - name: Verify fallback v3 patch chain applies to exact XNU source
+        run: python scripts/ci/verify_r208_fallback_v3_source.py --manifest ci/native-build-manifest.r208-fallback-v3.json --repo-root .
       - name: Validate R208 TF/APFS device-package design contract
         run: |
           python3 scripts/y35a/verify_r208_tf_apfs_package_contract.py \
@@ -234,6 +248,8 @@ jobs:
               NATIVE_MANIFEST=ci/native-build-manifest.r208.json ;;
             ci/native-build-manifest.r208-fallback-v2.json)
               NATIVE_MANIFEST=ci/native-build-manifest.r208-fallback-v2.json ;;
+            ci/native-build-manifest.r208-fallback-v3.json)
+              NATIVE_MANIFEST=ci/native-build-manifest.r208-fallback-v3.json ;;
             *)
               echo "unsupported native manifest selection: $REQUESTED_NATIVE_MANIFEST" >&2
               exit 1 ;;

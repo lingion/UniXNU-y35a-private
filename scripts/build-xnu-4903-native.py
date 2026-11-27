@@ -255,6 +255,7 @@ def make_step_command(
     y35a_a53: bool = False,
     y35a_low_vector: bool = False,
     phase_a_amfi: bool = False,
+    y35a_storage_fallback: bool = False,
     driver_archives: list[Path] | None = None,
 ) -> list[str]:
     if target not in ("installhdrs", "build"):
@@ -268,6 +269,8 @@ def make_step_command(
         other_cflags.append("-DXNU_Y35A_LOW_VECTOR=1")
     if phase_a_amfi:
         other_cflags.append("-DXNU_Y35A_PHASE_A_AMFI=1")
+    if y35a_storage_fallback:
+        other_cflags.append("-DXNU_Y35A_STORAGE_FALLBACK=1")
     command = [
         str(make), f"-j{jobs}", "-C", str(source), target,
         f"SDKROOT={overlay}", f"SDKROOT_RESOLVED={overlay}",
@@ -602,6 +605,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="enable the Y35A low/high vector diagnostic macro")
     parser.add_argument("--phase-a-amfi", action="store_true",
                         help="enable Phase-A AMFI entry/return witness instrumentation")
+    parser.add_argument("--y35a-storage-fallback", action="store_true",
+                        help="enable the candidate Y35A TF-to-eMMC root fallback path")
     parser.add_argument("--expected-sha256", help="optional exact kernel hash gate")
     parser.add_argument("--manifest", type=Path,
                         help="optional matching readback manifest for the final XNU static gate")
@@ -820,6 +825,7 @@ def _execute_run(
             jobs=args.jobs, host_os_version=str(xcode_info["host_os_version"]),
             y35a_a53=args.y35a_a53, y35a_low_vector=args.y35a_low_vector,
             phase_a_amfi=args.phase_a_amfi,
+            y35a_storage_fallback=args.y35a_storage_fallback,
             driver_archives=staged_driver_archives,
         )
         _run_logged(target, command, cwd=staged_source, env=env,
@@ -963,6 +969,7 @@ def main(argv: list[str] | None = None) -> int:
             jobs=args.jobs, host_os_version=str(xcode_info["host_os_version"]),
             y35a_a53=args.y35a_a53, y35a_low_vector=args.y35a_low_vector,
             phase_a_amfi=args.phase_a_amfi,
+            y35a_storage_fallback=args.y35a_storage_fallback,
             driver_archives=[Path(path) for path in args.driver_archive],
         ) for target in ("installhdrs", "build")]
         print(json.dumps({"ok": True, "plan_only": True, "inputs": assets,
@@ -970,10 +977,12 @@ def main(argv: list[str] | None = None) -> int:
                               "y35a_a53": args.y35a_a53,
                               "y35a_low_vector": args.y35a_low_vector,
                               "phase_a_amfi": args.phase_a_amfi,
+                              "y35a_storage_fallback": args.y35a_storage_fallback,
                               "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1", "-DOS_FIREHOSE_SPI=1"]
                               + (["-DXNU_Y35A_A53=1"] if args.y35a_a53 else [])
                               + (["-DXNU_Y35A_LOW_VECTOR=1"] if args.y35a_low_vector else [])
-                              + (["-DXNU_Y35A_PHASE_A_AMFI=1"] if args.phase_a_amfi else []),
+                              + (["-DXNU_Y35A_PHASE_A_AMFI=1"] if args.phase_a_amfi else [])
+                              + (["-DXNU_Y35A_STORAGE_FALLBACK=1"] if args.y35a_storage_fallback else []),
                           }, "commands": planned}, indent=2))
         return 0
 
@@ -1005,10 +1014,12 @@ def main(argv: list[str] | None = None) -> int:
             "y35a_a53": args.y35a_a53,
             "y35a_low_vector": args.y35a_low_vector,
             "phase_a_amfi": args.phase_a_amfi,
+            "y35a_storage_fallback": args.y35a_storage_fallback,
             "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1", "-DOS_FIREHOSE_SPI=1"]
             + (["-DXNU_Y35A_A53=1"] if args.y35a_a53 else [])
             + (["-DXNU_Y35A_LOW_VECTOR=1"] if args.y35a_low_vector else [])
-            + (["-DXNU_Y35A_PHASE_A_AMFI=1"] if args.phase_a_amfi else []),
+            + (["-DXNU_Y35A_PHASE_A_AMFI=1"] if args.phase_a_amfi else [])
+            + (["-DXNU_Y35A_STORAGE_FALLBACK=1"] if args.y35a_storage_fallback else []),
         },
         "warning": "Diagnostic-patched XNU input; not a vanilla or production release build.",
     }

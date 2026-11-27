@@ -57,6 +57,21 @@ def verify(kernel: Path, provenance_path: Path, driver_manifest_path: Path,
         raise ValueError("kernel was not built with the requested Phase-A AMFI profile")
     if "-DXNU_Y35A_PHASE_A_AMFI=1" not in provenance.get("build_profile", {}).get("other_cflags", []):
         raise ValueError("Phase-A AMFI macro is absent from recorded build flags")
+    build_profile = provenance.get("build_profile", {})
+    source_patches = provenance.get("inputs", {}).get("source_diff", [])
+    fallback_v3_present = any(
+        item.get("path") == "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch"
+        for item in source_patches if isinstance(item, dict)
+    )
+    fallback_macro = "-DXNU_Y35A_STORAGE_FALLBACK=1"
+    if fallback_v3_present and (
+            build_profile.get("y35a_storage_fallback") is not True
+            or fallback_macro not in build_profile.get("other_cflags", [])):
+        raise ValueError("fallback-v3 source patch is present but its build macro is not enabled")
+    if not fallback_v3_present and (
+            build_profile.get("y35a_storage_fallback") is True
+            or fallback_macro in build_profile.get("other_cflags", [])):
+        raise ValueError("fallback build macro is enabled without the fallback-v3 source patch")
     if not provenance.get("staged_inputs", {}).get("source_tree_after_compatibility_sha256"):
         raise ValueError("final staged source tree hash is missing")
     if staged_source_path != Path(provenance.get("run_root", ""), "src").resolve(strict=True):

@@ -1,0 +1,208 @@
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -261,8 +261,11 @@
+ __private_extern__ int os_reason_debug_disabled = 0; /* disable asserts for when we fail to allocate OS reasons */
+ #endif
+ 
+ extern kern_return_t IOFindBSDRoot(char *, unsigned int, dev_t *, u_int32_t *);
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++extern boolean_t IOY35ARequestEmmcRootFallback(void);
++#endif
+ extern void IOSecureBSDRoot(const char * rootName);
+ extern kern_return_t IOKitBSDInit(void );
+ extern void kminit(void);
+ extern void file_lock_init(void);
+@@ -446,8 +449,11 @@
+ 	struct ucred temp_cred;
+ 	struct posix_cred temp_pcred;
+ #if NFSCLIENT || CONFIG_IMAGEBOOT
+ 	boolean_t       netboot = FALSE;
++#endif
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	boolean_t       storageFallbackAttempted = FALSE;
+ #endif
+ 
+ #define bsd_init_kprintf(x...) /* kprintf("bsd_init: " x) */
+ 
+@@ -935,8 +941,19 @@
+ 		bsd_init_kprintf("vfs_mountroot\n");
+ 		if (0 == (err = vfs_mountroot())) {
+ 			break;
+ 		}
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++		if (!storageFallbackAttempted && IOY35ARequestEmmcRootFallback()) {
++			storageFallbackAttempted = TRUE;
++			rootdevice[0] = '\0';
++			setconf();
++			continue;
++		}
++		if (storageFallbackAttempted) {
++			(void)IOY35ARequestEmmcRootFallback();
++		}
++#endif
+ 		rootdevice[0] = '\0';
+ #if NFSCLIENT
+ 		if (netboot) {
+ 			PE_display_icon( 0, "noroot");  /* XXX a netboot-specific icon would be nicer */
+@@ -1102,8 +1119,16 @@
+ 	u_int32_t       flags;
+ 	kern_return_t   err;
+ 
+ 	err = IOFindBSDRoot(rootdevice, sizeof(rootdevice), &rootdev, &flags);
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	if (err && IOY35ARequestEmmcRootFallback()) {
++		err = IOFindBSDRoot(rootdevice, sizeof(rootdevice), &rootdev, &flags);
++		if (err) {
++			(void)IOY35ARequestEmmcRootFallback();
++		}
++	}
++#endif
+ 	if (err) {
+ 		printf("setconf: IOFindBSDRoot returned an error (%d);"
+ 		    "setting rootdevice to 'sd0a'.\n", err);     /* XXX DEBUG TEMP */
+ 		rootdev = makedev( 6, 0 );
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -398,8 +398,30 @@
+ 
+ static int didRam = 0;
+ enum { kMaxPathBuf = 512, kMaxBootVar = 128 };
+ 
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++static boolean_t native_y35a_emmc_fallback_active = FALSE;
++static boolean_t native_y35a_tf_root_selected = FALSE;
++static char native_y35a_emmc_uuid[kMaxBootVar];
++
++boolean_t
++IOY35ARequestEmmcRootFallback(void)
++{
++	if (!native_y35a_tf_root_selected) {
++		return FALSE;
++	}
++	if (native_y35a_emmc_fallback_active) {
++		panic("Y35A eMMC root failed after the single fallback attempt\n");
++	}
++	if (!PE_parse_boot_argn("emmc-boot-uuid", native_y35a_emmc_uuid, kMaxBootVar)) {
++		panic("Y35A TF root failed without emmc-boot-uuid\n");
++	}
++	native_y35a_emmc_fallback_active = TRUE;
++	return TRUE;
++}
++#endif
++
+ kern_return_t
+ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+     dev_t * root, u_int32_t * oflags )
+ {
+@@ -452,15 +474,31 @@
+ 	if (!PE_parse_boot_argn("rd", rdBootVar, kMaxBootVar )
+ 	    && !PE_parse_boot_argn("rootdev", rdBootVar, kMaxBootVar )) {
+ 		rdBootVar[0] = 0;
+ 	}
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	if (!strcmp(rdBootVar, "uuid")) {
++		native_y35a_tf_root_selected = TRUE;
++	}
++#endif
+ 
+ 	do {
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++		if (native_y35a_emmc_fallback_active) {
++			continue;
++		}
++#endif
+ 		if ((regEntry = IORegistryEntry::fromPath( "/chosen", gIODTPlane ))) {
+ 			di_root_ramfile(regEntry);
+ 			data = OSDynamicCast(OSData, regEntry->getProperty( "root-matching" ));
+ 			if (data) {
+ 				matching = OSDynamicCast(OSDictionary, OSUnserializeXML((char *)data->getBytesNoCopy()));
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++				if (matching && native_y35a_tf_root_selected) {
++					matching->release();
++					matching = NULL;
++				}
++#endif
+ 				if (matching) {
+ 					continue;
+ 				}
+ 			}
+@@ -472,8 +510,11 @@
+ 
+ 				// match the boot-args boot-uuid processing below
+ 				if (uuidString) {
+ 					IOLog("rooting via boot-uuid from /chosen: %s\n", uuidStr);
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++					native_y35a_tf_root_selected = TRUE;
++#endif
+ 					IOService::publishResource( "boot-uuid", uuidString );
+ 					uuidString->release();
+ 					matching = IOUUIDMatching();
+ 					mediaProperty = "boot-uuid-media";
+@@ -485,8 +526,20 @@
+ 			}
+ 			regEntry->release();
+ 		}
+ 	} while (false);
++
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	if (native_y35a_emmc_fallback_active && !matching) {
++		OSString *fallbackUUID = OSString::withCString(native_y35a_emmc_uuid);
++		if (fallbackUUID) {
++			IOService::publishResource("boot-uuid", fallbackUUID);
++			fallbackUUID->release();
++			matching = IOUUIDMatching();
++			mediaProperty = "boot-uuid-media";
++		}
++	}
++#endif
+ 
+ //
+ //	See if we have a RAMDisk property in /chosen/memory-map.  If so, make it into a device.
+ //	It will become /dev/mdx, where x is 0-f.
+@@ -605,8 +658,12 @@
+ 			IOLog( "Waiting on %s\n", s->text());
+ 			s->release();
+ 		}
+ 	}
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	boolean_t y35aBoundedRootWait = native_y35a_tf_root_selected && matching;
++	UInt32 y35aRootWaitAttempts = 0;
++#endif
+ 
+ 	do {
+ 		t.tv_sec = ROOTDEVICETIMEOUT;
+ 		t.tv_nsec = 0;
+@@ -629,15 +686,33 @@
+ 				if (gIOKitDebug & kIOLogMemory) {
+ 					IOPrintMemory();
+ 				}
+ 			}
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++			if (!service && y35aBoundedRootWait && ++y35aRootWaitAttempts >= 3) {
++				break;
++			}
++#endif
+ 		}
+ 	} while (!service);
+ 	matching->release();
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	if (!service && y35aBoundedRootWait) {
++		IOLog("Y35A UUID root lookup timed out after bounded waits\n");
++		IOFree(str, kMaxPathBuf + kMaxBootVar);
++		return kIOReturnNotFound;
++	}
++#endif
+ 
+ 	if (service && mediaProperty) {
+ 		service = (IOService *)service->getProperty(mediaProperty);
+ 	}
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	if (!service && y35aBoundedRootWait) {
++		IOFree(str, kMaxPathBuf + kMaxBootVar);
++		return kIOReturnNotFound;
++	}
++#endif
+ 
+ 	mjr = 0;
+ 	mnr = 0;
+ 

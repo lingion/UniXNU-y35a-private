@@ -152,10 +152,12 @@ class NativeXnuBuildContractTest(unittest.TestCase):
                 "y35a_a53": args.y35a_a53,
                 "y35a_low_vector": args.y35a_low_vector,
                 "phase_a_amfi": args.phase_a_amfi,
+                "y35a_storage_fallback": args.y35a_storage_fallback,
                 "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1", "-DOS_FIREHOSE_SPI=1"]
                 + (["-DXNU_Y35A_A53=1"] if args.y35a_a53 else [])
                 + (["-DXNU_Y35A_LOW_VECTOR=1"] if args.y35a_low_vector else [])
-                + (["-DXNU_Y35A_PHASE_A_AMFI=1"] if args.phase_a_amfi else []),
+                + (["-DXNU_Y35A_PHASE_A_AMFI=1"] if args.phase_a_amfi else [])
+                + (["-DXNU_Y35A_STORAGE_FALLBACK=1"] if args.y35a_storage_fallback else []),
             },
         }
         args.expected_sha256 = expected
@@ -215,12 +217,14 @@ class NativeXnuBuildContractTest(unittest.TestCase):
         self.assertFalse(defaults.y35a_a53)
         self.assertFalse(defaults.y35a_low_vector)
         self.assertFalse(defaults.phase_a_amfi)
+        self.assertFalse(defaults.y35a_storage_fallback)
         self.assertIsNone(defaults.developer_dir)
         self.assertEqual(defaults.patch, [])
         self.assertEqual(defaults.source, MODULE.DEFAULT_SOURCE)
         self.assertEqual(defaults.source_diff, MODULE.DEFAULT_SOURCE_DIFF)
         explicit = MODULE.parse_args([
             "--y35a-a53", "--y35a-low-vector", "--phase-a-amfi",
+            "--y35a-storage-fallback",
             "--developer-dir", "/xcode/Developer",
             "--patch", "first.patch",
             "--patch", "second.patch",
@@ -228,6 +232,7 @@ class NativeXnuBuildContractTest(unittest.TestCase):
         self.assertTrue(explicit.y35a_a53)
         self.assertTrue(explicit.y35a_low_vector)
         self.assertTrue(explicit.phase_a_amfi)
+        self.assertTrue(explicit.y35a_storage_fallback)
         self.assertEqual(explicit.developer_dir, Path("/xcode/Developer"))
         self.assertEqual(explicit.patch, [Path("first.patch"), Path("second.patch")])
         self.assertEqual(explicit.source_diff, defaults.source_diff)
@@ -263,6 +268,7 @@ class NativeXnuBuildContractTest(unittest.TestCase):
             self.assertEqual(recorded["build_profile"], {
                 "y35a_a53": True, "y35a_low_vector": True,
                 "phase_a_amfi": False,
+                "y35a_storage_fallback": False,
                 "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1", "-DOS_FIREHOSE_SPI=1",
                                  "-DXNU_Y35A_A53=1", "-DXNU_Y35A_LOW_VECTOR=1"],
             })
@@ -290,6 +296,32 @@ class NativeXnuBuildContractTest(unittest.TestCase):
             self.assertTrue(recorded["build_profile"]["phase_a_amfi"])
             self.assertIn(
                 "-DXNU_Y35A_PHASE_A_AMFI=1",
+                recorded["build_profile"]["other_cflags"],
+            )
+
+    def test_y35a_storage_fallback_flag_reaches_make_and_provenance(self):
+        command = self.make_command(y35a_a53=True, y35a_storage_fallback=True)
+        self.assertIn(
+            "OTHER_CFLAGS=-DXNU_NATIVE_EARLY_FAULT=1 -DOS_FIREHOSE_SPI=1 "
+            "-DXNU_Y35A_A53=1 -DXNU_Y35A_STORAGE_FALLBACK=1",
+            command,
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            commands = []
+            self.execute_fixture(
+                Path(directory),
+                profile=("--y35a-a53", "--y35a-storage-fallback"),
+                commands=commands,
+            )
+            self.assertIn(
+                "-DXNU_Y35A_STORAGE_FALLBACK=1",
+                " ".join(commands[1][1]),
+            )
+            recorded = json.loads(
+                (Path(directory) / "run/build-provenance.json").read_text())
+            self.assertTrue(recorded["build_profile"]["y35a_storage_fallback"])
+            self.assertIn(
+                "-DXNU_Y35A_STORAGE_FALLBACK=1",
                 recorded["build_profile"]["other_cflags"],
             )
 

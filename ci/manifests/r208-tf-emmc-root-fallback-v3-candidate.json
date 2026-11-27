@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "kind": "r208-tf-emmc-root-fallback-candidate",
+  "status": "source-candidate",
+  "source_ref": "xnu-4903.270.47",
+  "source_commit": "494ffe1c29d37ca720c37328feb83069c9641b67",
+  "patch": {
+    "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
+    "sha256": "ab94ed110c46049c6f95a8a7b27128a992ffe0eacc3361039036801fe1f3d469"
+  },
+  "patch_chain": [
+    "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch"
+  ],
+  "feature_macro": "XNU_Y35A_STORAGE_FALLBACK",
+  "build_flag": "--y35a-storage-fallback",
+  "tf_selector": "boot-uuid",
+  "emmc_selector": "emmc-boot-uuid",
+  "fallback_triggers": [
+    "bounded TF UUID root-service wait expires",
+    "vfs_mountroot fails after TF root selection"
+  ],
+  "bounded_wait_attempts": 3,
+  "fallback_attempts": 1,
+  "emmc_unavailable_policy": "fail-closed-panic",
+  "linked_status": "unverified",
+  "runtime_status": "unverified",
+  "device_run_allowed": false,
+  "notes": [
+    "This candidate supersedes the v2 source-only behavior by bounding IOFindBSDRoot UUID waits and returning to setconf for one eMMC selector retry.",
+    "The native build must define XNU_Y35A_STORAGE_FALLBACK; the candidate-specific build flag is part of the manifest.",
+    "This standalone v3 source candidate replaces the v2 patch in its own native manifest; it is not in the production manifest and has no linked/runtime/device qualification."
+  ]
+}
