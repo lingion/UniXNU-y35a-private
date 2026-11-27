@@ -65,7 +65,7 @@
     {
       "order": 4,
       "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
-      "sha256": "ab94ed110c46049c6f95a8a7b27128a992ffe0eacc3361039036801fe1f3d469",
+      "sha256": "9bf1906cb5018db557e97bc1d5c06618c01597c5522123a9182639f1d0b1ae40",
       "target_tree": "xnu-source"
     }
   ],

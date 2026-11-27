@@ -35,6 +35,10 @@ class TfEmmcRootFallbackV3PatchTest(unittest.TestCase):
     def test_uuid_service_wait_is_bounded_and_returns_to_setconf(self):
         bsd_patch, iokit_patch = self.patch_text.split(
             "--- a/iokit/bsddev/IOKitBSDInit.cpp", 1)
+        declaration_hunk = iokit_patch.index("@@ -421,")
+        root_selector_hunk = iokit_patch.index("@@ -452,")
+        self.assertLess(declaration_hunk, root_selector_hunk)
+        self.assertIn("y35aBoundedRootWait = native_y35a_tf_root_selected && matching", iokit_patch)
         self.assertIn("native_y35a_tf_root_selected && matching", iokit_patch)
         self.assertIn("++y35aRootWaitAttempts >= 3", iokit_patch)
         self.assertIn("return kIOReturnNotFound", iokit_patch)

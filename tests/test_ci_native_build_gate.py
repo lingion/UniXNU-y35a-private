@@ -16,6 +16,14 @@ SPEC.loader.exec_module(MODULE)
 
 
 class NativeBuildGateTests(unittest.TestCase):
+    def test_static_verifier_args_are_appended_once(self):
+        command = ["python3", "build.py"]
+        MODULE.append_static_verifier_args(command, Path("verify.py"), "a" * 64)
+        self.assertEqual(command.count("--static-verifier"), 1)
+        self.assertEqual(command.count("--static-verifier-sha256"), 1)
+        with self.assertRaisesRegex(ValueError, "must not be duplicated"):
+            MODULE.append_static_verifier_args(command, Path("verify.py"), "a" * 64)
+
     def test_static_verifier_must_match_pinned_source_hash(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

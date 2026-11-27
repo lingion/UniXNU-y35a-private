@@ -94,7 +94,18 @@
  IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
      dev_t * root, u_int32_t * oflags )
  {
-@@ -452,15 +474,31 @@
+@@ -421,6 +443,10 @@
+ 	bool                debugInfoPrintedOnce = false;
+ 	const char *        uuidStr = NULL;
+ 
+ 	static int          mountAttempts = 0;
+ 
+ 	int xchar, dchar;
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	boolean_t           y35aBoundedRootWait = FALSE;
++	UInt32              y35aRootWaitAttempts = 0;
++#endif
+@@ -452,15 +478,31 @@
  	if (!PE_parse_boot_argn("rd", rdBootVar, kMaxBootVar )
  	    && !PE_parse_boot_argn("rootdev", rdBootVar, kMaxBootVar )) {
  		rdBootVar[0] = 0;
@@ -126,7 +137,7 @@
  					continue;
  				}
  			}
-@@ -472,8 +510,11 @@
+@@ -472,8 +514,11 @@
  
  				// match the boot-args boot-uuid processing below
  				if (uuidString) {
@@ -138,7 +149,7 @@
  					uuidString->release();
  					matching = IOUUIDMatching();
  					mediaProperty = "boot-uuid-media";
-@@ -485,8 +526,20 @@
+@@ -485,8 +530,20 @@
  			}
  			regEntry->release();
  		}
@@ -159,20 +170,20 @@
  //
  //	See if we have a RAMDisk property in /chosen/memory-map.  If so, make it into a device.
  //	It will become /dev/mdx, where x is 0-f.
-@@ -605,8 +658,12 @@
+@@ -605,8 +662,12 @@
  			IOLog( "Waiting on %s\n", s->text());
  			s->release();
  		}
  	}
 +#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
-+	boolean_t y35aBoundedRootWait = native_y35a_tf_root_selected && matching;
-+	UInt32 y35aRootWaitAttempts = 0;
++	y35aBoundedRootWait = native_y35a_tf_root_selected && matching;
++	y35aRootWaitAttempts = 0;
 +#endif
  
  	do {
  		t.tv_sec = ROOTDEVICETIMEOUT;
  		t.tv_nsec = 0;
-@@ -629,15 +686,33 @@
+@@ -629,15 +690,33 @@
  				if (gIOKitDebug & kIOLogMemory) {
  					IOPrintMemory();
  				}

@@ -172,6 +172,14 @@ def validate_static_verifier(manifest: dict, repo_root: Path) -> tuple[Path, str
     return path, actual
 
 
+def append_static_verifier_args(command: list[str], verifier: Path, digest: str) -> None:
+    """Append the candidate verifier contract exactly once."""
+    if "--static-verifier" in command or "--static-verifier-sha256" in command:
+        raise ValueError("static verifier arguments must not be duplicated")
+    command.extend(["--static-verifier", str(verifier),
+                    "--static-verifier-sha256", digest])
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
@@ -316,10 +324,7 @@ def main() -> int:
         command.extend(["--driver-manifest", str(args.driver_manifest.resolve())])
     if args.driver_archive:
         command.extend(["--driver-contract", str(manifest_path)])
-    command.extend(["--static-verifier", str(static_verifier),
-                    "--static-verifier-sha256", static_verifier_sha])
-    command.extend(["--static-verifier", str(static_verifier),
-                    "--static-verifier-sha256", static_verifier_sha])
+    append_static_verifier_args(command, static_verifier, static_verifier_sha)
 
     report = {
         "ok": True,
@@ -334,8 +339,6 @@ def main() -> int:
         "driver_artifact": manifest["driver_artifact"],
         "driver_head_branch": manifest["driver_artifact"].get("head_branch"),
         "driver_manifest_sha256": sha256(args.driver_manifest.resolve()) if args.driver_manifest else None,
-        "static_verifier": str(static_verifier),
-        "static_verifier_sha256": static_verifier_sha,
         "static_verifier": str(static_verifier),
         "static_verifier_sha256": static_verifier_sha,
         "patches": [{"path": str(path), "sha256": sha256(path)} for path in patch_paths],

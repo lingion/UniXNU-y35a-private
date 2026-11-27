@@ -373,3 +373,13 @@
 - 证据：Run `46066779485` produced artifact `y35a-tf-apfs-offline-control-46066779485`, ID `15230827825`, digest `sha256:49ee10dd77ce031498b46fe2f1b5a9cb0610130df27f54bff9d0a9c525efd117`; run `46067312291` produced artifact `y35a-tf-apfs-offline-control-46067312291`, ID `15231297661`, digest `sha256:1c660f225481eb7b8d1fe49f11b7fcc3faa97b4ba4042a69e8ef270674277385`. Both report `offline-control-only`, `bootable=false`, `ios_system_image=false`, `device_run_allowed=false`, and card binding pending.
 - 自动化入口：`.github/workflows/y35a-ci-package.yml`, `scripts/ci/build_y35a_tf_apfs_image.py`, and the `tf-apfs-offline-control` report/binding sidecars.
 - 下一次触发：Any repeated APFS image creation with unchanged root-tree/QCDT inputs, or any production boot-argument binding to the generated APFS volume UUID.
+
+## L-2026-11-28-15 C++ goto targets constrain patch-local declarations
+
+- 现象：Native build run `46078557734` reached `IOKitBSDInit.cpp` compilation and failed with `cannot jump from this goto statement to its label`; the diagnostic identified `goto iofrootx` at line 597 and two fallback locals declared later at lines 663–664.
+- 根因：The fallback patch introduced initialized automatic variables after an existing `goto` source, so C++ rejected a legal upstream control-flow jump that bypassed their initialization. The native manifest and patch applied, but the candidate never reached link or kernel-artifact verification.
+- 影响：No authenticated kernel artifact was produced. The repeated static-verifier CLI arguments in the same run plan were a separate command-construction defect; the compiler log proves they were not this failure's cause.
+- 正确做法：For patch hunks that add initialized locals inside legacy C++ functions, inspect every existing goto target/source in the pinned function and declare new state before any possible jump, then assign state at its intended control-flow point. Lock declaration ordering and verifier-argument exact-once behavior with CI tests; do not accept a source-only hunk test as a compile result.
+- 证据：Run `46078557734`, commit `eab4cde75d9ddc8168e4de7404ba745e9e6adb33`, artifact `unixnu-native-build-46078557734` ID `15236535409` digest `sha256:fd01a2b80cbe42de5f2ee721217d34c8734235b908e2ebd3f15b442c18b9f2b2`; failing build log is preserved in `/Volumes/Portable/unixnu-native-build-46078557734/native/unixnu-native-build/logs/build.log`.
+- 自动化入口：`patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch`, `scripts/ci/run_native_build.py`, and `tests/test_ci_native_build_gate.py` / `tests/test_y35a_tf_emmc_root_fallback_v3_patch.py`.
+- 下一次触发：Any native C++ patch adding initialized locals to a function containing pre-existing `goto` labels, or a runner that constructs repeatable verifier arguments.
