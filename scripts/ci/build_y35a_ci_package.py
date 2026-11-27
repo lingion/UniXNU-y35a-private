@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import plistlib
 import platform
+import re
 import shutil
 import struct
 import subprocess
@@ -279,6 +280,14 @@ def resolve_native_manifest(path: Path) -> Path:
     return resolved
 
 
+def validate_native_artifact_api_binding(artifact_id: str, artifact_digest: str) -> dict:
+    if not re.fullmatch(r"[0-9]+", str(artifact_id)):
+        raise ValueError("native artifact ID must be a decimal Actions artifact ID")
+    if not re.fullmatch(r"sha256:[0-9a-f]{64}", artifact_digest):
+        raise ValueError("native artifact digest must be an exact sha256:<64 lowercase hex> value")
+    return {"id": int(artifact_id), "digest": artifact_digest}
+
+
 def attached_device(output: bytes) -> str:
     result = plistlib.loads(output)
     entities = result.get("system-entities", [])
@@ -510,6 +519,9 @@ def build_package(args) -> dict:
     if not isinstance(expected_macho_count, int) or isinstance(expected_macho_count, bool) or expected_macho_count < 1:
         raise ValueError("package manifest has an invalid expected staged Mach-O count")
     native_manifest_path = resolve_native_manifest(args.native_manifest)
+    native_artifact_api = validate_native_artifact_api_binding(
+        args.native_artifact_id, args.native_artifact_digest,
+    )
     kernel, native_binding, native_provenance = validate_native_artifact(
         args.native_artifact_dir.resolve(strict=True), args.native_run_id,
         args.native_head_sha, native_manifest_path,
@@ -668,6 +680,13 @@ def build_package(args) -> dict:
             "status": "offline-package-complete",
             "candidate_kind": config["package_scope"]["kind"],
             "native_build": native_binding,
+            "native_kernel_artifact_api": {
+                **native_artifact_api,
+                "run_id": args.native_run_id,
+                "head_sha": args.native_head_sha,
+                "manifest_path": native_manifest_path.relative_to(ROOT).as_posix(),
+                "manifest_sha256": sha256(native_manifest_path),
+            },
             "native_build_status": native_provenance["status"],
             "firmware": firmware_report,
             "device_tree": qcdt_report,
@@ -731,6 +750,8 @@ def main() -> int:
     parser.add_argument("--native-run-id", required=True)
     parser.add_argument("--native-head-sha", required=True)
     parser.add_argument("--native-artifact-dir", required=True, type=Path)
+    parser.add_argument("--native-artifact-id", required=True)
+    parser.add_argument("--native-artifact-digest", required=True)
     parser.add_argument("--native-manifest", type=Path,
                         default=ROOT / "ci/native-build-manifest.r208.json")
     parser.add_argument("--package-source-sha", required=True)

@@ -343,3 +343,13 @@
 - 证据：Run `46057855212` on source workflow SHA `7672b05d4c3235951925fa825c21403a84ce5c72` reported old expected digest `7dcb2b64efbe9c094acd0f0ca68ca278089770dc6c398fb5c9859c95f5aa66d5`; exact file digest was `3cfcc009098eb9316f69675028f1ce8344b6e54babb46b3b2a51c2d47f0ea905`.
 - 自动化入口：`ci/native-build-manifest.r208-fallback-v2.json`, `ci/native-source-provenance.r208-fallback-v2.json`, and native manifest validation in `scripts/ci/run_native_build.py`.
 - 下一次触发：Any isolated candidate manifest copied or derived from a production native manifest.
+
+## L-2026-11-28-12 package validator must consume the native artifact's selected manifest
+
+- 现象：Package run `46062519190` downloaded a successful kernel artifact and passed toolchain/firmware preparation, then failed with `native build plan does not bind the package's R208 build manifest`.
+- 根因：`build_y35a_ci_package.py` always compared the artifact plan against `ci/native-build-manifest.r208.json`, even though native run `46061043371` used the isolated fallback-v2 candidate manifest.
+- 影响：The kernel artifact was valid for its exact candidate plan, but package construction and artifact upload did not occur. No RAM package or root-tree artifact came from this run.
+- 正确做法：Select the exact native manifest as a restricted workflow input, validate it is one of the repository's allowed R208 manifests, compare the artifact plan/provenance against that manifest, and include its path/SHA plus the native artifact API ID/digest in package provenance. For manual dispatch, require the exact kernel artifact ID and API digest; keep the production manifest as default for normal workflow runs.
+- 证据：Run `46062519190`, SHA `88387d1bc19262d5984d75fe837fb69d9bca2479`, package job `Build and verify RAM-boot package`; native run `46061043371` produced successful schema-2 artifact ID `15228783166`, digest `sha256:818e0f39a3e6aaedb0d51c5636015b0ea17fc0efc2ac1b5049ca1820ebb021e2`.
+- 自动化入口：`scripts/ci/build_y35a_ci_package.py`, `.github/workflows/y35a-ci-package.yml`, `tests/test_ci_y35a_package.py`.
+- 下一次触发：Any package run consuming a native artifact built from a non-default or experiment-specific manifest.

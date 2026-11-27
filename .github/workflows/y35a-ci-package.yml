@@ -98,6 +98,16 @@ on:
         required: false
         default: ''
         type: string
+      native_artifact_id:
+        description: Exact unixnu-kernel artifact ID from the selected native run
+        required: false
+        default: ''
+        type: string
+      native_artifact_digest:
+        description: Exact artifact API digest including sha256 prefix
+        required: false
+        default: ''
+        type: string
       native_manifest_path:
         description: Exact native build manifest used by the native artifact
         required: false
@@ -188,6 +198,8 @@ jobs:
       native_head_sha: ${{ steps.native.outputs.head_sha }}
       package_source_sha: ${{ steps.package_source.outputs.sha }}
       native_manifest_path: ${{ steps.native_manifest.outputs.path }}
+      native_artifact_id: ${{ steps.native.outputs.artifact_id }}
+      native_artifact_digest: ${{ steps.native.outputs.artifact_digest }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -236,6 +248,8 @@ jobs:
           NATIVE_RUN_ID: ${{ github.event.workflow_run.id || inputs.native_run_id }}
           NATIVE_TARGET_BRANCH: ${{ github.event.workflow_run.head_branch || inputs.native_head_branch || github.ref_name }}
           NATIVE_TARGET_SHA: ${{ github.event.workflow_run.head_sha || inputs.native_head_sha || github.sha }}
+          EXPECTED_NATIVE_ARTIFACT_ID: ${{ inputs.native_artifact_id }}
+          EXPECTED_NATIVE_ARTIFACT_DIGEST: ${{ inputs.native_artifact_digest }}
         run: |
           set -euo pipefail
           if [[ ! "$NATIVE_RUN_ID" =~ ^[0-9]+$ ]]; then
@@ -258,18 +272,35 @@ jobs:
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN_ID/artifacts" \
             > "$RUNNER_TEMP/native-artifacts.json"
           ARTIFACT_NAME="unixnu-kernel-$NATIVE_RUN_ID"
-          if ! jq -e --arg name "$ARTIFACT_NAME" \
-            '[.artifacts[] | select(.name == $name and .expired == false)] | length > 0' \
-            "$RUNNER_TEMP/native-artifacts.json" > /dev/null; then
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            [[ "$EXPECTED_NATIVE_ARTIFACT_ID" =~ ^[0-9]+$ ]]
+            [[ "$EXPECTED_NATIVE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          fi
+          MATCHES=$(jq -c --arg name "$ARTIFACT_NAME" --argjson run "$NATIVE_RUN_ID" \
+            --arg sha "$NATIVE_TARGET_SHA" '
+            [.artifacts[] | select(.name == $name and .expired == false
+              and .workflow_run.id == $run and .workflow_run.head_sha == $sha)]' \
+            "$RUNNER_TEMP/native-artifacts.json")
+          if [[ "$(jq 'length' <<< "$MATCHES")" != 1 ]]; then
             if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-              echo "selected successful run has no unexpired $ARTIFACT_NAME artifact" >&2
+              echo "selected successful run must have exactly one matching unexpired $ARTIFACT_NAME artifact" >&2
               exit 1
             fi
             echo "::notice::successful native run has no kernel artifact, likely plan-only; package skipped"
             exit 0
           fi
+          ARTIFACT_ID=$(jq -r '.[0].id' <<< "$MATCHES")
+          ARTIFACT_DIGEST=$(jq -r '.[0].digest' <<< "$MATCHES")
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" && \
+                ("$ARTIFACT_ID" != "$EXPECTED_NATIVE_ARTIFACT_ID" || \
+                 "$ARTIFACT_DIGEST" != "$EXPECTED_NATIVE_ARTIFACT_DIGEST") ]]; then
+            echo "native kernel artifact ID/digest do not match the explicitly selected artifact" >&2
+            exit 1
+          fi
           echo "run_id=$NATIVE_RUN_ID" >> "$GITHUB_OUTPUT"
           echo "head_sha=$(jq -r '.headSha' "$RUNNER_TEMP/native-run.json")" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
 
   package:
     needs: validate
@@ -391,6 +422,8 @@ jobs:
         env:
           NATIVE_RUN_ID: ${{ needs.validate.outputs.native_run_id }}
           NATIVE_HEAD_SHA: ${{ needs.validate.outputs.native_head_sha }}
+          NATIVE_ARTIFACT_ID: ${{ needs.validate.outputs.native_artifact_id }}
+          NATIVE_ARTIFACT_DIGEST: ${{ needs.validate.outputs.native_artifact_digest }}
           NATIVE_BUILD_MANIFEST_PATH: ${{ needs.validate.outputs.native_manifest_path }}
           PACKAGE_SOURCE_SHA: ${{ needs.validate.outputs.package_source_sha }}
           PACKAGE_RUN_ID: ${{ github.run_id }}
@@ -401,6 +434,8 @@ jobs:
           python3 scripts/ci/build_y35a_ci_package.py \
             --native-run-id "$NATIVE_RUN_ID" \
             --native-head-sha "$NATIVE_HEAD_SHA" \
+            --native-artifact-id "$NATIVE_ARTIFACT_ID" \
+            --native-artifact-digest "$NATIVE_ARTIFACT_DIGEST" \
             --native-artifact-dir "$RUNNER_TEMP/native-kernel" \
             --native-manifest "$NATIVE_BUILD_MANIFEST_PATH" \
             --package-source-sha "$PACKAGE_SOURCE_SHA" \

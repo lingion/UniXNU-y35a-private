@@ -491,6 +491,17 @@ class PackageSourceClosureTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "inside the checked-out repository"):
                 package_ci.resolve_native_manifest(external)
 
+    def test_native_artifact_api_binding_requires_exact_id_and_digest(self):
+        digest = "sha256:" + "a" * 64
+        self.assertEqual(
+            package_ci.validate_native_artifact_api_binding("15228783166", digest),
+            {"id": 15228783166, "digest": digest},
+        )
+        with self.assertRaisesRegex(ValueError, "decimal Actions artifact ID"):
+            package_ci.validate_native_artifact_api_binding("artifact-1", digest)
+        with self.assertRaisesRegex(ValueError, "exact sha256"):
+            package_ci.validate_native_artifact_api_binding("15228783166", "sha256:bad")
+
     def test_package_workflow_passes_selected_native_manifest(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
         self.assertIn("native_manifest_path:", workflow)
