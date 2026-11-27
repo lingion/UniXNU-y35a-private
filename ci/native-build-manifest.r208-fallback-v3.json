@@ -41,7 +41,7 @@
   "fallback_candidate": {
     "device_run_allowed": false,
     "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
-    "sha256": "4c22d48cacb1aeba5a973ac8a0e303a982ddc57625bd3a6a5257f7bdd3deb7df",
+    "sha256": "82a05e7e1ddd8b69535dcda63a7e00b9c51916c68e6a279324393a8872e4fd4e",
     "status": "source-candidate"
   },
   "kind": "R208 TF SD native build plan with fallback-v3 candidate",
@@ -83,7 +83,7 @@
     {
       "order": 4,
       "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
-      "sha256": "4c22d48cacb1aeba5a973ac8a0e303a982ddc57625bd3a6a5257f7bdd3deb7df",
+      "sha256": "82a05e7e1ddd8b69535dcda63a7e00b9c51916c68e6a279324393a8872e4fd4e",
       "target_tree": "xnu-source"
     }
   ],

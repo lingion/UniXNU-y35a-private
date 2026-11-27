@@ -6,7 +6,7 @@
   "source_commit": "494ffe1c29d37ca720c37328feb83069c9641b67",
   "patch": {
     "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
-    "sha256": "4c22d48cacb1aeba5a973ac8a0e303a982ddc57625bd3a6a5257f7bdd3deb7df"
+    "sha256": "82a05e7e1ddd8b69535dcda63a7e00b9c51916c68e6a279324393a8872e4fd4e"
   },
   "patch_chain": [
     "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch"
