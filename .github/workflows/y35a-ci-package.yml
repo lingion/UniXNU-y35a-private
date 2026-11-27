@@ -314,9 +314,11 @@ jobs:
           set -euo pipefail
           test "$(git -C .ci-tools/dtc rev-parse HEAD)" = "$DTC_REVISION"
           test "$(python3 -c 'import json; print(json.load(open("ci/y35a-ci-package-manifest.json"))["dtc"]["commit"])')" = "$DTC_REVISION"
-          # Pinned upstream dtc enables a GCC-only warning that Apple clang
-          # treats as unknown; disable only that warning while keeping -Werror.
-          make -C .ci-tools/dtc dtc EXTRA_CFLAGS=-Wno-error=unknown-warning-option
+          # The pinned dtc's generated Flex C has one signedness warning under
+          # Apple clang; suppress only that warning class and GCC-only unknown
+          # warning options while keeping -Werror for all other diagnostics.
+          make -C .ci-tools/dtc dtc \
+            EXTRA_CFLAGS='-Wno-error=unknown-warning-option -Wno-error=sign-compare'
       - name: Download pinned iOS 12.4.1 firmware
         run: |
           set -euo pipefail
