@@ -221,6 +221,14 @@ class TfApfsImageInputTest(unittest.TestCase):
         )
         self.assertEqual(result["partition_map_source"], "Content")
 
+    def test_gpt_apfs_relation_accepts_guid_partition_list_content(self):
+        result = MODULE.validate_gpt_apfs(
+            {"Content": "EF57347C-0000-11AA-AA11-00306543ECAC"},
+            {"Content": "Apple_APFS", "FilesystemType": "apfs"},
+            {"AllDisksAndPartitions": [{"Content": "GUID_partition_scheme"}]},
+        )
+        self.assertEqual(result["partition_map_source"], "diskutil-list:Content")
+
     def test_tree_digest_changes_with_mode(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "root"

@@ -282,3 +282,13 @@
 - 证据：GitHub Actions run `46042368705`, job `tf-apfs-offline-control`, failure `TF image does not report a GPT partition map:` after the volume was force-unmounted.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
 - 下一次触发：Any diskutil plist schema change or GPT/APFS image gate.
+
+## L-2026-11-28-06 diskutil info Content can be an APFS partition-type GUID
+
+- 现象：R208 offline-control run `46042907572` created, attached and unmounted the APFS image, but the GPT gate saw `Content=EF57347C-0000-11AA-AA11-00306543ECAC` and rejected it as a GPT partition map.
+- 根因：`diskutil info -plist` for the selected whole-disk/parent device can expose a partition-type GUID in `Content`; that value is not the GUID partition-map scheme.
+- 影响：The image and APFS volume were usable, but the GPT evidence was ambiguous and no control artifact was emitted.
+- 正确做法：Read `diskutil list -plist` for the whole disk and use its partition-map/content fields as the GPT source; retain the APFS volume and parent-device relation from `diskutil info` and record which plist source supplied the scheme.
+- 证据：GitHub Actions run `46042907572`, job `tf-apfs-offline-control`, failure `TF image does not report a GPT partition map: EF57347C-0000-11AA-AA11-00306543ECAC`.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
+- 下一次触发：Any GPT/APFS gate using diskutil info without diskutil list partition-map evidence.

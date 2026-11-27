@@ -509,19 +509,35 @@ def plist_entities(value):
     return []
 
 
-def validate_gpt_apfs(whole_disk: dict, volume: dict) -> dict:
+def validate_gpt_apfs(whole_disk: dict, volume: dict, partition_list: dict | None = None) -> dict:
     partition_map = str(whole_disk.get("PartitionMapType", ""))
     content = str(whole_disk.get("Content", ""))
+    partition_list = partition_list or {}
+    list_content = str(partition_list.get("Content", ""))
+    list_map = str(partition_list.get("PartitionMapType", ""))
+    if not list_content and isinstance(partition_list.get("AllDisksAndPartitions"), list):
+        for disk in partition_list["AllDisksAndPartitions"]:
+            if isinstance(disk, dict):
+                list_content = str(disk.get("Content", list_content))
+                list_map = str(disk.get("PartitionMapType", list_map))
+                if list_content or list_map:
+                    break
     volume_content = str(volume.get("Content", ""))
     filesystem = str(volume.get("FilesystemType", ""))
-    map_facts = f"{partition_map} {content}".upper()
+    map_facts = f"{partition_map} {content} {list_map} {list_content}".upper()
     if "GPT" not in map_facts and "GUID" not in map_facts:
-        raise ValueError(f"TF image does not report a GPT partition map: {partition_map or content}")
+        raise ValueError(f"TF image does not report a GPT partition map: {partition_map or content or list_map or list_content}")
     if "APFS" not in volume_content.upper() and "APFS" not in filesystem.upper():
         raise ValueError(f"TF image volume is not APFS: {volume_content}/{filesystem}")
     return {
         "partition_map_type": partition_map,
-        "partition_map_source": "PartitionMapType" if partition_map else "Content",
+        "partition_map_source": (
+            "PartitionMapType" if partition_map else
+            "diskutil-list:PartitionMapType" if list_map else
+            "diskutil-list:Content" if list_content else "Content"
+        ),
+        "diskutil_list_content": list_content,
+        "diskutil_list_partition_map_type": list_map,
         "whole_disk_content": content,
         "volume_content": volume_content,
         "filesystem_type": filesystem,
@@ -600,7 +616,10 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
         whole_info = plistlib.loads(run_checked(
             ["diskutil", "info", "-plist", f"/dev/{whole_name}"], text=False,
         ).stdout)
-        gpt_apfs = validate_gpt_apfs(whole_info, fs_info)
+        partition_list = plistlib.loads(run_checked(
+            ["diskutil", "list", "-plist", f"/dev/{whole_name}"], text=False,
+        ).stdout)
+        gpt_apfs = validate_gpt_apfs(whole_info, fs_info, partition_list)
         report = {
             "schema_version": 1,
             "status": "intermediate-built",
