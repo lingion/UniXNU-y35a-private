@@ -49,7 +49,6 @@ PACKAGE_SOURCE_FILES = (
     "ci/y35a-ci-package-manifest.json",
     "ci/manifests/r208-tf-apfs-package-contract.json",
     "scripts/ci/build_y35a_ci_package.py",
-    "scripts/ci/build_y35a_tf_apfs_image.py",
     "scripts/ci/build_y35a_qcdt.py",
     "scripts/ci/extract_ios12_package_inputs.py",
     "scripts/ci/patch_xnu_host_tools.py",
