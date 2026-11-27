@@ -3,10 +3,10 @@
   "source_ref": "494ffe1c29d37ca720c37328feb83069c9641b67",
   "source_provenance": "ci/native-source-provenance.r208.json",
   "driver_artifact": {
-    "run_id": 45852497429,
-    "name": "r208-native-sdcard-45852497429",
+    "run_id": 45963287517,
+    "name": "r208-native-sdcard-45963287517",
     "archive": "libQcomSdcard.a",
-    "sha256": "f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73"
+    "sha256": "74f9b7263b8b0a55c2ca4d1577cfc4a2ab1d4002f9ca925803368d167b565293"
   },
   "native_inputs": {
     "availability_tag": "AvailabilityVersions-33.200.7",

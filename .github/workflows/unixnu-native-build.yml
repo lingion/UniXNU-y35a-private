@@ -23,12 +23,12 @@ on:
       driver_run_id:
         description: Existing successful R208 driver artifact run
         required: true
-        default: '45852497429'
+        default: '45963287517'
         type: string
       driver_artifact_name:
         description: Driver archive artifact name
         required: true
-        default: r208-native-sdcard-45852497429
+        default: r208-native-sdcard-45963287517
         type: string
 
 permissions:
