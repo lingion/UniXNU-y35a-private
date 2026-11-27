@@ -393,7 +393,7 @@ def _validate_build_inputs(fakeroot: Path, overlay: Path, xcrun_wrapper: Path) -
         fakeroot / "usr/local/libexec/availability.pl",
         fakeroot / "usr/local/lib/kernel/libcc_kext.a",
         overlay / "SDKSettings.plist",
-        overlay / "usr/local/libexec/availability",
+        overlay / "usr/local/libexec/availability.pl",
         overlay / "usr/local/lib/kernel/libfirehose_kernel.a",
         overlay / "usr/local/include/kernel/os/firehose_buffer_private.h",
         xcrun_wrapper,
