@@ -32,6 +32,29 @@ class NativeXnuBuildContractTest(unittest.TestCase):
         self.assertIn('-Wl,-force_load,/tmp/libQcomSdcc.a', libs)
         self.assertLess(libs.index('libcc_kext.a'), libs.index('libQcomSdcc.a'))
 
+    def test_native_build_enables_firehose_spi_contract(self):
+        command = self.make_command("build")
+        self.assertIn(
+            "OTHER_CFLAGS=-DXNU_NATIVE_EARLY_FAULT=1 -DOS_FIREHOSE_SPI=1",
+            command,
+        )
+
+    def test_monotonic_header_guard_is_applied_to_staged_source(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory)
+            header = source / "osfmk/machine/monotonic.h"
+            header.parent.mkdir(parents=True)
+            header.write_text(
+                "#error unsupported architecture\n#endif\n\n"
+                "#include <stdatomic.h>\n#include <stdbool.h>\n#include <stdint.h>\n"
+                "int mt_microstackshot_start_arch(uint64_t period);\n"
+            )
+            result = MODULE.patch_monotonic_header(source)
+            self.assertEqual(result["status"], "patched")
+            text = header.read_text()
+            self.assertEqual(text.count("#if defined(MT_CORE_NFIXED)"), 1)
+            self.assertIn("#endif /* defined(MT_CORE_NFIXED) */", text)
+
     def test_userdata_window_manifest_binds_archive_hash_and_role(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -79,7 +102,7 @@ class NativeXnuBuildContractTest(unittest.TestCase):
                 "y35a_a53": args.y35a_a53,
                 "y35a_low_vector": args.y35a_low_vector,
                 "phase_a_amfi": args.phase_a_amfi,
-                "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1"]
+                "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1", "-DOS_FIREHOSE_SPI=1"]
                 + (["-DXNU_Y35A_A53=1"] if args.y35a_a53 else [])
                 + (["-DXNU_Y35A_LOW_VECTOR=1"] if args.y35a_low_vector else [])
                 + (["-DXNU_Y35A_PHASE_A_AMFI=1"] if args.phase_a_amfi else []),
@@ -182,13 +205,13 @@ class NativeXnuBuildContractTest(unittest.TestCase):
             self.assertFalse(any(part.startswith("OTHER_CFLAGS=") for part in commands[0][1]))
             self.assertEqual(commands[1][0], "build")
             self.assertIn(
-                "OTHER_CFLAGS=-DXNU_NATIVE_EARLY_FAULT=1 "
+                "OTHER_CFLAGS=-DXNU_NATIVE_EARLY_FAULT=1 -DOS_FIREHOSE_SPI=1 "
                 "-DXNU_Y35A_A53=1 -DXNU_Y35A_LOW_VECTOR=1", commands[1][1])
             recorded = json.loads((Path(directory) / "run/build-provenance.json").read_text())
             self.assertEqual(recorded["build_profile"], {
                 "y35a_a53": True, "y35a_low_vector": True,
                 "phase_a_amfi": False,
-                "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1",
+                "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1", "-DOS_FIREHOSE_SPI=1",
                                  "-DXNU_Y35A_A53=1", "-DXNU_Y35A_LOW_VECTOR=1"],
             })
 
@@ -196,7 +219,7 @@ class NativeXnuBuildContractTest(unittest.TestCase):
         command = self.make_command(
             y35a_a53=True, y35a_low_vector=True, phase_a_amfi=True)
         self.assertIn(
-            "OTHER_CFLAGS=-DXNU_NATIVE_EARLY_FAULT=1 "
+            "OTHER_CFLAGS=-DXNU_NATIVE_EARLY_FAULT=1 -DOS_FIREHOSE_SPI=1 "
             "-DXNU_Y35A_A53=1 -DXNU_Y35A_LOW_VECTOR=1 "
             "-DXNU_Y35A_PHASE_A_AMFI=1", command)
         with tempfile.TemporaryDirectory() as directory:

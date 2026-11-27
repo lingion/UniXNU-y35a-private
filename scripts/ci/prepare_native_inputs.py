@@ -335,7 +335,7 @@ def main() -> int:
         "schema": 1,
         "source": {"xnu_commit": "494ffe1c29d37ca720c37328feb83069c9641b67",
                     "availability_tag": "AvailabilityVersions-33.200.7",
-                    "libdispatch_tag": "libdispatch-1477.100.9",
+                    "libdispatch_tag": "libdispatch-913.60.2",
                     "llvm_commit": LLVM_COMMIT, "libc_commit": LIBC_COMMIT},
         "paths": {"fakeroot": str(fakeroot), "sdk_overlay": str(overlay), "xcrun_wrapper": str(wrapper)},
         "trees": {"fakeroot_sha256": tree_sha256(fakeroot), "sdk_overlay_sha256": tree_sha256(overlay),

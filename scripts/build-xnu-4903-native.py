@@ -204,49 +204,38 @@ def stage_source_tree(source: Path, destination: Path, patches: list[Path], *, o
 
 
 def patch_genassym_for_clang(source: Path) -> dict[str, str]:
-    """Make XNU 4903 genassym output stable under current Apple clang."""
+    """Apply the proven 4903 genassym source fix to the staged XNU tree."""
     genassym = source / "osfmk/arm64/genassym.c"
-    makefile = source / "osfmk/conf/Makefile.template"
     gen_text = genassym.read_text()
     old_forms = (r'.ascii \"%0\"" : : "n"', r'.ascii \"%0\"" : : "i"')
     replacement = r'.ascii \"#%0\"" : : "i"'
     if replacement not in gen_text:
         for old in old_forms:
             if old in gen_text:
-                gen_text = gen_text.replace(old, replacement)
-                genassym.write_text(gen_text)
+                genassym.write_text(gen_text.replace(old, replacement))
                 break
         else:
             raise SystemExit(f"{genassym}: unsupported DECLARE() form")
+    return {"genassym": str(genassym.relative_to(source)), "status": "passed"}
 
-    make_text = makefile.read_text()
-    marker = "# UNIXNU_XCODE16_GENASSYM_FIX"
-    if marker not in make_text:
-        lines = make_text.splitlines(keepends=True)
-        target = None
-        for index, line in enumerate(lines):
-            if line.startswith("assym.s: genassym.o"):
-                for candidate in range(index + 1, min(index + 4, len(lines))):
-                    if "DEFINITION__define__" in lines[candidate] and "sed -e" in lines[candidate]:
-                        target = candidate
-                        break
-                break
-        if target is None:
-            raise SystemExit(f"{makefile}: assym.s sed rule not found")
-        line = lines[target]
-        anchor = "-e '/^[[:space:]]*DEFINITION__define__/!d;{N;s/\\n//;}'"
-        if anchor not in line:
-            raise SystemExit(f"{makefile}: assym.s sed anchor changed")
-        fixes = []
-        for code, digit in zip(range(48, 58), "0123456789"):
-            fixes.append(
-                "-e 's/^\\([[:space:]]*DEFINITION__define__[^:]*:[[:space:]]*\\)"
-                f"\\.byte {code}\\([^0-9].*\\)$/\\1.ascii \"{digit}\"\\2/'"
-            )
-        lines[target] = line.replace(anchor, marker + " " + " ".join(fixes) + " " + anchor, 1)
-        makefile.write_text("".join(lines))
-    return {"genassym": str(genassym.relative_to(source)), "makefile": str(makefile.relative_to(source)), "status": "passed"}
 
+def patch_monotonic_header(source: Path) -> dict[str, str]:
+    """Guard ARM monotonic declarations when T7001 does not enable MT_CORE_NFIXED."""
+    header = source / "osfmk/machine/monotonic.h"
+    text = header.read_text()
+    guard = "#if defined(MT_CORE_NFIXED)\n"
+    if guard in text:
+        return {"header": str(header.relative_to(source)), "status": "already-applied"}
+    arch_end = "#error unsupported architecture\n#endif\n\n"
+    body_start = "#include <stdatomic.h>\n#include <stdbool.h>\n#include <stdint.h>\n"
+    body_end = "int mt_microstackshot_start_arch(uint64_t period);\n"
+    for anchor in (arch_end, body_start, body_end):
+        if anchor not in text:
+            raise SystemExit(f"{header}: monotonic guard anchor missing: {anchor.splitlines()[0]}")
+    text = text.replace(arch_end, arch_end + guard, 1)
+    text = text.replace(body_end, body_end + "#endif /* defined(MT_CORE_NFIXED) */\n", 1)
+    header.write_text(text)
+    return {"header": str(header.relative_to(source)), "status": "patched"}
 
 def make_step_command(
     target: str,
@@ -272,7 +261,7 @@ def make_step_command(
         raise ValueError(f"unsupported XNU make target: {target}")
     if jobs < 1:
         raise ValueError("jobs must be positive")
-    other_cflags = ["-DXNU_NATIVE_EARLY_FAULT=1"]
+    other_cflags = ["-DXNU_NATIVE_EARLY_FAULT=1", "-DOS_FIREHOSE_SPI=1"]
     if y35a_a53:
         other_cflags.append("-DXNU_Y35A_A53=1")
     if y35a_low_vector:
@@ -704,16 +693,18 @@ def _execute_run(
         "sdk_overlay_tree_sha256": tree_sha256(overlay),
         "xcrun_wrapper_sha256": sha256_file(wrapper),
     }
-    provenance["staged_source_compatibility"] = {
+    compatibility = {
         "genassym": patch_genassym_for_clang(staged_source),
+        "monotonic": patch_monotonic_header(staged_source),
     }
+    provenance["staged_source_compatibility"] = compatibility
     _write_json(provenance_path, provenance)
     host_tool_patch = ROOT / "scripts/ci/patch_xnu_host_tools.py"
     compatibility_target = staged_source / "bsd/kern/makekdebugevents.py"
     if compatibility_target.is_file():
         host_tool_command = [sys.executable, str(host_tool_patch), "--xnu-source", str(staged_source)]
         host_tool_result = subprocess.run(host_tool_command, capture_output=True, text=True, check=False)
-        provenance["staged_source_compatibility"] = {
+        compatibility["host_tools"] = {
             "status": "passed" if host_tool_result.returncode == 0 else "failed",
             "script": str(host_tool_patch),
             "script_sha256": sha256_file(host_tool_patch),
@@ -722,14 +713,16 @@ def _execute_run(
             "stdout": host_tool_result.stdout,
             "stderr": host_tool_result.stderr,
         }
+        provenance["staged_source_compatibility"] = compatibility
         _write_json(provenance_path, provenance)
         if host_tool_result.returncode:
             raise SystemExit("XNU host-tool compatibility patch failed; run preserved")
     else:
-        provenance["staged_source_compatibility"] = {
+        compatibility["host_tools"] = {
             "status": "not-applicable",
             "reason": "bsd/kern/makekdebugevents.py absent from staged source",
         }
+        provenance["staged_source_compatibility"] = compatibility
         _write_json(provenance_path, provenance)
     provenance["status"] = "prepared"
     _write_json(provenance_path, provenance)
@@ -874,7 +867,7 @@ def main(argv: list[str] | None = None) -> int:
                               "y35a_a53": args.y35a_a53,
                               "y35a_low_vector": args.y35a_low_vector,
                               "phase_a_amfi": args.phase_a_amfi,
-                              "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1"]
+                              "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1", "-DOS_FIREHOSE_SPI=1"]
                               + (["-DXNU_Y35A_A53=1"] if args.y35a_a53 else [])
                               + (["-DXNU_Y35A_LOW_VECTOR=1"] if args.y35a_low_vector else [])
                               + (["-DXNU_Y35A_PHASE_A_AMFI=1"] if args.phase_a_amfi else []),
@@ -905,7 +898,7 @@ def main(argv: list[str] | None = None) -> int:
             "y35a_a53": args.y35a_a53,
             "y35a_low_vector": args.y35a_low_vector,
             "phase_a_amfi": args.phase_a_amfi,
-            "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1"]
+            "other_cflags": ["-DXNU_NATIVE_EARLY_FAULT=1", "-DOS_FIREHOSE_SPI=1"]
             + (["-DXNU_Y35A_A53=1"] if args.y35a_a53 else [])
             + (["-DXNU_Y35A_LOW_VECTOR=1"] if args.y35a_low_vector else [])
             + (["-DXNU_Y35A_PHASE_A_AMFI=1"] if args.phase_a_amfi else []),
