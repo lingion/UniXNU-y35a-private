@@ -3052,3 +3052,22 @@ REF: `GOAL.md:51-57,77`; `LIVE-TARGET.md`; `STATE.md`; `CURRENT.md`; `LONG-RUN-S
 类型: CI-STATUS / PACKAGE-PROVENANCE
 事实: package commit `73f1756` adds the six missing push/pull_request trigger paths corresponding to `PACKAGE_SOURCE_FILES`: the R208 driver manifest, `make_adt.py`, `devicetree.py`, `udif.py`, `util.py` and the native-input test. Package run `45896319737` was created from this commit and failed before steps for the same account Billing/spending-limit reason.
 裁决: trigger closure is prepared but not CI-verified while Actions is unavailable. Keep status `WAITING_FOR_CI`, `device_run_allowed=false`, and do not run local fallback validation.
+
+## 2026-11-27T12:00:00Z — MISSION 状态显式化
+
+类型: DECISION / STATE
+事实: LIVE-TARGET.md 新增 `MISSION: IN_PROGRESS | D1 NOT_MET | D2 NOT_MET | D3 NOT_MET`；STATE.md 新增 mission 行，明确当前 R208 里程碑仅为离线闭环。
+裁决: CI 绿灯、离线 gate、文档同步不改变 MISSION 状态。只有 Y35A 设备 raw 证据可把 D1/D2/D3 改为 MET，并须附 raw 路径、完整 SHA-256 与独立裁决者。D1/D2/D3 全部 MET 前禁止输出“目标完成”“任务完成”“阶段完成”或 DONE。
+device_run_allowed=false；persistent writes: none；未触碰设备、未本机编译。
+
+## 2026-11-27T12:10:00Z — GOAL 增加完成声明规则
+
+类型: DECISION / GOAL
+事实: GOAL.md 在“使命和完成条件”后新增“完成声明规则”一节：任务状态只由 D1/D2/D3 设备证据决定；CI、gate、离线合同、文档和里程碑标记均不构成完成；任何 MET 声明须附设备 raw 路径、完整 SHA-256、镜像哈希与裁决者；设备未进入 launchd PID 1 前不得声明 D1/D2 部分完成；全部 MET 前禁止输出完成类措辞或 DONE；离线子任务连续两轮无设备验证进展须写 BLOCKER 并请用户决策。
+裁决: 生效。device_run_allowed=false；persistent writes: none；未触碰设备、未本机编译。
+
+## 2026-11-27T04:11:34Z — R208 validation and TF/APFS intermediate producer
+
+类型: CI-STATUS / MILESTONE
+事实: Package branch commit `3d88e3b` adds a root-tree producer artifact from the RAM diagnostic package and a manual macOS-only GPT/APFS intermediate job consuming explicit root-tree and stock-QCDT/provenance artifacts. Validation run `45938145784` passed all 33 contract tests; package run `45938145777` completed the validate job and skipped RAM/TF image jobs because no native/root/QCDT dispatch inputs were supplied.
+裁决: R208 remains an intermediate offline stage. It does not prove a kernel artifact, launchd, SpringBoard, TF boot, or device operation. Mission remains `IN_PROGRESS`; D1/D2/D3 remain `NOT_MET`; `device_run_allowed=false`.

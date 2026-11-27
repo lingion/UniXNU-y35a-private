@@ -4,7 +4,17 @@
 
 ## 当前主目标
 
-完成 R208 TF/SD 启动链的离线闭环。当前状态：`WAITING_FOR_CI`。所有可复现的 UniXNU 编译、链接、主机验证、静态门禁、package/probe plan 和产物 hash closure 只在 GitHub Actions 执行，并以真实 CI run 及其绑定产物为准。任何本机磁盘都不得运行 UniXNU 编译、链接或大规模构建。R205、R205b、R205c、R206 均为历史候选，不得重跑。R207 v2 builder 已终止，禁止重启。CI 账户阻塞不能触发本机回退。
+## 任务状态（最高优先级，不随阶段变化）
+
+MISSION: IN_PROGRESS | D1 NOT_MET | D2 NOT_MET | D3 NOT_MET
+
+- 任何 CI 绿灯、离线闭环、gate 通过、文档同步都不改变 MISSION 状态。
+- 只有 Y35A 设备上的 raw 证据能把 D1、D2、D3 改为 MET，且必须附 raw 路径、完整 SHA-256 和独立裁决者。
+- D1、D2、D3 全部 MET 前，禁止输出“目标完成”“任务完成”“阶段完成”或 DONE。当前合法状态只能是 IN_PROGRESS 或 HARD_BLOCK。
+
+## 当前主目标
+
+最终目标是 D1/D2/D3：同一镜像在 Y35A 真机连续三次进入 launchd 并稳定十分钟，进入可交互 SpringBoard，随后完成驱动矩阵。当前状态：`IN_PROGRESS`，D1/D2/D3 均未满足。R208 TF/SD 离线闭环只是推进真机目标的中间阶段。所有可复现的 UniXNU 编译、链接、主机验证、静态门禁、package/probe plan 和产物 hash closure 只在 GitHub Actions 执行，并以真实 CI run 及其绑定产物为准。任何本机磁盘都不得运行 UniXNU 编译、链接或大规模构建。R205、R205b、R205c、R206 均为历史候选，不得重跑。R207 v2 builder 已终止，禁止重启。CI 账户阻塞不能触发本机回退。
 
 ## 当前事实
 
@@ -17,7 +27,7 @@
 - R208 已完成 SD 协议 host suite、sdhc2 ADT contract、root-selection positive/negative contract、TF/eMMC fallback contract、NativeSdcard object compile、IOStorageFamily-191 combine、确定性 archive 和 Docs CI。main 的 validation run `45884101324` 与 Docs run `45884101618` 均成功；最新 TF validation `45887232679` 全绿，绑定 main commit `425ec007c2973fc14c81f64f14898138340cca3c`; this state correction is included in main `2b45f50`. XNU kernel link、package/probe、TF GPT/APFS image、root mount、eMMC fallback implementation 和设备运行仍未完成。候选 XNU fallback patch 已单独通过 pinned XNU apply-check，但尚未进入 native manifest。
 - 本轮对 `/Volumes/Mobile` 的访问返回 `Input/output error`，未对该卷继续扫描或写入。`/Volumes/Portable` 已确认可用，仅作为临时 staging 盘；它不是 canonical 工作树，也不运行 UniXNU 编译。
 - 临时 staging `/Volumes/Portable/UniXNU-staging-20261127-0042` 已按提交 `68b2cf91038fedb1ccacdc5950223ef618d8215e` 导出；manifest SHA-256 为 `a4d970a878c88c8e21dbfeeca086f78d2f8fad0b09180584048b4430ee0d8538`，逐文件校验 1424/1424 通过。
-- native-link 当前状态：plan-only run `45882865622` 通过，但 execute run `45888048634` 在 CI 输入准备后发现 XNU checkout dirty，未进入 kernel build，也没有 kernel artifact。package candidate 已迁到当前 main 基线，提交 `1cdc077`、`ac28710`、`73f1756`、`f694b4f`、`026555c`；现有 RAM package 仍是 launchd diagnostic，新增 TF/APFS package contract 仍是 design-only。已登记的 Mobile stock boot/QCDT 候选全部返回 `Input/output error`，derived DTS/QCDT 不能替代 stock provenance。先恢复 Actions 额度，再验证 host-tool 恢复闭包并执行一次精确绑定的 native build；不把 diagnostic package 当作 TF 可上机包。
+- native-link 当前状态：plan-only run `45882865622` 通过，但 execute run `45888048634` 在 CI 输入准备后发现 XNU checkout dirty，未进入 kernel build，也没有 kernel artifact。package candidate 已迁到当前 main 基线，提交 `1cdc077`、`ac28710`、`73f1756`、`f694b4f`、`026555c`、`3d88e3b`；validation `45938145784` 的 33 项合同测试通过，package `45938145777` 只完成 validate job，RAM package 和 TF/APFS job 因没有 native/root/QCDT inputs 跳过。已登记的 Mobile stock boot/QCDT 候选全部返回 `Input/output error`，derived DTS/QCDT 不能替代 stock provenance。先恢复 Actions 额度和 stock QCDT 输入，再验证 host-tool 恢复闭包并执行一次精确绑定的 native build；不把 diagnostic package 当作 TF 可上机包或 D1/D2 证据。
 - TF/SD 设备路线当前只允许离线工作。TF 卡容量、sdhc2 协议、card-detect、root mount、回退到 eMMC 和真实卡绑定都没有实机证据。
 - R208 CI manifest 已绑定 exact XNU ref、六个 arm-driver patch 的 SHA 和 native build profile。NativeSdcard object SHA-256 为 `47bec72ade1ff792938b9ae468f778a7d7e4c13bb62f97d18e5dbf96242e900e`，combined object SHA-256 为 `0353a170088989517d6634805f16537e26844fa89bd2acf9040dffd3cfa400fd`，确定性 archive SHA-256 为 `f401224182f56a5d27532482c1978528ae1570c3d5b16931b98384a6aaba1e73`。较早的 object/header 失败 runs 保留在 `LOG.md`，不再作为当前状态。
 

@@ -39,6 +39,15 @@
 
 Phase A 只追求 D1 和 D2。允许的 stub、绕过和硬编码必须登记为 HACK，并写出替换计划。D1、D2 独立确认后进入 Phase B，逐项替换 HACK 并完成 D3。
 
+## 完成声明规则
+
+- 任务状态只由 D1、D2、D3 的设备证据决定。在三项全部 MET 之前，任务状态恒为 `IN_PROGRESS`，唯一允许的例外是 `HARD_BLOCK`（见下文）。
+- 以下内容都不构成任何 D 项的完成，也不能改变任务状态：CI run 成功、provenance 完整、gate 或 host 测试通过、TF/SD 离线合同绿灯、文档或 SOP 更新、STATE 或 LIVE-TARGET 的里程碑标记。它们只能记为离线里程碑。
+- 每次声明某项为 MET 或任务完成，必须同时给出：Y35A 设备上的 raw 日志路径、完整 SHA-256、镜像完整哈希、裁决者身份。缺任何一项即视为未完成。
+- 设备从未进入 launchd PID 1 的情况下，不得声明 D1 或 D2 的任何部分完成，也不得声明 Phase B 开始。
+- 在 D1、D2、D3 全部 MET 之前，禁止输出“目标完成”“任务完成”“阶段完成”或 DONE。`DONE` 只能在三项都由独立裁决者确认后使用。
+- 若 `LIVE-TARGET.md` 的当前主目标是离线闭环，它只是 Phase A 的子任务，不代表 D1/D2 进展。离线子任务连续两轮没有设备验证进展时，必须停止离线推进，写 BLOCKER 并请求用户决策。
+
 ## 当前路径和范围
 
 - 活动工作根 `/Volumes/Mobile/unixnu-research/UniXNU-y35a`

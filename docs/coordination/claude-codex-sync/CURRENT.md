@@ -1395,3 +1395,8 @@ Commit `f694b4f` adds a design-only TF/APFS device-package contract to `codex/un
 ## 2026-11-27 R208 stock QCDT unavailable
 
 Read-only checks of all registered Mobile stock boot/QCDT candidate paths returned `Input/output error`; Portable staging contains no stock boot/QCDT/image. The TF/APFS device-package contract therefore remains design-only: derived DTS/QCDT may support offline control packaging, but cannot satisfy stock-QCDT device provenance. Keep `WAITING_FOR_CI`, `device_ready=false` and `device_run_allowed=false`.
+
+
+## 2026-11-27 R208 validation and intermediate producer
+
+Validation run `45938145784` on package commit `0bf9aad` passed all 33 contract tests and the TF/APFS design contract. Package run `45938145777` on the same commit completed only the validate job; the RAM package and TF/APFS intermediate jobs were skipped because no native run/root-tree/stock-QCDT dispatch inputs were supplied. Package commit `3d88e3b` adds the root-tree producer artifact and macOS-only GPT/APFS intermediate path. This is an offline intermediate stage; it is not kernel, launchd, SpringBoard, or device evidence. Mission remains `IN_PROGRESS`, D1/D2/D3 `NOT_MET`.
