@@ -13,6 +13,10 @@
 5. 检查 `REFERENCES.md`，再检索本地参考仓库。没有命中就写 `NONE-FOUND`。
 6. 写 `experiment.json`，冻结输入、假设、变量、停止条件和后续动作。
 
+## 本机执行限制
+
+UniXNU 的编译、测试、静态门禁、diff 检查、package/image 验证只能在 GitHub Actions 执行。本机仅可编辑文件和被动阅读代码、日志与状态；不得运行 `git diff --check`、测试、lint、verifier、构建或 package 命令。误执行的结果必须明确排除，不能作为验收证据。
+
 ## 长任务
 
 长任务只启动一个明确的 run root。每 30 至 60 秒核对真实进程、退出码和产物。进程存在不等于成功。等待期间只做与当前输入不冲突的参考检索、日志分析或独立裁决。

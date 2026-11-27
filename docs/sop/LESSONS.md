@@ -235,11 +235,11 @@
 
 ## L-2026-11-28-01 local UniXNU diff checks are excluded
 
-- 现象：在 CI-only 项目工作树上再次执行了本机 `git diff --check`。
+- 现象：在 CI-only 项目工作树上再次执行了本机 `git diff --check`，本轮又重复执行一次。
 - 根因：把通用 Git 文本检查误当成不属于项目静态门禁；实际目标合同明确本机不运行任何 UniXNU 静态验证。
 - 影响：本机命令结果不得作为本次改动通过的证据；当前分支仍需精确 SHA 的 GitHub Actions 验证。
-- 正确做法：本机只做编辑和只读人工代码审阅；所有 diff 检查、测试、门禁和构建都放入 GitHub Actions。提交信息不得写入这次本地命令为验证结果。
-- 证据：本轮本机命令记录；命令退出状态不纳入验收，不据此得出通过结论。
+- 正确做法：本机只做编辑和只读人工代码审阅；不得调用任何本机项目验证命令，包括通用 Git diff check。所有 diff 检查、测试、门禁和构建都放入 GitHub Actions。提交信息不得写入这些本机命令为验证结果。
+- 证据：2026-11-28 本机命令记录（本轮重复）；所有这些命令退出状态都不纳入验收，不据此得出通过结论。
 - 自动化入口：`.github/workflows/y35a-ci-package.yml`。
 - 下一次触发：任何 UniXNU package/workflow 改动的提交或验证。
 
@@ -273,12 +273,12 @@
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
 - 下一次触发：Any hdiutil create/convert step whose output suffix differs from the format-recognized extension.
 
-## L-2026-11-28-05 diskutil plist may report GPT in Content, not PartitionMapType
+## L-2026-11-28-05 diskutil plist may report GPT in Content, not PartitionMapType (superseded)
 
 - 现象：R208 offline-control run `46042368705` successfully created, attached and force-unmounted the APFS volume, then the GPT/APFS gate rejected an empty `PartitionMapType`.
 - 根因：The macOS `diskutil info -plist` whole-disk record did not populate `PartitionMapType`; the available whole-disk `Content` field carried the GUID partition-scheme fact.
 - 影响：The image was structurally created and mounted, but the gate produced no control artifact because it required one plist key name rather than the partition-map fact.
-- 正确做法：Accept GPT/GUID evidence from either `PartitionMapType` or whole-disk `Content`, record which field supplied it, and continue requiring APFS volume content/filesystem and parent whole-disk binding.
+- 更正：The earlier field-fallback recommendation is superseded by L-2026-11-28-06 and L-2026-11-28-08. `Content` may be an APFS partition-type GUID; do not treat it as partition-map scheme evidence.
 - 证据：GitHub Actions run `46042368705`, job `tf-apfs-offline-control`, failure `TF image does not report a GPT partition map:` after the volume was force-unmounted.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
 - 下一次触发：Any diskutil plist schema change or GPT/APFS image gate.
@@ -288,7 +288,27 @@
 - 现象：R208 offline-control run `46042907572` created, attached and unmounted the APFS image, but the GPT gate saw `Content=EF57347C-0000-11AA-AA11-00306543ECAC` and rejected it as a GPT partition map.
 - 根因：`diskutil info -plist` for the selected whole-disk/parent device can expose a partition-type GUID in `Content`; that value is not the GUID partition-map scheme.
 - 影响：The image and APFS volume were usable, but the GPT evidence was ambiguous and no control artifact was emitted.
-- 正确做法：Read `diskutil list -plist` for the whole disk and use its partition-map/content fields as the GPT source; retain the APFS volume and parent-device relation from `diskutil info` and record which plist source supplied the scheme.
+- 正确做法：Use `hdiutil pmap -simple` on the image itself and accept only its explicit top-level scheme record; retain and verify the APFS volume-to-parent whole-disk identity from `diskutil info`. The pmap report is human-readable, so bind its exact bytes in the intermediate report rather than assuming a plist output mode.
 - 证据：GitHub Actions run `46042907572`, job `tf-apfs-offline-control`, failure `TF image does not report a GPT partition map: EF57347C-0000-11AA-AA11-00306543ECAC`.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
-- 下一次触发：Any GPT/APFS gate using diskutil info without diskutil list partition-map evidence.
+- 下一次触发：Any GPT/APFS gate that infers the partition scheme from a partition's content GUID or omits volume-to-parent identity binding.
+
+## L-2026-11-28-07 macOS runner Python may lack xattr APIs
+
+- 现象：R208 package run `46037779595` failed while hashing the restored root tree with `AttributeError: module 'os' has no attribute 'listxattr'`.
+- 根因：The macOS Actions Python runtime did not expose the Python xattr API expected by the producer-side metadata digest.
+- 影响：The package could not complete its metadata-bound root-tree verification even though the tree contents were available.
+- 正确做法：Use Python xattr APIs when present and fail over to the macOS `xattr` executable when they are absent; use `xattr -px` and decode hexadecimal output back to raw bytes before hashing, so both paths hash identical values. Preserve a fail-closed error when neither interface exists and add a structural fallback test so Linux validation does not skip this branch silently.
+- 证据：Run `46037779595` failed at the package tree digest; run `46038856167` passed the same package path after commit `956abbb`, and run `46039400354` reached the later `hdiutil create` failure after the xattr stage.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py`, `tests/test_y35a_tf_apfs_image.py` and `.github/workflows/y35a-ci-package.yml`.
+- 下一次触发：Any root-tree metadata digest on a macOS Actions runner where Python xattr support is not guaranteed.
+
+## L-2026-11-28-08 GPT evidence must be a scheme and bind the mounted volume
+
+- 现象：R208 offline-control run `46044011970` created and mounted the APFS image, then rejected the GPT check after `diskutil list` exposed the APFS partition-type GUID `EF57347C-0000-11AA-AA11-00306543ECAC` rather than a top-level GUID partition scheme.
+- 根因：Partition-type content and partition-map scheme are separate facts; a generic string search can mistake an APFS partition GUID for GPT, while accepting GPT plus APFS without requiring device identities leaves the parent-disk relationship unproven.
+- 影响：No offline-control artifact was uploaded, and prior GPT checks did not establish that the inspected APFS volume belonged to the expected whole disk.
+- 正确做法：Read the image's `hdiutil pmap -simple` output and accept only an explicit top-level `SCHEME` value of GPT/GUID partition scheme. Require the expected whole-disk identifier, returned whole-disk identifier, APFS volume identifier, and volume parent identifier; reject missing or mismatched values. Do not use `diskutil info` partition-content fields as a substitute for image scheme evidence. Keep APFS content/filesystem validation separate from the scheme check.
+- 证据：GitHub Actions run `46044011970`, commit `10e998ac199dae277fb551deac35b3aa4ed65154`, failed in `tf-apfs-offline-control` at `Build non-bootable derived-QCDT control image`; log reported the APFS partition GUID as the supposed GPT evidence. No control artifact was emitted.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
+- 下一次触发：Any GPT/APFS image validation or APFS-volume-to-parent-disk report.
