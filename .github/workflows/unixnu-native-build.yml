@@ -151,6 +151,9 @@ jobs:
             ${{ runner.temp }}/native-inputs/native-inputs-manifest.json
             ${{ runner.temp }}/unixnu-native-build/**/build-provenance.json
             ${{ runner.temp }}/unixnu-native-build/**/logs/**
+            ${{ runner.temp }}/unixnu-native-build/**/*.filelist
+            ${{ runner.temp }}/unixnu-native-build/**/*.linkarguments
+            ${{ runner.temp }}/unixnu-native-build/**/link.filelist
           if-no-files-found: warn
       - name: Prepare kernel artifact contract
         if: ${{ inputs.execute == true && success() }}
