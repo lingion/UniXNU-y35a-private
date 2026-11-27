@@ -41,6 +41,8 @@ class PackageToolchainContractTest(unittest.TestCase):
         self.assertIn("control_root_tree_artifact_id", workflow)
         self.assertIn(".device_run_allowed == false", workflow)
         self.assertIn(".bootable == false", workflow)
+        upload_step = workflow.split("- name: Upload metadata-preserving root-tree tar without outer ZIP", 1)[1].split("  tf-apfs-intermediate:", 1)[0]
+        self.assertEqual(upload_step.count("name: root-tree.tar"), 1)
 
     def test_toolchain_manifest_binds_pinned_ndk_paths_versions_and_hashes(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -233,6 +233,7 @@ class TfApfsImageInputTest(unittest.TestCase):
                 output.addfile(link)
             result = MODULE.validate_root_tree_archive(archive)
             self.assertEqual(result["symlinks"], 1)
+            self.assertEqual(result["root_name"], "root-tree")
 
     def test_root_tree_metadata_manifest_binds_archive_and_restored_tree(self):
         with tempfile.TemporaryDirectory() as directory:

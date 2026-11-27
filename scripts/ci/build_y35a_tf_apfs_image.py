@@ -232,6 +232,7 @@ def validate_root_tree_archive(archive_path: Path) -> dict:
     members = []
     seen_paths = set()
     prior_regular_files = set()
+    top_level_names = set()
     with tarfile.open(archive_path, mode="r:*") as archive:
         for member in archive.getmembers():
             raw_name = member.name
@@ -239,9 +240,10 @@ def validate_root_tree_archive(archive_path: Path) -> dict:
             parts = raw_name.split("/")
             normalized = Path(raw_name).as_posix()
             if (not raw_name or path.is_absolute() or ".." in parts or "." in parts
-                    or "" in parts[:-1] or parts[0] != "root-tree"
+                    or "" in parts[:-1]
                     or normalized != raw_name.rstrip("/")):
                 raise ValueError(f"root-tree archive contains an unsafe path: {raw_name!r}")
+            top_level_names.add(parts[0])
             canonical_name = raw_name.rstrip("/")
             if canonical_name in seen_paths:
                 raise ValueError(f"root-tree archive contains a duplicate path: {raw_name!r}")
@@ -253,15 +255,18 @@ def validate_root_tree_archive(archive_path: Path) -> dict:
             if member.islnk():
                 target = Path(member.linkname)
                 if (target.is_absolute() or ".." in target.parts
-                        or not member.linkname.startswith("root-tree/")
+                        or member.linkname.split("/", 1)[0] != parts[0]
                         or member.linkname not in prior_regular_files):
                     raise ValueError(f"root-tree archive hard link escapes its tree: {member.name!r}")
             if member.isfile():
                 prior_regular_files.add(canonical_name)
             members.append(member)
-    if not members or not any(member.name.rstrip("/") == "root-tree" and member.isdir()
+    if len(top_level_names) != 1:
+        raise ValueError("root-tree archive must contain exactly one top-level directory")
+    root_name = next(iter(top_level_names))
+    if not members or not any(member.name.rstrip("/") == root_name and member.isdir()
                               for member in members):
-        raise ValueError("root-tree archive does not contain its root directory")
+        raise ValueError("root-tree archive does not contain its top-level root directory")
     symlink_names = {member.name.rstrip("/") for member in members if member.issym()}
     for member in members:
         parts = member.name.rstrip("/").split("/")
@@ -271,13 +276,13 @@ def validate_root_tree_archive(archive_path: Path) -> dict:
         # Symlink targets are filesystem semantics and may be absolute in an iOS
         # root. Extraction safety comes from rejecting archive member paths that
         # escape the tree and forbidding any archived child below a symlink.
-    return {"members": len(members), "symlinks": len(symlink_names)}
+    return {"members": len(members), "symlinks": len(symlink_names), "root_name": root_name}
 
 
 def extract_root_tree_archive(archive_path: Path, destination: Path) -> Path:
     """Extract metadata-preserving tar data on macOS after rejecting unsafe paths."""
     archive_path = archive_path.resolve(strict=True)
-    validate_root_tree_archive(archive_path)
+    archive_info = validate_root_tree_archive(archive_path)
     destination = destination.resolve()
     if destination.exists() and any(destination.iterdir()):
         raise ValueError(f"root-tree extraction destination is not empty: {destination}")
@@ -291,7 +296,7 @@ def extract_root_tree_archive(archive_path: Path, destination: Path) -> Path:
     if os.geteuid() != 0 and shutil.which("sudo"):
         command.insert(0, shutil.which("sudo"))
     subprocess.run(command, check=True)
-    extracted = destination / "root-tree"
+    extracted = destination / archive_info["root_name"]
     if not extracted.is_dir():
         raise ValueError("root-tree archive did not create the expected directory")
     return extracted
