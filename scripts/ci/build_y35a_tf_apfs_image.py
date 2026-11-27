@@ -559,10 +559,23 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
     attached = None
     mountpoint = None
     try:
-        run_checked([
+        create_path = output.with_suffix(".dmg")
+        if create_path.exists():
+            raise SystemExit(f"refusing to overwrite existing hdiutil image: {create_path}")
+        create_result = run_checked([
             "hdiutil", "create", "-size", size, "-layout", "GPTSPUD",
-            "-fs", "APFS", "-volname", volume_name, "-type", "UDIF", "-ov", str(output),
+            "-fs", "APFS", "-volname", volume_name, "-type", "UDIF", str(create_path),
         ])
+        if not create_path.is_file():
+            raise RuntimeError(
+                f"hdiutil reported success but did not create the requested .dmg path: {create_path}; "
+                f"stdout:\n{create_result.stdout}\nstderr:\n{create_result.stderr}"
+            )
+        if output.exists():
+            raise SystemExit(f"refusing to overwrite existing TF image: {output}")
+        os.rename(create_path, output)
+        if not output.is_file() or output.stat().st_size == 0:
+            raise RuntimeError(f"hdiutil image output is missing or empty after rename: {output}")
         result = run_checked(
             ["hdiutil", "attach", "-nobrowse", "-owners", "on", "-plist", str(output)],
             text=False,

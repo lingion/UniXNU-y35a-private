@@ -262,3 +262,13 @@
 - 证据：GitHub Actions run `46040773916` reported `-format requires -srcfolder or -srcdevice`; run `46041415209` reported `invalid argument for -type` when passed `UDRW`; the hdiutil manual distinguishes `-type UDIF` from the resulting UDRW image.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
 - 下一次触发：Any macOS hdiutil empty-image creation or GPT/APFS intermediate builder.
+
+## L-2026-11-28-04 use a recognized extension for hdiutil image output
+
+- 现象：R208 offline-control run `46041901430` passed hdiutil create but `hdiutil attach` reported `No such file or directory` for the requested `.img` path.
+- 根因：`hdiutil` selects/appends output extensions based on recognized disk-image suffixes; the create step did not prove that the requested `.img` path was the actual emitted file.
+- 影响：The APFS intermediate was not attached or populated, so no image artifact was uploaded.
+- 正确做法：Create to an explicit `.dmg` path, check that exact file exists and is non-empty, then rename it to the package's declared `.img` path before attach. Never assume a zero exit status means the path requested exists.
+- 证据：GitHub Actions run `46041901430`, after `-type UDIF` the create command returned success; the next attach to `/Users/runner/work/_temp/y35a-tf-offline-control.apfs.img` failed `No such file or directory`.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
+- 下一次触发：Any hdiutil create/convert step whose output suffix differs from the format-recognized extension.

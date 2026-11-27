@@ -37,6 +37,8 @@ class TfApfsImageInputTest(unittest.TestCase):
         self.assertIn('"-type", "UDIF"', text)
         self.assertNotIn('"-format", "UDRW"', text)
         self.assertNotIn('"-type", "UDRW"', text)
+        self.assertIn('create_path = output.with_suffix(".dmg")', text)
+        self.assertIn('os.rename(create_path, output)', text)
 
     def test_main_offline_control_binds_arguments_by_name(self):
         with tempfile.TemporaryDirectory() as directory:
