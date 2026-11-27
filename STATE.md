@@ -27,6 +27,7 @@ Persistent writes: none this turn. Full partition backup and EDL/firehose recove
 - Trusted stock PD1502A QCDT provenance remains unavailable. No true TF system package, kernel-linked root selection, eMMC fallback implementation, card binding, or device qualification is established.
 - Bounded readable-source search found only third-party PD1502A download pages and repository-derived/declared QCDT references; no candidate is provenance-bound to stock PD1502A firmware bytes. Do not use those pages as production input without a downloaded artifact plus source/board/hash binding.
 - The audited fallback patch `f886e829b94999e79af06964ee274992d975382827191912d2ab8c8a8bd291eb` changes selection only while `!service` and `mediaProperty == "boot-uuid-media"`; it does not yet prove or implement fallback after a TF service is found but its first read fails.
+- New source candidate `patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch` is pinned to XNU tag `xnu-4903.270.47` / source commit `494ffe1c29d37ca720c37328feb83069c9641b67`, SHA `1863a52b087dfc25e2fbf132c36f2ceae03777f82efbf1843b178cfc193c8670`. Validation run `46053378589` on `73eb16e` passed 68 package contract tests. It remains outside `ci/native-build-manifest.r208.json`; linked/runtime/device status is unverified.
 - No local UniXNU build, test, lint, diff-check, static gate, package or image validation is allowed. Accidental local `git diff --check` output from this turn is explicitly excluded as evidence.
 
 ## Next actions

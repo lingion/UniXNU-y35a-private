@@ -1148,5 +1148,7 @@ Artifact `y35a-tf-apfs-offline-control-46049301112` ID `15224410131`, digest `sh
 
 This is derived-QCDT offline-control output, not a device package. Bounded readable-source search found no stock-PD1502A byte/hash provenance; only third-party download pages and derived/declared references remain. The fallback candidate currently covers only `!service` `boot-uuid-media` waiting and does not cover a found TF service whose first read fails. Production root, linked root selection, physical card binding and device qualification remain pending. D1/D2/D3 are unmet; `device_run_allowed=false`.
 
+Fallback v2 source candidate is now tracked at `patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch`, SHA-256 `1863a52b087dfc25e2fbf132c36f2ceae03777f82efbf1843b178cfc193c8670`, derived from XNU `xnu-4903.270.47` / `494ffe1c…`. Run `46053378589` passed 68 contract tests. It is not in the native build manifest and has no linked/runtime evidence.
+
 
 ## R205b queue (historical)

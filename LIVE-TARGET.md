@@ -22,7 +22,7 @@
 ## 下一步
 
 1. 以成功的 offline-control artifact 为只读中间产物，继续查可信 stock PD1502A QCDT 的来源/哈希；不扫描曾返回 I/O error 的 `/Volumes/Mobile`。
-2. 并行闭合 kernel root selection 和首次 TF 读失败时的 eMMC fallback 实现及其 CI gates。
+2. v2 fallback source candidate 已在 Actions contract gate 通过，但尚未进入 native manifest/link；继续让 native CI 验证它覆盖 mountroot failure 后的 eMMC 重选。
 3. 重建 production root 和同一 provenance 闭包中的真正 TF/APFS package/probe；仍不操作设备或 TF 卡，直到目标合同与授权门完整满足。
 
 ## 持久化和恢复边界
