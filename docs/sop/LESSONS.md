@@ -242,3 +242,13 @@
 - 证据：本轮本机命令记录；命令退出状态不纳入验收，不据此得出通过结论。
 - 自动化入口：`.github/workflows/y35a-ci-package.yml`。
 - 下一次触发：任何 UniXNU package/workflow 改动的提交或验证。
+
+## L-2026-11-28-02 preserve captured native tool errors in CI logs
+
+- 现象：R208 offline-control run `46039400354` completed package/artifact identity checks, then failed at `hdiutil create` without exposing the tool's captured stderr.
+- 根因：`subprocess.run(..., capture_output=True, check=True)` raised `CalledProcessError`; the workflow log showed only the command and exit code because the caller discarded `stdout` and `stderr`.
+- 影响：The APFS intermediate remains unbuilt and the image-creation cause was not diagnosable from the run.
+- 正确做法：Use a checked-command wrapper that reports the exact argv, exit code, stdout and stderr for subprocess failures. Diagnose the tool's actual message before changing image arguments.
+- 证据：GitHub Actions run `46039400354`, job `tf-apfs-offline-control`, step `Build non-bootable derived-QCDT control image`, `hdiutil create` exit 1; artifact ID/digest and root tar download steps passed.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
+- 下一次触发：Any CI subprocess that captures output and fails with check=True.

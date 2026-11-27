@@ -36,6 +36,21 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def run_checked(command: list[str], *, text: bool = True) -> subprocess.CompletedProcess:
+    try:
+        return subprocess.run(command, check=True, capture_output=True, text=text)
+    except subprocess.CalledProcessError as error:
+        stdout = error.stdout or (b"" if not text else "")
+        stderr = error.stderr or (b"" if not text else "")
+        if not text:
+            stdout = stdout.decode("utf-8", errors="replace") if isinstance(stdout, bytes) else str(stdout)
+            stderr = stderr.decode("utf-8", errors="replace") if isinstance(stderr, bytes) else str(stderr)
+        raise RuntimeError(
+            f"command failed with exit {error.returncode}: {command!r}\n"
+            f"stdout:\n{stdout}\nstderr:\n{stderr}"
+        ) from error
+
+
 def xattr_manifest(path: Path) -> list:
     """Read xattrs through Python where supported, falling back to macOS xattr."""
     if hasattr(os, "listxattr") and hasattr(os, "getxattr"):
@@ -544,14 +559,14 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
     attached = None
     mountpoint = None
     try:
-        subprocess.run([
+        run_checked([
             "hdiutil", "create", "-size", size, "-layout", "GPTSPUD",
             "-fs", "APFS", "-volname", volume_name, "-format", "UDRW",
             "-ov", str(output),
-        ], check=True, capture_output=True, text=True)
-        result = subprocess.run(
+        ])
+        result = run_checked(
             ["hdiutil", "attach", "-nobrowse", "-owners", "on", "-plist", str(output)],
-            check=True, capture_output=True,
+            text=False,
         )
         entities = plist_entities(plistlib.loads(result.stdout))
         volume = next((item for item in entities if item.get("mount-point")), None)
@@ -562,15 +577,14 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
         subprocess.run(["ditto", "--rsrc", "--extattr", "--acl",
                         str(root_tree), mountpoint], check=True)
         subprocess.run(["sync"], check=True)
-        fs_info = plistlib.loads(subprocess.run(
-            ["diskutil", "info", "-plist", mountpoint], check=True, capture_output=True,
+        fs_info = plistlib.loads(run_checked(
+            ["diskutil", "info", "-plist", mountpoint], text=False,
         ).stdout)
         whole_name = fs_info.get("ParentWholeDisk") or fs_info.get("ParentWholeDiskDevice")
         if not whole_name:
             raise RuntimeError("APFS volume did not report its parent whole disk")
-        whole_info = plistlib.loads(subprocess.run(
-            ["diskutil", "info", "-plist", f"/dev/{whole_name}"],
-            check=True, capture_output=True,
+        whole_info = plistlib.loads(run_checked(
+            ["diskutil", "info", "-plist", f"/dev/{whole_name}"], text=False,
         ).stdout)
         gpt_apfs = validate_gpt_apfs(whole_info, fs_info)
         report = {

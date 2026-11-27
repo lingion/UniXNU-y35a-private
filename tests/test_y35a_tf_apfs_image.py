@@ -4,6 +4,7 @@ import hashlib
 import io
 import os
 from pathlib import Path
+import subprocess
 import tarfile
 import tempfile
 import sys
@@ -22,6 +23,13 @@ SPEC.loader.exec_module(MODULE)
 
 
 class TfApfsImageInputTest(unittest.TestCase):
+    def test_checked_command_preserves_captured_failure_output(self):
+        error = subprocess.CalledProcessError(1, ["hdiutil", "create"], output="out", stderr="disk image error")
+        with mock.patch.object(MODULE.subprocess, "run", side_effect=error):
+            with self.assertRaisesRegex(RuntimeError, "disk image error") as raised:
+                MODULE.run_checked(["hdiutil", "create"])
+        self.assertIn("hdiutil", str(raised.exception))
+
     def test_main_offline_control_binds_arguments_by_name(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
