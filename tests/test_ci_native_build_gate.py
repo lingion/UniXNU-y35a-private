@@ -30,7 +30,7 @@ class NativeBuildGateTests(unittest.TestCase):
                     "libdispatch": "dispatch-pin", "libplatform": "platform-pin"},
                 "native_input_commits": {
                     "availability": "availability-commit", "libdispatch": "dispatch-commit",
-                    "libplatform": "platform-commit", "llvm": "llvm-commit", "libc": "libc-pin"},
+                    "libplatform": "platform-commit", "llvm": "llvm-commit", "libc": "libc-commit"},
             }
             source_path.write_text(json.dumps(source))
             manifest = {
@@ -57,7 +57,7 @@ class NativeBuildGateTests(unittest.TestCase):
                 "libdispatch_tag": "dispatch-pin", "libdispatch_commit": "dispatch-commit",
                 "libplatform_tag": "platform-pin", "libplatform_commit": "platform-commit",
                 "llvm_commit": "llvm-commit",
-                "libc_commit": "libc-pin",
+                "libc_commit": "libc-commit",
             }
             data = {
                 "source": {"xnu_commit": "xnu-pin", **expected},
@@ -69,6 +69,7 @@ class NativeBuildGateTests(unittest.TestCase):
             for root in roots[:2]:
                 root.mkdir()
             roots[2].write_text("wrapper")
+            roots[2].chmod(0o755)
             data["paths"] = dict(zip(("fakeroot", "sdk_overlay", "xcrun_wrapper"),
                                      map(str, roots)))
             data["trees"] = {

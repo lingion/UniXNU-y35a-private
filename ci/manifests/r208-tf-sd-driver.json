@@ -118,7 +118,7 @@
     "scripts/ci/run_native_build.py": "9a64246124836202e646159c22f3d778823ab0e7187058d438c917659cc8bd88",
     "scripts/ci/validate_r208_tf_manifest.py": "c42118e6cc83f7364b303778a4166d61a1530930e65ec76c412ab6f4adb3241c",
     "ci/native-source-provenance.r208.json": "53d2d6fcfbe76721a8c1fed7ad7b2fcad3b8e7b92154b6220f084635ef0b4452",
-    "tests/test_ci_native_build_gate.py": "63cd287dc11ae1395ebe59e6e22d19981fcd8221d990311d7ff4f0a4b665ee87",
+    "tests/test_ci_native_build_gate.py": "1971a421c7e7e01b5672cdfd60c17d37bdff4875ff9fd14fcb831f0382e3dff2",
     "tests/test_native_xnu_build_contract.py": "33f1e110d09a921751210d4aed480e3740adaf0de49fa345807f55081c730186",
     ".github/workflows/unixnu-native-build.yml": "c90b89d5ee4a0f9a902051895154c06ee611e03e79b1663dcbcca82737115a4f",
     ".github/workflows/r208-tf-validation.yml": "e414e49af97a438dfd4ff5b768732f423aa8a18414018905c2dd897d9abd6ccf",
