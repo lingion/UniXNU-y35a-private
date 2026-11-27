@@ -1,0 +1,24 @@
+{
+  "schema_version": 1,
+  "kind": "r208-tf-emmc-root-fallback-candidate",
+  "status": "source-candidate",
+  "source_ref": "xnu-4903.270.47",
+  "source_commit": "494ffe1c29d37ca720c37328feb83069c9641b67",
+  "patch": {
+    "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch",
+    "sha256": "1863a52b087dfc25e2fbf132c36f2ceae03777f82efbf1843b178cfc193c8670"
+  },
+  "feature_macro": "XNU_Y35A_STORAGE_FALLBACK",
+  "tf_selector": "boot-uuid",
+  "emmc_selector": "emmc-boot-uuid",
+  "fallback_trigger": "vfs_mountroot failure after TF root selection",
+  "fallback_attempts": 1,
+  "device_run_allowed": false,
+  "linked_status": "unverified",
+  "runtime_status": "unverified",
+  "notes": [
+    "The candidate is derived from public XNU 4903.270.47 source and is not in the native build manifest.",
+    "It does not prove that the TF service first read failed; that requires linked/runtime evidence.",
+    "It does not authorize device, TF-card, eMMC, GPT or persistent writes."
+  ]
+}

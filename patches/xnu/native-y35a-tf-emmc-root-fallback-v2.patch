@@ -1,0 +1,108 @@
+--- a/bsd/kern/bsd_init.c
++++ b/bsd/kern/bsd_init.c
+@@ -262,6 +262,9 @@
+ #endif
+ 
+ extern kern_return_t IOFindBSDRoot(char *, unsigned int, dev_t *, u_int32_t *);
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++extern boolean_t IOY35ARequestEmmcRootFallback(void);
++#endif
+ extern void IOSecureBSDRoot(const char * rootName);
+ extern kern_return_t IOKitBSDInit(void );
+ extern void kminit(void);
+@@ -448,6 +451,9 @@
+ #if NFSCLIENT || CONFIG_IMAGEBOOT
+ 	boolean_t       netboot = FALSE;
+ #endif
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	boolean_t       storageFallbackAttempted = FALSE;
++#endif
+ 
+ #define bsd_init_kprintf(x...) /* kprintf("bsd_init: " x) */
+ 
+@@ -936,6 +942,14 @@
+ 		if (0 == (err = vfs_mountroot())) {
+ 			break;
+ 		}
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++		if (!storageFallbackAttempted && IOY35ARequestEmmcRootFallback()) {
++			storageFallbackAttempted = TRUE;
++			rootdevice[0] = '\0';
++			setconf();
++			continue;
++		}
++#endif
+ 		rootdevice[0] = '\0';
+ #if NFSCLIENT
+ 		if (netboot) {
+--- a/iokit/bsddev/IOKitBSDInit.cpp
++++ b/iokit/bsddev/IOKitBSDInit.cpp
+@@ -399,6 +399,25 @@
+ static int didRam = 0;
+ enum { kMaxPathBuf = 512, kMaxBootVar = 128 };
+ 
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++static boolean_t native_y35a_emmc_fallback_active = FALSE;
++static boolean_t native_y35a_tf_root_selected = FALSE;
++static char native_y35a_emmc_uuid[kMaxBootVar];
++
++boolean_t
++IOY35ARequestEmmcRootFallback(void)
++{
++	if (!native_y35a_tf_root_selected || native_y35a_emmc_fallback_active) {
++		return FALSE;
++	}
++	if (!PE_parse_boot_argn("emmc-boot-uuid", native_y35a_emmc_uuid, kMaxBootVar)) {
++		return FALSE;
++	}
++	native_y35a_emmc_fallback_active = TRUE;
++	return TRUE;
++}
++#endif
++
+ kern_return_t
+ IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
+     dev_t * root, u_int32_t * oflags )
+@@ -455,6 +474,11 @@
+ 	}
+ 
+ 	do {
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++		if (native_y35a_emmc_fallback_active) {
++			continue;
++		}
++#endif
+ 		if ((regEntry = IORegistryEntry::fromPath( "/chosen", gIODTPlane ))) {
+ 			di_root_ramfile(regEntry);
+ 			data = OSDynamicCast(OSData, regEntry->getProperty( "root-matching" ));
+@@ -487,6 +511,18 @@
+ 		}
+ 	} while (false);
+ 
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++	if (native_y35a_emmc_fallback_active && !matching) {
++		OSString *fallbackUUID = OSString::withCString(native_y35a_emmc_uuid);
++		if (fallbackUUID) {
++			IOService::publishResource("boot-uuid", fallbackUUID);
++			fallbackUUID->release();
++			matching = IOUUIDMatching();
++			mediaProperty = "boot-uuid-media";
++		}
++	}
++#endif
++
+ //
+ //	See if we have a RAMDisk property in /chosen/memory-map.  If so, make it into a device.
+ //	It will become /dev/mdx, where x is 0-f.
+@@ -636,6 +672,11 @@
+ 
+ 	if (service && mediaProperty) {
+ 		service = (IOService *)service->getProperty(mediaProperty);
++#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
++		if (!native_y35a_emmc_fallback_active) {
++			native_y35a_tf_root_selected = TRUE;
++		}
++#endif
+ 	}
+ 
+ 	mjr = 0;
