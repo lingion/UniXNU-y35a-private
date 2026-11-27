@@ -20,9 +20,13 @@ class TfApfsImageInputTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "not-qcdt.bin"
             path.write_bytes(b"derived-dtb")
+            provenance = Path(directory) / "provenance.json"
+            provenance.write_text(json.dumps({
+                "source_type": "stock-qcdt", "board": "PD1502A",
+                "origin": "stock-boot-image", "sha256_scope": "qcdt-bytes",
+                "sha256": MODULE.hashlib.sha256(path.read_bytes()).hexdigest(),
+            }))
             with self.assertRaisesRegex(ValueError, "QCDT magic"):
-                provenance = Path(directory) / "provenance.json"
-                provenance.write_text(json.dumps({}))
                 MODULE.parse_stock_qcdt(path, provenance)
 
     def test_qcdt_table_range_is_validated(self):
@@ -34,7 +38,7 @@ class TfApfsImageInputTest(unittest.TestCase):
             table[44:48] = (40).to_bytes(4, "little")
             table[48:52] = (64).to_bytes(4, "little")
             path.write_bytes(table)
-            with self.assertRaisesRegex(ValueError, "invalid DTB range"):
+            with self.assertRaisesRegex(ValueError, "overlaps header/table or exceeds file"):
                 provenance = Path(directory) / "provenance.json"
                 provenance.write_text(json.dumps({
                     "source_type": "stock-qcdt", "board": "PD1502A",

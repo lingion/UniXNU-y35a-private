@@ -392,10 +392,18 @@ class PackageComponentClosureTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             name = package_ci.REQUIRED_PACKAGE_COMPONENTS[0]
-            (root / name).write_bytes(b"actual")
+            for component in package_ci.REQUIRED_PACKAGE_COMPONENTS:
+                (root / component).write_bytes(b"actual" if component == name else component.encode())
             manifest = {
                 "package_components": {
-                    name: {"path": name, "bytes": 6, "sha256": "0" * 64},
+                    component: {
+                        "path": component,
+                        "bytes": 6 if component == name else (root / component).stat().st_size,
+                        "sha256": "0" * 64 if component == name else hashlib.sha256(
+                            (root / component).read_bytes(),
+                        ).hexdigest(),
+                    }
+                    for component in package_ci.REQUIRED_PACKAGE_COMPONENTS
                 },
             }
 
