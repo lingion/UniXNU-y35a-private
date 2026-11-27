@@ -561,7 +561,7 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
     try:
         run_checked([
             "hdiutil", "create", "-size", size, "-layout", "GPTSPUD",
-            "-fs", "APFS", "-volname", volume_name, "-format", "UDRW",
+            "-fs", "APFS", "-volname", volume_name, "-type", "UDRW",
             "-ov", str(output),
         ])
         result = run_checked(

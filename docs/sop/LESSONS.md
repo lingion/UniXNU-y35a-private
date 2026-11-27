@@ -252,3 +252,13 @@
 - 证据：GitHub Actions run `46039400354`, job `tf-apfs-offline-control`, step `Build non-bootable derived-QCDT control image`, `hdiutil create` exit 1; artifact ID/digest and root tar download steps passed.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
 - 下一次触发：Any CI subprocess that captures output and fails with check=True.
+
+## L-2026-11-28-03 hdiutil empty image uses -type, not -format
+
+- 现象：R208 offline-control run `46040773916` reached the macOS image builder after all artifact identity and tar restore gates passed, then failed at `hdiutil create`.
+- 根因：The command used `-format UDRW` without `-srcfolder` or `-srcdevice`; hdiutil reported `-format requires -srcfolder or -srcdevice`.
+- 影响：The derived-QCDT APFS control image was not created or uploaded. This is an image-builder command contract failure, not evidence against the root tree or QCDT provenance.
+- 正确做法：For an empty writable image, use the hdiutil image type option (`-type UDRW`) with the GPT/APFS layout, then attach and populate it; preserve hdiutil stdout/stderr in failures.
+- 证据：GitHub Actions run `46040773916`, job `tf-apfs-offline-control`, exact stderr from `hdiutil create`.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
+- 下一次触发：Any macOS hdiutil empty-image creation or GPT/APFS intermediate builder.
