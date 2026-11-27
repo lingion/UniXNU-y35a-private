@@ -36,7 +36,7 @@ class TfEmmcRootFallbackV3PatchTest(unittest.TestCase):
         bsd_patch, iokit_patch = self.patch_text.split(
             "--- a/iokit/bsddev/IOKitBSDInit.cpp", 1)
         declaration_hunk = iokit_patch.index("@@ -399,")
-        root_selector_hunk = iokit_patch.index("@@ -452,")
+        root_selector_hunk = iokit_patch.index("@@ -453,")
         self.assertLess(declaration_hunk, root_selector_hunk)
         self.assertIn("y35aBoundedRootWait = native_y35a_tf_root_selected && matching", iokit_patch)
         self.assertIn("native_y35a_tf_root_selected && matching", iokit_patch)
