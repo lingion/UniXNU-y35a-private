@@ -52,8 +52,12 @@ def validate_native_provenance(manifest: dict, repo_root: Path) -> dict:
     source_provenance_path = resolve(repo_root, manifest.get("source_provenance"))
     if source_provenance_path is None or not source_provenance_path.is_file():
         raise SystemExit("native source provenance is missing")
-    if sha256(source_provenance_path) != manifest.get("source_provenance_sha256"):
-        raise SystemExit("native source provenance SHA-256 does not match native build manifest")
+    actual_provenance_sha = sha256(source_provenance_path)
+    if actual_provenance_sha != manifest.get("source_provenance_sha256"):
+        raise SystemExit(
+            "native source provenance SHA-256 does not match native build manifest: "
+            f"expected {manifest.get('source_provenance_sha256')!r}, actual {actual_provenance_sha}"
+        )
     source_provenance = json.loads(source_provenance_path.read_text())
     source = source_provenance.get("source", {})
     if source.get("commit") != manifest.get("source_ref"):
