@@ -3092,3 +3092,10 @@ SUPERSEDES: 2026-11-27T07:44:47Z — Firehose 输入修复已派发 native CI (r
 事实: Native run `45960088944` 绑定 package commit `e007c2ed6cf09038ed32d6e99c6d394f50628606`，输入准备、manifest 校验和编译步骤通过，最终 arm64 kernel link 失败。`libQcomSdcard.a(IOStorageFamily-QcomSdcard.o)` 的 vtable 引用 `_RESERVEDIOService33` 至 `_RESERVEDIOService47`，但 pinned XNU 4903 的 `IOService` 没有这些 reserved slots。artifact provenance 将该 object 源码追溯到 IOStorageFamily commit `c95d314`，ABI 与目标内核不兼容。run 未产出 kernel artifact。
 下一步: 选择并固定与 Darwin 18/XNU 4903 ABI 对应的 IOStorageFamily 源版本，更新 CI archive producer、manifest 和 provenance，由 GitHub Actions 重建 archive 后再运行精确 SHA native link。不得通过给 XNU `IOService` 伪造 reserved slots 来掩盖 archive ABI 不匹配。
 裁决: Firehose、genassym、monotonic 与 patch/input 闭包不再是 run `45960088944` 的阻塞。Native kernel link、package/probe、TF/APFS 与真机目标仍未完成。Mission `IN_PROGRESS`; D1/D2/D3 `NOT_MET`; `device_run_allowed=false`。
+
+## 2026-11-27T08:32:25Z — Darwin 18 storage archive 重试未产出 kernel
+
+类型: CI-FAILURE / CONTINUATION
+事实: Package commit `31f5091` pins candidate `IOStorageFamily-218.200.3`; source/archive run `45963287517` passed. Commit `dfdb2b9c0fd0bf9679192298f550bb8b1d22c58d` binds the candidate archive into the R208 native manifest. TF validation `45964534567` passed. Native run `45964692949` on that SHA passed native input preparation, manifest checks and compilation, then failed at `Run native build` during final link. Kernel artifact contract and upload were skipped. The exact linker failure has not yet been recorded in this entry and is being retrieved by the main session.
+下一步: Read the uploaded build log and identify the exact linker symbols and archive owner. Record the root cause before changing the source pin, ABI headers or link inputs. Then continue with one exact-SHA CI candidate.
+裁决: Candidate `IOStorageFamily-218.200.3` has not yielded a kernel artifact. Mission `IN_PROGRESS`; D1/D2/D3 `NOT_MET`; `device_run_allowed=false`. The audit session did not repeat linker investigation or run a local build.
