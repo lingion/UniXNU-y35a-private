@@ -98,6 +98,11 @@ on:
         required: false
         default: ''
         type: string
+      native_manifest_path:
+        description: Exact native build manifest used by the native artifact
+        required: false
+        default: ci/native-build-manifest.r208.json
+        type: string
       root_tree_run_id:
         description: Actions run containing a root-tree artifact for TF/APFS intermediate packaging
         required: false
@@ -182,6 +187,7 @@ jobs:
       native_run_id: ${{ steps.native.outputs.run_id }}
       native_head_sha: ${{ steps.native.outputs.head_sha }}
       package_source_sha: ${{ steps.package_source.outputs.sha }}
+      native_manifest_path: ${{ steps.native_manifest.outputs.path }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -205,6 +211,23 @@ jobs:
           set -euo pipefail
           [[ "$PACKAGE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           echo "sha=$PACKAGE_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+      - name: Resolve native manifest selection
+        id: native_manifest
+        env:
+          REQUESTED_NATIVE_MANIFEST: ${{ inputs.native_manifest_path }}
+        run: |
+          set -euo pipefail
+          case "${REQUESTED_NATIVE_MANIFEST:-}" in
+            ""|ci/native-build-manifest.r208.json)
+              NATIVE_MANIFEST=ci/native-build-manifest.r208.json ;;
+            ci/native-build-manifest.r208-fallback-v2.json)
+              NATIVE_MANIFEST=ci/native-build-manifest.r208-fallback-v2.json ;;
+            *)
+              echo "unsupported native manifest selection: $REQUESTED_NATIVE_MANIFEST" >&2
+              exit 1 ;;
+          esac
+          test -f "$NATIVE_MANIFEST"
+          echo "path=$NATIVE_MANIFEST" >> "$GITHUB_OUTPUT"
       - name: Resolve successful native run
         id: native
         if: github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && inputs.native_run_id != '')
@@ -368,6 +391,7 @@ jobs:
         env:
           NATIVE_RUN_ID: ${{ needs.validate.outputs.native_run_id }}
           NATIVE_HEAD_SHA: ${{ needs.validate.outputs.native_head_sha }}
+          NATIVE_BUILD_MANIFEST_PATH: ${{ needs.validate.outputs.native_manifest_path }}
           PACKAGE_SOURCE_SHA: ${{ needs.validate.outputs.package_source_sha }}
           PACKAGE_RUN_ID: ${{ github.run_id }}
           PACKAGE_TOOLCHAIN_MANIFEST: ${{ runner.temp }}/y35a-package-toolchain.json
@@ -378,6 +402,7 @@ jobs:
             --native-run-id "$NATIVE_RUN_ID" \
             --native-head-sha "$NATIVE_HEAD_SHA" \
             --native-artifact-dir "$RUNNER_TEMP/native-kernel" \
+            --native-manifest "$NATIVE_BUILD_MANIFEST_PATH" \
             --package-source-sha "$PACKAGE_SOURCE_SHA" \
             --package-run-id "$PACKAGE_RUN_ID" \
             --ipsw "$RUNNER_TEMP/ios-12.4.1-16G102.ipsw" \

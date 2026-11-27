@@ -477,6 +477,25 @@ class PackageSourceClosureTest(unittest.TestCase):
         self.assertIn("scripts/unixnu/devicetree.py", package_ci.PACKAGE_SOURCE_FILES)
         self.assertIn("scripts/unixnu/udif.py", package_ci.PACKAGE_SOURCE_FILES)
         self.assertIn("scripts/unixnu/util.py", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("ci/native-build-manifest.r208-fallback-v2.json", package_ci.PACKAGE_SOURCE_FILES)
+        self.assertIn("ci/native-source-provenance.r208-fallback-v2.json", package_ci.PACKAGE_SOURCE_FILES)
+
+    def test_candidate_native_manifest_is_selectable_but_external_paths_are_not(self):
+        candidate = package_ci.resolve_native_manifest(
+            ROOT / "ci/native-build-manifest.r208-fallback-v2.json",
+        )
+        self.assertEqual(candidate.name, "native-build-manifest.r208-fallback-v2.json")
+        with tempfile.TemporaryDirectory() as directory:
+            external = Path(directory) / "manifest.json"
+            external.write_text("{}")
+            with self.assertRaisesRegex(ValueError, "inside the checked-out repository"):
+                package_ci.resolve_native_manifest(external)
+
+    def test_package_workflow_passes_selected_native_manifest(self):
+        workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
+        self.assertIn("native_manifest_path:", workflow)
+        self.assertIn("ci/native-build-manifest.r208-fallback-v2.json", workflow)
+        self.assertIn('--native-manifest "$NATIVE_BUILD_MANIFEST_PATH"', workflow)
 
 
 class PackageComponentClosureTest(unittest.TestCase):

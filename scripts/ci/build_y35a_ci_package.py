@@ -40,12 +40,20 @@ REQUIRED_PACKAGE_COMPONENTS = (
     "ramdisk-second.bin",
     "trustcache.bin",
 )
+ALLOWED_NATIVE_MANIFESTS = {
+    "ci/native-build-manifest.r208.json",
+    "ci/native-build-manifest.r208-fallback-v2.json",
+}
 PACKAGE_SOURCE_FILES = (
     ".github/workflows/y35a-ci-package.yml",
     ".github/workflows/unixnu-native-build.yml",
     "ci/manifests/r208-tf-sd-driver.json",
     "ci/native-build-manifest.r208.json",
     "ci/native-source-provenance.r208.json",
+    "ci/native-build-manifest.r208-fallback-v2.json",
+    "ci/native-source-provenance.r208-fallback-v2.json",
+    "patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch",
+    "scripts/ci/verify_r208_fallback_v2_source.py",
     "ci/y35a-ci-package-manifest.json",
     "ci/manifests/r208-tf-apfs-package-contract.json",
     "scripts/ci/build_y35a_ci_package.py",
@@ -258,6 +266,17 @@ def validate_native_artifact(
         "kernel_bytes": kernel_bytes,
     }
     return kernel, binding, provenance
+
+
+def resolve_native_manifest(path: Path) -> Path:
+    resolved = path.resolve(strict=True)
+    try:
+        relative = resolved.relative_to(ROOT).as_posix()
+    except ValueError as error:
+        raise ValueError("native build manifest must be inside the checked-out repository") from error
+    if relative not in ALLOWED_NATIVE_MANIFESTS:
+        raise ValueError(f"unsupported native build manifest: {relative}")
+    return resolved
 
 
 def attached_device(output: bytes) -> str:
@@ -490,9 +509,10 @@ def build_package(args) -> dict:
         raise ValueError("package manifest must require TrustCache coverage for every staged Mach-O")
     if not isinstance(expected_macho_count, int) or isinstance(expected_macho_count, bool) or expected_macho_count < 1:
         raise ValueError("package manifest has an invalid expected staged Mach-O count")
+    native_manifest_path = resolve_native_manifest(args.native_manifest)
     kernel, native_binding, native_provenance = validate_native_artifact(
         args.native_artifact_dir.resolve(strict=True), args.native_run_id,
-        args.native_head_sha, ROOT / "ci/native-build-manifest.r208.json",
+        args.native_head_sha, native_manifest_path,
     )
     output = args.output.resolve()
     if output.exists():
@@ -711,6 +731,8 @@ def main() -> int:
     parser.add_argument("--native-run-id", required=True)
     parser.add_argument("--native-head-sha", required=True)
     parser.add_argument("--native-artifact-dir", required=True, type=Path)
+    parser.add_argument("--native-manifest", type=Path,
+                        default=ROOT / "ci/native-build-manifest.r208.json")
     parser.add_argument("--package-source-sha", required=True)
     parser.add_argument("--package-run-id", required=True)
     parser.add_argument("--ipsw", required=True, type=Path)
