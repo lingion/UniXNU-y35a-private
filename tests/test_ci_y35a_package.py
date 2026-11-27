@@ -20,6 +20,58 @@ from verify_y35a_trustcache import combine_v1, parse_v1, verify_coverage
 import package_native
 
 
+class PackageToolchainContractTest(unittest.TestCase):
+    def test_toolchain_manifest_binds_pinned_ndk_paths_versions_and_hashes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ndk = root / "android-sdk/ndk/27.0.12077973"
+            prebuilt = ndk / "toolchains/llvm/prebuilt/darwin-x86_64/bin"
+            prebuilt.mkdir(parents=True)
+            compiler = root / "xcode/clang"
+            compiler.parent.mkdir()
+            tools = {
+                "clang": (compiler, "Apple clang test"),
+                "ld.lld": (prebuilt / "ld.lld", "LLD test"),
+                "llvm-objcopy": (prebuilt / "llvm-objcopy", "llvm-objcopy test"),
+            }
+            records = {}
+            for name, (path, version) in tools.items():
+                path.write_text(f"#!/bin/sh\necho '{version}'\n")
+                path.chmod(0o755)
+                records[name] = {
+                    "path": str(path),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    "version": version,
+                }
+            manifest_path = root / "toolchain.json"
+            manifest_path.write_text(json.dumps({
+                "android_ndk": {"revision": "27.0.12077973", "root": str(ndk),
+                                "host_tag": "darwin-x86_64"},
+                "tools": records,
+            }))
+            config = {"toolchain": {"android_ndk_revision": "27.0.12077973"}}
+            result = package_ci.validate_package_toolchain(
+                manifest_path, config, compiler=compiler,
+                linker=tools["ld.lld"][0], objcopy=tools["llvm-objcopy"][0])
+            self.assertEqual(result["android_ndk_revision"], "27.0.12077973")
+            self.assertEqual(result["android_ndk_host_tag"], "darwin-x86_64")
+            self.assertEqual(set(result["tools"]), {"clang", "ld.lld", "llvm-objcopy"})
+
+    def test_toolchain_manifest_rejects_pinned_ndk_revision_mismatch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            manifest_path = root / "toolchain.json"
+            manifest_path.write_text(json.dumps({
+                "android_ndk": {"revision": "wrong", "root": str(root),
+                                "host_tag": "darwin-x86_64"},
+                "tools": {},
+            }))
+            with self.assertRaisesRegex(ValueError, "revision does not match"):
+                package_ci.validate_package_toolchain(
+                    manifest_path, {"toolchain": {"android_ndk_revision": "27.0.12077973"}},
+                    compiler=root / "clang", linker=root / "ld.lld", objcopy=root / "llvm-objcopy")
+
+
 def synthetic_fdt(size=128):
     data = bytearray(size)
     data[:4] = b"\xd0\x0d\xfe\xed"

@@ -84,6 +84,54 @@ def version_line(executable: Path) -> str:
     return output.splitlines()[0] if output else "version output unavailable"
 
 
+def validate_package_toolchain(
+    manifest_path: Path,
+    config: dict,
+    *,
+    compiler: Path,
+    linker: Path,
+    objcopy: Path,
+) -> dict:
+    manifest = load_json(manifest_path.resolve(strict=True))
+    ndk = manifest.get("android_ndk", {})
+    expected_revision = config.get("toolchain", {}).get("android_ndk_revision")
+    if not expected_revision or ndk.get("revision") != expected_revision:
+        raise ValueError("package toolchain Android NDK revision does not match the package manifest")
+    ndk_root = Path(ndk.get("root", "")).resolve(strict=True)
+    host_tag = ndk.get("host_tag")
+    if host_tag not in {"darwin-x86_64", "darwin-arm64"}:
+        raise ValueError("package toolchain has an unsupported Android NDK host prebuilt")
+    if ndk_root.name != expected_revision or ndk_root.parent.name != "ndk":
+        raise ValueError("Android NDK root does not identify the pinned revision")
+    tools = manifest.get("tools", {})
+    actual_paths = {"clang": compiler, "ld.lld": linker, "llvm-objcopy": objcopy}
+    resolved = {}
+    for name, expected_path in actual_paths.items():
+        record = tools.get(name, {})
+        path = expected_path.resolve(strict=True)
+        if path != Path(record.get("path", "")).resolve(strict=True):
+            raise ValueError(f"package toolchain path mismatch for {name}")
+        if not path.is_file() or not os.access(path, os.X_OK):
+            raise ValueError(f"package tool is not executable: {name}")
+        actual_sha = sha256(path)
+        if actual_sha != record.get("sha256"):
+            raise ValueError(f"package tool SHA-256 mismatch: {name}")
+        actual_version = version_line(path)
+        if actual_version != record.get("version"):
+            raise ValueError(f"package tool version mismatch: {name}")
+        if name != "clang" and path.relative_to(ndk_root).parts[:4] != (
+                "toolchains", "llvm", "prebuilt", host_tag):
+            raise ValueError(f"package tool is outside pinned NDK host tools: {name}")
+        resolved[name] = {"path": str(path), "sha256": actual_sha, "version": actual_version}
+    return {
+        "manifest_sha256": sha256(manifest_path),
+        "android_ndk_revision": expected_revision,
+        "android_ndk_root": str(ndk_root),
+        "android_ndk_host_tag": host_tag,
+        "tools": resolved,
+    }
+
+
 def load_json(path: Path) -> dict:
     value = json.loads(path.read_text())
     if not isinstance(value, dict):
@@ -389,6 +437,9 @@ def verify_hfs_ramdisk(path: Path) -> dict:
 def build_package(args) -> dict:
     config_path = args.config.resolve(strict=True)
     config = load_json(config_path)
+    package_toolchain = validate_package_toolchain(
+        args.toolchain_manifest, config,
+        compiler=args.compiler, linker=args.linker, objcopy=args.objcopy)
     package_scope = config.get("package_scope", {})
     expected_macho_count = package_scope.get("expected_staged_macho_count")
     if package_scope.get("require_all_staged_machos_trusted") is not True:
@@ -404,6 +455,7 @@ def build_package(args) -> dict:
         if not output.is_dir() or any(output.iterdir()):
             raise SystemExit(f"Use a new or empty output directory: {output}")
     output.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(args.toolchain_manifest.resolve(strict=True), output / "package-toolchain-manifest.json")
 
     with tempfile.TemporaryDirectory(prefix="y35a-package-", dir=output.parent) as temporary:
         work = Path(temporary)
@@ -541,9 +593,7 @@ def build_package(args) -> dict:
                 "workflow_run_id": args.package_run_id,
                 "toolchain": {
                     "macos_version": platform.mac_ver()[0],
-                    "clang": {"path": str(args.compiler), "version": version_line(args.compiler)},
-                    "lld": {"path": str(args.linker), "version": version_line(args.linker)},
-                    "llvm_objcopy": {"path": str(args.objcopy), "version": version_line(args.objcopy)},
+                    "package_toolchain_manifest": package_toolchain,
                     "dtc_revision": args.dtc_revision,
                     "dtc_sha256": qcdt_report["dtc_sha256"],
                 },
@@ -602,6 +652,7 @@ def main() -> int:
     parser.add_argument("--compiler", required=True, type=Path)
     parser.add_argument("--linker", required=True, type=Path)
     parser.add_argument("--objcopy", required=True, type=Path)
+    parser.add_argument("--toolchain-manifest", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
     parser.add_argument("--config", type=Path,
                         default=ROOT / "ci/y35a-ci-package-manifest.json")

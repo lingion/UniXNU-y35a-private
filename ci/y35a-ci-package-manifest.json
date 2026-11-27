@@ -61,5 +61,8 @@
   "dtc": {
     "repository": "https://github.com/dgibson/dtc.git",
     "commit": "2d10aa2afe35527728db30b35ec491ecb6959e5c"
+  },
+  "toolchain": {
+    "android_ndk_revision": "27.0.12077973"
   }
 }
