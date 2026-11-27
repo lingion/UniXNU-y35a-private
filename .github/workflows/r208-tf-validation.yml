@@ -5,6 +5,7 @@ on:
   push:
     paths:
       - 'ci/manifests/r208-tf-sd-driver.json'
+      - 'ci/native-build-manifest.r208.json'
       - 'scripts/ci/validate_r208_tf_manifest.py'
       - 'scripts/ci/compile_r208_sdcard.py'
       - 'drivers/QcomSdcard/**'

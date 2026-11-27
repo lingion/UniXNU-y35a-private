@@ -63,14 +63,14 @@
     "archive_size": 217912,
     "combined_object_sha256": "b756ed200263ae999aa69eb9ee33b20548ea846cf3a6eafe74ae7a899cc0b175",
     "combined_object_size": 194120,
-    "commit": "c055cc5828cbcb87a4373519c713d4fedefae59b",
+    "commit": "50ab0de1d3b0751b9edac26a560118bd8ed07e1e",
     "head_branch": "codex/unixnu-ci-package-v2",
-    "driver_manifest_sha256": "410f5ba77736547208389d5c038b11b2c27bff157234fbbb8bb4ed06c7df6f60",
+    "driver_manifest_sha256": "e9a127e2d052e8ee1a16a6fe67a9944331296ad019c462282d37f9b8df2efe8e",
     "native_sdcard_object_sha256": "a58aa07cd9b52c6486748cab35c9773990dd9f30985ba0f2d9ce7f5ffb6060ce",
     "native_sdcard_object_size": 25568,
-    "run_id": 45979988462,
-    "artifact_id": 15189211165,
-    "artifact_zip_digest": "sha256:fccad17f47f17865e0a80a235bd6207bf3dc432eb0c2947cff62813d72e06935",
+    "run_id": 45991832027,
+    "artifact_id": 15193134761,
+    "artifact_zip_digest": "sha256:5a7339585293b8914952aef19a248e82d96690b331b9a7fd2b113e461fbdf3f8",
     "status": "success"
   },
   "lk2nd_patch": {
@@ -103,6 +103,7 @@
     "tag": "xnu-4903.270.47"
   },
   "source_files": {
+    "ci/native-build-manifest.r208.json": "5a2ed15ce136013175de609ddff3c2650ea3c8441d39e7db1ae01399b6a2e22c",
     "components.toml": "abc2efe231e7903dceaf3889b3f329b0819c1bb4980b004de5fec2e81a1cd390",
     "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch": "51a61655b607b10bb913da3b7d969a3e933fffeaad1ff0146cdfb0d2cc33e93d",
     "patches/lk2nd/msm8916-sd-boot.patch": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc",
@@ -121,7 +122,7 @@
     "tests/test_ci_native_build_gate.py": "1971a421c7e7e01b5672cdfd60c17d37bdff4875ff9fd14fcb831f0382e3dff2",
     "tests/test_native_xnu_build_contract.py": "33f1e110d09a921751210d4aed480e3740adaf0de49fa345807f55081c730186",
     ".github/workflows/unixnu-native-build.yml": "c90b89d5ee4a0f9a902051895154c06ee611e03e79b1663dcbcca82737115a4f",
-    ".github/workflows/r208-tf-validation.yml": "94ac15c8fe272db1f251653ae0a8aa1ab901b255ce956437b26d79f3f96db9f3",
+    ".github/workflows/r208-tf-validation.yml": "a633b069396d1fc29dccf90fdb84f7d298198eedff0db61bbc9e774a088da95a",
     "tests/test_r208_storage_abi_contract.py": "65baf370282e099ff3a7693f5ad08217ca03304c3e0fd6ad8171b1280b7d470b"
   },
   "status": "offline-plan-only",
