@@ -47,7 +47,6 @@ jobs:
     env:
       SOURCE_REF: ${{ inputs.source_ref }}
       BUILD_MANIFEST: ${{ inputs.manifest }}
-      RUN_ROOT: ${{ runner.temp }}/unixnu-native-build
     steps:
       - uses: actions/checkout@v4
         with:
@@ -119,7 +118,7 @@ jobs:
           python scripts/ci/run_native_build.py \
             --manifest "$BUILD_MANIFEST" \
             --source-root "$RUNNER_TEMP/xnu" \
-            --run-root "$RUN_ROOT" \
+            --run-root "$RUNNER_TEMP/unixnu-native-build" \
             --developer-dir "$DEVELOPER_DIR" \
             --repo-root "$GITHUB_WORKSPACE" \
             --fakeroot "$RUNNER_TEMP/native-inputs/fakeroot" \
@@ -134,7 +133,7 @@ jobs:
           python scripts/ci/run_native_build.py \
             --manifest "$BUILD_MANIFEST" \
             --source-root "$RUNNER_TEMP/xnu" \
-            --run-root "$RUN_ROOT" \
+            --run-root "$RUNNER_TEMP/unixnu-native-build" \
             --developer-dir "$DEVELOPER_DIR" \
             --repo-root "$GITHUB_WORKSPACE" \
             --fakeroot "$RUNNER_TEMP/native-inputs/fakeroot" \
@@ -156,10 +155,10 @@ jobs:
       - name: Prepare kernel artifact contract
         if: ${{ inputs.execute == true && success() }}
         env:
-          NATIVE_RUN_ROOT: ${{ env.RUN_ROOT }}
           RUN_ID: ${{ github.run_id }}
           HEAD_SHA: ${{ github.sha }}
         run: |
+          NATIVE_RUN_ROOT="$RUNNER_TEMP/unixnu-native-build"
           KERNEL="$NATIVE_RUN_ROOT/obj/DEVELOPMENT_ARM64_T7001/mach.development.t7001.unstripped"
           PROVENANCE="$NATIVE_RUN_ROOT/build-provenance.json"
           test -f "$KERNEL"
