@@ -559,11 +559,10 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
     attached = None
     mountpoint = None
     try:
-        with tempfile.TemporaryDirectory(prefix="y35a-empty-source-", dir=output.parent) as empty_source:
-            run_checked([
-                "hdiutil", "create", "-srcfolder", empty_source, "-layout", "GPTSPUD",
-                "-fs", "APFS", "-volname", volume_name, "-format", "UDRW", "-ov", str(output),
-            ])
+        run_checked([
+            "hdiutil", "create", "-size", size, "-layout", "GPTSPUD",
+            "-fs", "APFS", "-volname", volume_name, "-type", "UDIF", "-ov", str(output),
+        ])
         result = run_checked(
             ["hdiutil", "attach", "-nobrowse", "-owners", "on", "-plist", str(output)],
             text=False,
