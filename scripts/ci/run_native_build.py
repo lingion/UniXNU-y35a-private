@@ -62,6 +62,8 @@ def main() -> int:
             continue
         if item.get("order") != index:
             failures.append(f"patches[{index}].order must equal {index}")
+        if item.get("target_tree") != "xnu-source":
+            failures.append(f"patches[{index}].target_tree must be xnu-source")
         path = resolve(repo_root, item.get("path"))
         if path is None or not path.is_file():
             failures.append(f"patches[{index}] missing: {item.get('path')}")
