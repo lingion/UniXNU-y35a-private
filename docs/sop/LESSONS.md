@@ -191,3 +191,13 @@
 - 证据：native run `45956827212` 的 `build.log`；同代 libdispatch 913/1477 的 `os/firehose_buffer_private.h` 与 `src/firehose/firehose_buffer.c`。
 - 自动化入口：`scripts/ci/prepare_native_inputs.py`、native input manifest 和 native build workflow。
 - 下一次触发：任何 XNU 4903 Firehose 版本切换或私有头适配。
+
+## L-2026-11-27-02 embedded KEXT vtable ABI must match XNU headers
+
+- 现象：native XNU 4903 builds reached final link but failed on 122 `_RESERVED*` references emitted by `libQcomSdcard.a(IOStorageFamily-QcomSdcard.o)`; the errors included `OSMetaClass`, `IORegistryEntry`, `IOService`, and related base classes.
+- 根因：driver compile passed `XNU_KERNEL_PRIVATE` without `CONFIG_EMBEDDED`, so `OSMetaClass.h` selected `APPLE_KEXT_VTABLE_PADDING=1` and `APPLE_KEXT_ALIGN_CONTAINERS=0`. XNU 4903 embedded kernel uses `CONFIG_EMBEDDED` and its exported header view selects padding 0/alignment 1. This is a compile-time header-view mismatch, not a missing IOService object or an IOStorageFamily version mismatch.
+- 影响：all storage-derived class vtables had a different reserved-slot layout from the target kernel; forcing or stubbing the missing methods would conceal the ABI error and corrupt class layout.
+- 正确做法：compile NativeSdcard and every IOStorageFamily support object with `CONFIG_EMBEDDED=1`; run a static-assert compile probe requiring `APPLE_KEXT_VTABLE_PADDING=0` and `APPLE_KEXT_ALIGN_CONTAINERS=1`; inspect archive undefined symbols and reject `_RESERVED*` imports before upload.
+- 证据：runs `45960088944`, `45964692949`, and `45969385915`; XNU 4903 `libkern/libkern/c++/OSMetaClass.h:119-140,2056-2062,2122-2128`; XNU `iokit/Kernel/IOService.cpp:7213-7270`; run `45969385915` `link.filelist` confirms base objects are included. The inference from the old archive's `_RESERVED*` imports to padding mode is independently checked by the `CONFIG_EMBEDDED` branches in the pinned header.
+- 自动化入口：`scripts/ci/compile_r208_sdcard.py` and `tests/test_r208_storage_abi_contract.py`, run by `.github/workflows/r208-tf-validation.yml`.
+- 下一次触发：any external C++ KEXT/base-family objects force-loaded into an embedded XNU kernel.

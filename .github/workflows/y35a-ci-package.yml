@@ -18,6 +18,7 @@ on:
       - 'scripts/ci/prepare_native_inputs.py'
       - 'scripts/ci/patch_xnu_host_tools.py'
       - 'scripts/ci/run_native_build.py'
+      - 'scripts/ci/compile_r208_sdcard.py'
       - 'ci/native-source-provenance.r208.json'
       - 'scripts/build-xnu-4903-native.py'
       - 'scripts/stage-ios12-root.py'
@@ -31,6 +32,7 @@ on:
       - 'scripts/y35a/verify_r208_tf_apfs_package_contract.py'
       - 'tests/test_ci_y35a_package.py'
       - 'tests/test_ci_native_input_prep.py'
+      - 'tests/test_r208_storage_abi_contract.py'
       - 'tests/test_r208_tf_apfs_package_contract.py'
       - 'tests/test_y35a_tf_apfs_image.py'
   pull_request:
@@ -50,6 +52,7 @@ on:
       - 'scripts/ci/prepare_native_inputs.py'
       - 'scripts/ci/patch_xnu_host_tools.py'
       - 'scripts/ci/run_native_build.py'
+      - 'scripts/ci/compile_r208_sdcard.py'
       - 'ci/native-source-provenance.r208.json'
       - 'scripts/build-xnu-4903-native.py'
       - 'scripts/stage-ios12-root.py'
@@ -63,6 +66,7 @@ on:
       - 'scripts/y35a/verify_r208_tf_apfs_package_contract.py'
       - 'tests/test_ci_y35a_package.py'
       - 'tests/test_ci_native_input_prep.py'
+      - 'tests/test_r208_storage_abi_contract.py'
       - 'tests/test_r208_tf_apfs_package_contract.py'
       - 'tests/test_y35a_tf_apfs_image.py'
   workflow_dispatch:
@@ -148,7 +152,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test package contracts
-        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py
+        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_storage_abi_contract.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py
       - name: Validate R208 TF/APFS device-package design contract
         run: |
           python3 scripts/y35a/verify_r208_tf_apfs_package_contract.py \

@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 import shutil
 
@@ -27,6 +28,17 @@ def normalize_ar_timestamps(path: Path) -> None:
     path.write_bytes(data)
 
 
+def embedded_kext_abi_probe_source() -> str:
+    return (
+        "#include <libkern/c++/OSMetaClass.h>\n"
+        "#if !defined(CONFIG_EMBEDDED) || CONFIG_EMBEDDED != 1\n"
+        "#error CONFIG_EMBEDDED must match the embedded XNU kernel\n"
+        "#endif\n"
+        "static_assert(APPLE_KEXT_VTABLE_PADDING == 0, \"KEXT vtable padding mismatch\");\n"
+        "static_assert(APPLE_KEXT_ALIGN_CONTAINERS == 1, \"KEXT container alignment mismatch\");\n"
+    )
+
+
 def sha256(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -40,6 +52,37 @@ def run(command: list[str], *, env: dict[str, str] | None = None) -> str:
     if result.returncode:
         raise SystemExit(result.stderr.strip() or result.stdout.strip() or "command failed")
     return result.stdout.strip()
+
+
+def verify_embedded_kext_abi(compile_prefix: list[str], *, env: dict[str, str]) -> dict:
+    if "-DCONFIG_EMBEDDED=1" not in compile_prefix:
+        raise SystemExit("embedded XNU KEXT ABI gate requires CONFIG_EMBEDDED=1")
+    source = embedded_kext_abi_probe_source()
+    command = compile_prefix + ["-x", "c++", "-fsyntax-only", "-"]
+    result = subprocess.run(command, input=source, capture_output=True, text=True,
+                            env=env, check=False)
+    if result.returncode:
+        raise SystemExit("embedded XNU KEXT ABI compile-time gate failed: " +
+                         (result.stderr.strip() or result.stdout.strip()))
+    return {
+        "status": "passed",
+        "config_embedded": 1,
+        "apple_kext_vtable_padding": 0,
+        "apple_kext_align_containers": 1,
+        "probe_source_sha256": hashlib.sha256(source.encode()).hexdigest(),
+        "argv": command,
+        "stdout": result.stdout,
+        "stderr": result.stderr,
+    }
+
+
+def reject_reserved_abi_imports(archive: Path, *, env: dict[str, str]) -> dict:
+    output = run(["/usr/bin/xcrun", "nm", "-u", str(archive)], env=env)
+    imports = sorted({line.strip() for line in output.splitlines() if "_RESERVED" in line})
+    if imports:
+        raise SystemExit("storage archive imports embedded-incompatible reserved ABI slots: " +
+                         "; ".join(imports))
+    return {"status": "passed", "reserved_abi_imports": imports}
 
 
 def main() -> int:
@@ -99,7 +142,8 @@ def main() -> int:
         "-Werror", "-Wno-unused-parameter", "-ferror-limit=0",
         "-DARM64_BOARD_CONFIG_T7001", "-Darm64", "-DARM64", "-D__ARM64__",
         "-DLP64", "-D__API__=v4", "-DPLATFORM_iPhoneOS", "-DAPPLE", "-DKERNEL",
-        "-DKERNEL_PRIVATE", "-DXNU_KERNEL_PRIVATE", "-DPRIVATE", "-D__MACHO__=1",
+        "-DKERNEL_PRIVATE", "-DXNU_KERNEL_PRIVATE", "-DCONFIG_EMBEDDED=1",
+        "-DPRIVATE", "-D__MACHO__=1",
         "-DDRIVER_PRIVATE", "-DIOKIT_KERNEL_PRIVATE", "-DIOASSERT=1",
         "-DIOMATCHDEBUG=1", "-DIOALLOCDEBUG=1", "-DXNU_NATIVE_SDCARD=1",
     ]
@@ -127,12 +171,14 @@ def main() -> int:
         command += ["-isystem", str(include)]
     command += ["-I", str(repo / "drivers/QcomSdcard"), "-c", str(source), "-o", str(args.output)]
     version = run([clang, "--version"], env=env)
+    abi_contract = verify_embedded_kext_abi(command[:command.index("-c")], env=env)
     result = subprocess.run(command, capture_output=True, text=True, env=env, check=False)
     report = {
         "source": str(source), "source_sha256": sha256(source),
         "xnu_source": str(xnu), "xnu_commit": commit,
         "iostorage_source": str(iostorage), "iostorage_commit": iostorage_commit,
         "clang": clang, "clang_version": version, "sdk": sdk,
+        "kext_abi": abi_contract,
         "argv": command, "exit_code": result.returncode,
     }
     if result.returncode:
@@ -172,6 +218,15 @@ def main() -> int:
     archive = args.output.with_name("libQcomSdcard.a")
     run(["/usr/bin/xcrun", "ar", "-rcs", str(archive), str(combined)], env=env)
     normalize_ar_timestamps(archive)
+    try:
+        archive_abi = reject_reserved_abi_imports(archive, env=env)
+    except SystemExit as error:
+        report["archive_kext_abi"] = {"status": "failed", "error": str(error)}
+        report["archive"] = {"path": str(archive), "sha256": sha256(archive),
+                             "size": archive.stat().st_size}
+        args.output.with_name("compile-report.json").write_text(json.dumps(report, indent=2) + "\n")
+        raise
+    report["archive_kext_abi"] = archive_abi
     report["iostorage_objects"] = [{"path": str(path), "sha256": sha256(path)} for path in family_objects]
     report["combined_object"] = {"path": str(combined), "sha256": sha256(combined), "size": combined.stat().st_size}
     report["archive"] = {"path": str(archive), "sha256": sha256(archive), "size": archive.stat().st_size}
@@ -184,6 +239,8 @@ def main() -> int:
         "source": {"path": str(source), "sha256": sha256(source)},
         "xnu": {"commit": commit},
         "iostorage": {"commit": iostorage_commit},
+        "kext_abi": abi_contract,
+        "archive_kext_abi": archive_abi,
         "object": report["object"],
         "combined_object": report["combined_object"],
     }

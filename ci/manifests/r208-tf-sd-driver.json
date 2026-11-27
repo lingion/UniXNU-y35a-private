@@ -106,12 +106,13 @@
     "patches/xnu/local-availability.patch": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0",
     "scripts/build-xnu-4903-native.py": "2deeede1352bea837186df58af709ea1dadd6e33184ce5711e04e57a81db97ee",
     "scripts/build-xnu-4k-baseline.sh": "ac959683bf4e9f792f261aa02a729a012b8704b75261c8599ced7ef37d25fc2b",
-    "scripts/ci/compile_r208_sdcard.py": "2bc7ae4f72f626585bafe88f34e7c836da040170316dc93a5255bd76bfcb514e",
+    "scripts/ci/compile_r208_sdcard.py": "e7ba3c9b561383483a4aec592d0e85c17c9ca1ce6f1679d6a1c2c8d9ad9ca946",
     "scripts/ci/patch_xnu_host_tools.py": "a626197ff726a6c5a091be59b5bf775db8168c34e9ae9eccf6e23818c45e078e",
     "scripts/y35a/build_arm_driver_4903.py": "993dee39fc4a1b3a12b1c966a54b995e2ddb64d2f80e8977f253da6e642d56b9",
     "scripts/y35a/make_adt.py": "72bcafc305f3a1cc1cbe9899e5df3e326da91c42a76595cde9f376a5936f4847",
     "scripts/y35a/test_board_adt.py": "02b5a58e74df2c2308d6b4ee81b241821533484147b2328ded2e9c477ec9fbce",
-    "scripts/ci/prepare_native_inputs.py": "cd1b5605cc02de906b593fec1b0a73ffb92c84ce974886099d1af746a5658187"
+    "scripts/ci/prepare_native_inputs.py": "cd1b5605cc02de906b593fec1b0a73ffb92c84ce974886099d1af746a5658187",
+    "tests/test_r208_storage_abi_contract.py": "65baf370282e099ff3a7693f5ad08217ca03304c3e0fd6ad8171b1280b7d470b"
   },
   "status": "offline-plan-only",
   "toolchain": {

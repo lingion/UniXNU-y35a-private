@@ -6,11 +6,13 @@ on:
     paths:
       - 'ci/manifests/r208-tf-sd-driver.json'
       - 'scripts/ci/validate_r208_tf_manifest.py'
+      - 'scripts/ci/compile_r208_sdcard.py'
       - 'drivers/QcomSdcard/**'
       - 'scripts/y35a/make_adt.py'
       - 'scripts/y35a/test_board_adt.py'
       - 'scripts/y35a/verify_sd_root_fallback_contract.py'
       - 'tests/test_y35a_sd_root_fallback_contract.py'
+      - 'tests/test_r208_storage_abi_contract.py'
       - 'ci/manifests/r208-root-fallback-contract.json'
       - 'patches/lk2nd/msm8916-sd-boot.patch'
       - 'patches/arm-driver-4903/0006-qcom-sdcard-personality.patch'
@@ -47,6 +49,8 @@ jobs:
           python3 -m unittest -v tests/test_y35a_sd_root_fallback_contract.py
           python3 scripts/y35a/verify_sd_root_fallback_contract.py \
             --contract ci/manifests/r208-root-fallback-contract.json
+      - name: Test embedded KEXT ABI contract
+        run: python3 -m unittest -v tests/test_r208_storage_abi_contract.py
       - name: Fetch exact XNU source
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/xnu.git "$RUNNER_TEMP/xnu"
