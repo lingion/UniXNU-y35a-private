@@ -72,6 +72,16 @@ on:
         required: false
         default: ''
         type: string
+      native_head_branch:
+        description: Branch of the exact native build run
+        required: false
+        default: ''
+        type: string
+      native_head_sha:
+        description: Full commit SHA of the exact native build run
+        required: false
+        default: ''
+        type: string
       root_tree_run_id:
         description: Actions run containing a root-tree artifact for TF/APFS intermediate packaging
         required: false
@@ -149,8 +159,8 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           NATIVE_RUN_ID: ${{ github.event.workflow_run.id || inputs.native_run_id }}
-          NATIVE_TARGET_BRANCH: ${{ github.event.workflow_run.head_branch || github.ref_name }}
-          NATIVE_TARGET_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+          NATIVE_TARGET_BRANCH: ${{ github.event.workflow_run.head_branch || inputs.native_head_branch || github.ref_name }}
+          NATIVE_TARGET_SHA: ${{ github.event.workflow_run.head_sha || inputs.native_head_sha || github.sha }}
         run: |
           set -euo pipefail
           if [[ ! "$NATIVE_RUN_ID" =~ ^[0-9]+$ ]]; then
@@ -160,12 +170,14 @@ jobs:
           gh run view "$NATIVE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
             --json databaseId,workflowName,conclusion,headBranch,headSha \
             > "$RUNNER_TEMP/native-run.json"
-          jq -e --arg id "$NATIVE_RUN_ID" '
+          jq -e --arg id "$NATIVE_RUN_ID" \
+            --arg branch "$NATIVE_TARGET_BRANCH" \
+            --arg sha "$NATIVE_TARGET_SHA" '
             .databaseId == ($id | tonumber)
             and .workflowName == "UniXNU native build"
             and .conclusion == "success"
-            and .headBranch == strenv(NATIVE_TARGET_BRANCH)
-            and .headSha == strenv(NATIVE_TARGET_SHA)
+            and .headBranch == $branch
+            and .headSha == $sha
             and (.headSha | test("^[0-9a-f]{40}$"))
           ' "$RUNNER_TEMP/native-run.json" > /dev/null
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$NATIVE_RUN_ID/artifacts" \
