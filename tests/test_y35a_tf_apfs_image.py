@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import hashlib
 import io
 import os
 from pathlib import Path
@@ -73,10 +74,7 @@ class TfApfsImageInputTest(unittest.TestCase):
                     mock.patch.object(MODULE, "build_image", return_value={"status": "intermediate-built"}) as build:
                 self.assertEqual(MODULE.main(), 0)
             validate.assert_called_once()
-            self.assertEqual(validate.call_args.kwargs["root_tree"], restored_tree)
-            self.assertEqual(validate.call_args.kwargs["qcdt_path"], qcdt)
-            self.assertEqual(validate.call_args.kwargs["qcdt_provenance_path"], qcdt_provenance)
-            self.assertEqual(validate.call_args.kwargs["root_tree_archive_path"], archive)
+            self.assertEqual(validate.call_args.args[0:4], (restored_tree, qcdt, qcdt_provenance, archive))
             self.assertEqual(validate.call_args.kwargs["root_tree_transport"], binding)
             build.assert_called_once()
             self.assertEqual(build.call_args.args[0:3], (restored_tree, qcdt, qcdt_provenance))
@@ -249,6 +247,10 @@ class TfApfsImageInputTest(unittest.TestCase):
                 "archive_path": archive.name,
                 "archive_bytes": archive.stat().st_size,
                 "archive_sha256": MODULE.sha256(archive),
+                "entries_sha256": hashlib.sha256(
+                    json.dumps(MODULE.tree_metadata_manifest(tree)["entries"],
+                               sort_keys=True, separators=(",", ":")).encode()
+                ).hexdigest(),
             }
             metadata_path = root / "root-tree.metadata.json"
             metadata_path.write_text(json.dumps(manifest, sort_keys=True))
@@ -334,6 +336,9 @@ class TfApfsImageInputTest(unittest.TestCase):
                 ).hexdigest(),
                 "round_trip": "passed",
             }
+            metadata["entries_sha256"] = hashlib.sha256(
+                json.dumps(metadata["entries"], sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest()
             metadata_path = root / "root-tree.metadata.json"
             metadata_path.write_text(json.dumps(metadata, sort_keys=True))
             restored_tree_binding = MODULE.verify_root_tree_metadata(archive_path, metadata_path, tree)
