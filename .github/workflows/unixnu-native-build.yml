@@ -219,11 +219,12 @@ jobs:
             ${{ runner.temp }}/unixnu-native-build/inputs/staged-source-compatibility.diff
           if-no-files-found: warn
       - name: Capture native link symbol diagnostics
-        if: always()
+        if: ${{ always() && inputs.execute == true }}
         run: |
           set +e
           ROOT="$RUNNER_TEMP/unixnu-native-build"
           OUT="$ROOT/logs/link-symbol-diagnostics.txt"
+          mkdir -p "$(dirname "$OUT")"
           : > "$OUT"
           for path in \
             "$ROOT/obj/DEVELOPMENT_ARM64_T7001/libkern/DEVELOPMENT/OSMetaClass.cpo" \
@@ -238,7 +239,7 @@ jobs:
             fi
           done
       - name: Upload native link symbol diagnostics
-        if: always()
+        if: ${{ always() && inputs.execute == true }}
         uses: actions/upload-artifact@v4
         with:
           name: unixnu-native-link-diagnostics-${{ github.run_id }}
