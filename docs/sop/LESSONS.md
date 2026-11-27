@@ -353,3 +353,13 @@
 - 证据：Run `46062519190`, SHA `88387d1bc19262d5984d75fe837fb69d9bca2479`, package job `Build and verify RAM-boot package`; native run `46061043371` produced successful schema-2 artifact ID `15228783166`, digest `sha256:818e0f39a3e6aaedb0d51c5636015b0ea17fc0efc2ac1b5049ca1820ebb021e2`.
 - 自动化入口：`scripts/ci/build_y35a_ci_package.py`, `.github/workflows/y35a-ci-package.yml`, `tests/test_ci_y35a_package.py`.
 - 下一次触发：Any package run consuming a native artifact built from a non-default or experiment-specific manifest.
+
+## L-2026-11-28-13 R208 source manifest hashes must follow shared workflow inputs
+
+- 现象：TF validation run `46064271989` failed at `Validate manifest` before SD/root/fallback/native jobs, reporting hash mismatches for `scripts/ci/run_native_build.py` and `.github/workflows/unixnu-native-build.yml`.
+- 根因：Those two files changed for the fallback candidate's native provenance/execute path, while `ci/manifests/r208-tf-sd-driver.json` still held their older expected SHA-256 values.
+- 影响：The TF job stopped before any TF driver or root-selection checks; the candidate source was not evaluated by that run.
+- 正确做法：Use the same run's `r208-source-hash-audit` artifact to update only the mismatched expected hashes; do not infer them from the working tree or mark skipped jobs as passed.
+- 证据：Actions run `46064271989`, artifact audit ID `15229931634`, digest `sha256:831198dd19da45b972bb812f7a3795f0e328081ccf2b4c46127b769b55c0f267`. Measured hashes: `scripts/ci/run_native_build.py=8ded6b0afa73f2f8fd8538c49abaa502694821875ae3299ebd437cccd6f5f46b`; `.github/workflows/unixnu-native-build.yml=910ffc377070703a09d2a6d4deb2cbc864261ce670c9ec71354d1f3096c8bddd`.
+- 自动化入口：`scripts/ci/validate_r208_tf_manifest.py` and `.github/workflows/r208-tf-validation.yml`.
+- 下一次触发：Any change to a source or workflow listed in the R208 TF manifest.
