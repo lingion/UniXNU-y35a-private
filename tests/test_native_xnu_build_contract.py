@@ -132,6 +132,18 @@ class NativeXnuBuildContractTest(unittest.TestCase):
         source_provenance.write_text("{}")
         run_root = root / "run"
         run_root.mkdir()
+        staged_source = run_root / "src"
+        genassym = staged_source / "osfmk/arm64/genassym.c"
+        genassym.parent.mkdir(parents=True)
+        genassym.write_text(r'.ascii \"#%0\"" : : "i"' + "\n")
+        monotonic = staged_source / "osfmk/machine/monotonic.h"
+        monotonic.parent.mkdir(parents=True)
+        monotonic.write_text("#if defined(MT_CORE_NFIXED)\n#endif /* defined(MT_CORE_NFIXED) */\n")
+        subprocess.run(["git", "init", "-q", str(staged_source)], check=True)
+        subprocess.run(["git", "-C", str(staged_source), "config", "user.name", "Fixture"], check=True)
+        subprocess.run(["git", "-C", str(staged_source), "config", "user.email", "fixture@example.invalid"], check=True)
+        subprocess.run(["git", "-C", str(staged_source), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(staged_source), "commit", "-qm", "fixture"], check=True)
         provenance_path = run_root / "build-provenance.json"
         args = MODULE.parse_args(list(profile))
         provenance = {
@@ -229,7 +241,9 @@ class NativeXnuBuildContractTest(unittest.TestCase):
         build = self.make_command("build")
         self.assertFalse(any(value.startswith(("CFLAGS_EXTRA=", "OTHER_CFLAGS=", "SFLAGS"))
                              for value in installhdrs))
-        self.assertIn("OTHER_CFLAGS=-DXNU_NATIVE_EARLY_FAULT=1", build)
+        other_cflags = next(value for value in build if value.startswith("OTHER_CFLAGS="))
+        self.assertIn("-DXNU_NATIVE_EARLY_FAULT=1", other_cflags)
+        self.assertIn("-DOS_FIREHOSE_SPI=1", other_cflags)
         self.assertFalse(any(value.startswith(("CFLAGS_EXTRA=", "SFLAGS")) for value in build))
         self.assertFalse(any("XNU_Y35A_" in value for value in build))
 
@@ -327,10 +341,11 @@ class NativeXnuBuildContractTest(unittest.TestCase):
                 self.assertEqual(command[0], "/usr/bin/xcrun")
                 self.assertEqual(env["DEVELOPER_DIR"], str(developer.resolve()))
 
+    @unittest.skipUnless(os.environ.get("UNIXNU_XNU_SOURCE"), "exact pinned XNU source is not provided")
     def test_real_4903_make_expands_profile_for_c_s_cpp_and_genassym(self):
         # This integration check needs the same local, pinned source as the runner.
         # It expands real rules in a private makefile; no kernel recipe is executed.
-        source = MODULE.DEFAULT_SOURCE
+        source = Path(os.environ.get("UNIXNU_XNU_SOURCE", MODULE.DEFAULT_SOURCE))
         definitions = source / "makedefs/MakeInc.def"
         self.assertTrue(definitions.is_file(), "prepare the runner's local XNU 4903 source")
         template = (source / "osfmk/conf/Makefile.template").read_text().splitlines()
