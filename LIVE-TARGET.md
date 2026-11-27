@@ -13,17 +13,17 @@
 
 所有 UniXNU 编译、测试、静态验证、package 与 image 验证只允许在 GitHub Actions。本机只编辑和被动读取，不运行任何本地 UniXNU 验证命令。设备、USB、fastboot、adb、串口、TF 卡和持久分区本轮均未操作；`device_run_allowed=false`。
 
-当前 topic 分支为 `codex/unixnu-ci-package-v2`。提交 `fdb347873c765cec278cb1c4ac554606a7e9f711` 加入 GPT scheme 与设备关系校验、xattr fallback 字节一致性；`a739997574207411b916c0c04b10849f3e9ac508` 同步 SOP/lessons；`518f8f4` 修复 pmap 查询时镜像仍 attached 的时序。后两项 run `46047857330` host validation 成功，`46047857312` package contract 成功并运行 63 个测试，但其实际 package jobs 按 push 事件跳过。`518f8f4` 的具体 Actions 验证仍待执行。
+当前 topic 分支为 `codex/unixnu-ci-package-v2`；已验证的 package candidate source commit 为 `23502821148473f4baa411ec4dfe81745a4a9aa7`。提交 `fdb3478` 修复 GPT scheme、whole-disk/volume/parent 绑定与 xattr 字节摘要；`a739997` 修订 SOP/lessons；`518f8f4` 将 pmap 查询移到 unmount/detach 之后。host-validation `46049199580` 与 package contract `46049199572` 成功；后者 64 tests passed，但 push 事件按设计跳过实际 package jobs。
 
-手动 offline-control run `46047971221` 使用已绑定输入：package run `46038856167`、RAM artifact `15218633072`，root-tree artifact `15219732795`。输入身份、下载、APFS image 创建、root-tree 写入和前置 metadata 检查均通过；在 image 仍 attached 时调用 `hdiutil pmap -simple` 失败，stderr 为 `Resource temporarily unavailable`。没有上传 control artifact。提交 `518f8f4` 已改为先成功 unmount/detach，再读取 image partition map，并加入命令顺序测试；仍待 Actions 验证。
+失败 run `46047971221` 的原因为镜像仍 attached 时查询 pmap。修复后手动 run `46049301112` 全部成功，实际验证了 scheme 与 parent binding，并上传中间 artifact `y35a-tf-apfs-offline-control-46049301112`：artifact ID `15224410131`，artifact digest `sha256:4182dbabd5303ffb1a348221150a774ac7b1b308504573afd1c0ec1edadd3c74`。镜像大小 4 GiB，image SHA-256 `8b7fae9326a0530f231487e1b48735b92780069aa11bef970b38e74c8bf093d4`；report SHA `62884f559efa7d9861738db5c977f9c82d352fd68467cc2310af4fa5ac50c3cd`，binding SHA `be14ac1ac9a3feefae4056eaba0bfb37639adb34f671e22f20c7f898c18564cd`。GPT scheme 是 `GPT`，该 CI image 的 whole-disk/volume/parent 为 `disk6`/`disk6s1`/`disk6`。这只是 CI 虚拟磁盘关系，不是手机卡绑定。
 
-该控制镜像使用 derived QCDT，只能标为 `offline-control-only`。stock PD1502A QCDT provenance、生产系统 root、kernel root selection、TF 卡绑定、eMMC fallback 实现、真正 TF/APFS system package、boot/probe 资格仍未闭合。不得称为可上机包或 iOS 启动成功。
+该控制镜像使用 derived QCDT，报告为 `offline-control-only`、`device_run_allowed=false`、`bootable=false`、`ios_system_image=false`、`springboard_included=false`、`touch_runtime_validated=false`。root selection 和 eMMC fallback 仍为 `unverified`。stock PD1502A QCDT provenance、生产系统 root、TF 卡绑定、真正 TF/APFS system package、boot/probe 资格仍未闭合。不得称为可上机包或 iOS 启动成功。
 
 ## 下一步
 
-1. 将 detach-before-pmap 修复与 R208 状态记录提交并推送私有 topic 分支。
-2. 先确认该精确 SHA 的 Actions validation 成功，再用同一已验证 package/root-tree artifacts 跑一次离线控制镜像。
-3. 按 run 的真实终态更新状态和账本。若 control image 上传成功，仍保持 offline-only；下一关键外部输入是可信 stock PD1502A QCDT 来源及 kernel 内 TF root/fallback 实现闭环。
+1. 以成功的 offline-control artifact 为只读中间产物，继续查可信 stock PD1502A QCDT 的来源/哈希；不扫描曾返回 I/O error 的 `/Volumes/Mobile`。
+2. 并行闭合 kernel root selection 和首次 TF 读失败时的 eMMC fallback 实现及其 CI gates。
+3. 重建 production root 和同一 provenance 闭包中的真正 TF/APFS package/probe；仍不操作设备或 TF 卡，直到目标合同与授权门完整满足。
 
 ## 持久化和恢复边界
 

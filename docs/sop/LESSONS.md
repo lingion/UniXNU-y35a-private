@@ -320,15 +320,6 @@
 - 影响：The GPT scheme could not be read and no offline-control image artifact was uploaded. This run does not show an invalid GPT image or a failure in root-tree copy.
 - 正确做法：After sync and diskutil info capture, successfully unmount the APFS volume and detach the image, then read `hdiutil pmap -simple` from the backing file. If unmount or detach fails, stop before scheme validation and keep cleanup best-effort in `finally`.
 - 证据：GitHub Actions run `46047971221`, commit `a739997574207411b916c0c04b10849f3e9ac508`, step `Build non-bootable derived-QCDT control image`; stderr was `hdiutil: pmap: unable to open ... - Resource temporarily unavailable`.
+- 修复验证：Actions run `46049301112` on commit `23502821148473f4baa411ec4dfe81745a4a9aa7` passed the `tf-apfs-offline-control` job and uploaded artifact `y35a-tf-apfs-offline-control-46049301112` (ID `15224410131`, digest `sha256:4182dbabd5303ffb1a348221150a774ac7b1b308504573afd1c0ec1edadd3c74`). The image SHA-256 is `8b7fae9326a0530f231487e1b48735b92780069aa11bef970b38e74c8bf093d4`; the report records explicit GPT scheme, whole disk `disk6`, APFS volume `disk6s1`, and parent `disk6`.
 - 自动化入口：Commit `518f8f4` adds `detach_and_read_partition_map()` and `test_partition_map_read_waits_for_unmount_and_detach` in the TF/APFS builder and tests.
-- 下一次触发：Any hdiutil operation that reads an image backing file after a mounted image was modified.
-
-## L-2026-11-28-09 hdiutil pmap requires the image to be detached
-
-- 现象：R208 offline-control run `46047971221` passed package identity, artifact download, APFS creation, root-tree copy and metadata checks, then `hdiutil pmap -simple` failed with `Resource temporarily unavailable`.
-- 根因：The image was still attached while the host tried to open the backing image file for its partition map; unmount/detach were only in the later cleanup block.
-- 影响：The GPT scheme could not be read and no offline-control image artifact was uploaded. This run does not show an invalid GPT image or a failure in root-tree copy.
-- 正确做法：After sync and diskutil info capture, successfully unmount the APFS volume and detach the image, then read `hdiutil pmap -simple` from the backing file. If unmount or detach fails, stop before scheme validation and keep cleanup best-effort in `finally`.
-- 证据：GitHub Actions run `46047971221`, commit `a739997574207411b916c0c04b10849f3e9ac508`, step `Build non-bootable derived-QCDT control image`; stderr was `hdiutil: pmap: unable to open ... - Resource temporarily unavailable`.
-- 自动化入口：`detach_and_read_partition_map()` and `test_partition_map_read_waits_for_unmount_and_detach` in the TF/APFS builder and tests.
 - 下一次触发：Any hdiutil operation that reads an image backing file after a mounted image was modified.

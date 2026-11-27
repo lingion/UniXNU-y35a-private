@@ -1384,10 +1384,12 @@ Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e37
 
 The final project goal remains an iOS 12.4.1 boot on vivo Y35A with D1/D2/D3 device evidence; none is met. This entry supersedes the older R208 summaries below for current package work.
 
-On topic commit `a739997574207411b916c0c04b10849f3e9ac508`, host-validation run `46047857330` passed. Package workflow run `46047857312` passed its contract validation (63 tests) but skipped the actual package jobs because it was push-triggered. Manual run `46047971221` successfully verified/downloaded package run `46038856167` artifacts `15218633072` and `15219732795`, created/attached the APFS image, copied the root tree, then failed when `hdiutil pmap -simple` tried to open the still-attached image (`Resource temporarily unavailable`). No offline-control artifact was uploaded.
+Package candidate source commit `23502821148473f4baa411ec4dfe81745a4a9aa7`: host-validation run `46049199580` and package contract run `46049199572` passed; the latter ran 64 tests, while push-triggered package jobs were skipped. The manual offline-control run `46049301112` completed all jobs successfully after commit `518f8f4` moved pmap inspection after unmount/detach.
 
-Commit `518f8f4` unmounts and detaches the image before reading its pmap and adds a command-order regression test. It is not yet validated by Actions. Derived-QCDT output remains offline-control-only; stock PD1502A QCDT provenance, root selection/fallback implementation, device package and runtime qualification remain open. `device_run_allowed=false`; no device or TF operation occurred.
+Artifact `y35a-tf-apfs-offline-control-46049301112`: ID `15224410131`, digest `sha256:4182dbabd5303ffb1a348221150a774ac7b1b308504573afd1c0ec1edadd3c74`, size 19,227,640 bytes. Embedded image SHA-256 `8b7fae9326a0530f231487e1b48735b92780069aa11bef970b38e74c8bf093d4`; report SHA `62884f559efa7d9861738db5c977f9c82d352fd68467cc2310af4fa5ac50c3cd`; binding SHA `be14ac1ac9a3feefae4056eaba0bfb37639adb34f671e22f20c7f898c18564cd`. Report records GPT from hdiutil, and CI image disk6/disk6s1/parent disk6. This identifies only the GitHub runner's image, not a phone card.
 
-Next: commit/push the exact ordering fix and record, wait for exact-SHA Actions validation, then dispatch one offline-control run using the same still-valid package/root-tree artifact pair. Do not treat that result as device readiness.
+The artifact is a 4 GiB derived-QCDT `offline-control-only` intermediate, with `device_ready=false`, `device_run_allowed=false`, `bootable=false`, `ios_system_image=false`, `springboard_included=false`, and `touch_runtime_validated=false`. Root selection and eMMC fallback remain unverified. Stock PD1502A QCDT provenance and a production root/package/probe are still open. No device or TF operation occurred; D1/D2/D3 remain unmet.
+
+Next: find trusted stock QCDT provenance among readable repo/cache/CI artifact sources without scanning `/Volumes/Mobile`; independently close linked TF root selection and first-read eMMC fallback before building a production TF package.
 
 ## 2026-11-26 R205b paired MVE adjudication

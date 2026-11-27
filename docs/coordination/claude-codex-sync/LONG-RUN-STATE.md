@@ -1142,10 +1142,11 @@ Native execute run `45888048634` on commit `2b45f50b143edf19c678892dab0d768a5e37
 
 The overall Y35A iOS 12.4.1 goal is still unmet: D1/D2/D3 remain `IN_PROGRESS / NOT_MET`, with no verified iOS or interactive SpringBoard boot. Current side task is only the CI-generated derived-QCDT GPT/APFS offline-control intermediate.
 
-Commit `a739997574207411b916c0c04b10849f3e9ac508`: host-validation `46047857330` passed; package workflow `46047857312` ran 63 contract tests successfully but skipped actual package jobs. Manual offline-control `46047971221` passed artifact identity/download and APFS/root-tree preparation, then failed at pmap because the image remained attached (`Resource temporarily unavailable`). No control artifact was emitted.
+Package candidate source commit `23502821148473f4baa411ec4dfe81745a4a9aa7`: host-validation `46049199580` and contract run `46049199572` passed; 64 tests passed. Offline-control run `46049301112` succeeded after commit `518f8f4` enforced unmount → detach → pmap.
 
-Commit `518f8f4` moves `hdiutil pmap` after successful unmount/detach and adds a command-order test. Next: push and require exact-SHA Actions validation, then one offline-control dispatch using verified inputs from package run `46038856167` (artifact IDs `15218633072`, `15219732795`). Keep `device_run_allowed=false`; no local validation, device or TF operations.
+Artifact `y35a-tf-apfs-offline-control-46049301112` ID `15224410131`, digest `sha256:4182dbabd5303ffb1a348221150a774ac7b1b308504573afd1c0ec1edadd3c74`; image SHA-256 `8b7fae9326a0530f231487e1b48735b92780069aa11bef970b38e74c8bf093d4`, report SHA `62884f559efa7d9861738db5c977f9c82d352fd68467cc2310af4fa5ac50c3cd`, binding SHA `be14ac1ac9a3feefae4056eaba0bfb37639adb34f671e22f20c7f898c18564cd`. The image report proves GPT/APFS on the CI virtual image and parent identity there only.
 
-Open downstream inputs: stock PD1502A QCDT provenance, kernel-linked TF root selection and eMMC fallback, TF system package/probe, card binding and device evidence. Derived QCDT remains offline-only.
+This is derived-QCDT offline-control output, not a device package. Stock PD1502A QCDT, production root, linked root selection, eMMC fallback, physical card binding and device qualification remain pending. D1/D2/D3 are unmet; `device_run_allowed=false`. Next work: bounded stock-QCDT provenance search outside the I/O-failing volume and linked root/fallback closure.
+
 
 ## R205b queue (historical)
