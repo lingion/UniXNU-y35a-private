@@ -63,7 +63,7 @@
  		rootdev = makedev( 6, 0 );
 --- a/iokit/bsddev/IOKitBSDInit.cpp
 +++ b/iokit/bsddev/IOKitBSDInit.cpp
-@@ -398,8 +398,30 @@
+@@ -398,8 +398,34 @@
  
  static int didRam = 0;
  enum { kMaxPathBuf = 512, kMaxBootVar = 128 };
@@ -94,13 +94,6 @@
  IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
      dev_t * root, u_int32_t * oflags )
  {
-@@ -421,6 +443,10 @@
- 	bool                debugInfoPrintedOnce = false;
- 	const char *        uuidStr = NULL;
- 
- 	static int          mountAttempts = 0;
- 
- 	int xchar, dchar;
 +#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
 +	boolean_t           y35aBoundedRootWait = FALSE;
 +	UInt32              y35aRootWaitAttempts = 0;

@@ -383,3 +383,12 @@
 - 证据：Run `46078557734`, commit `eab4cde75d9ddc8168e4de7404ba745e9e6adb33`, artifact `unixnu-native-build-46078557734` ID `15236535409` digest `sha256:fd01a2b80cbe42de5f2ee721217d34c8734235b908e2ebd3f15b442c18b9f2b2`; failing build log is preserved in `/Volumes/Portable/unixnu-native-build-46078557734/native/unixnu-native-build/logs/build.log`.
 - 自动化入口：`patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch`, `scripts/ci/run_native_build.py`, and `tests/test_ci_native_build_gate.py` / `tests/test_y35a_tf_emmc_root_fallback_v3_patch.py`.
 - 下一次触发：Any native C++ patch adding initialized locals to a function containing pre-existing `goto` labels, or a runner that constructs repeatable verifier arguments.
+
+## L-2026-11-28-16 exact-source gate must validate every hunk coordinate after moving declarations
+
+- 现象：After `e132c36` moved the fallback locals before `goto iofrootx`, package validation run `46081848963` still failed at the exact-source apply gate with `patch failed: iokit/bsddev/IOKitBSDInit.cpp:421`.
+- 根因：The local declaration was moved into a separate hunk, but the hunk's surrounding line coordinates no longer matched the pinned file after the earlier insertion. Source-only contract tests did not exercise the complete patch application.
+- 正确做法：Keep declarations in the same function-entry hunk as the existing context and recalculate every later new-file hunk offset from the complete ordered patch. Treat exact-source `git apply --check` as the authoritative gate before native execution.
+- 证据：Run `46081848963`, commit `e132c36014ab75090883deceff223ddacd38b0d0`, package validate job `140782400731`; failure occurred before TF/APFS and package jobs, with no package artifact.
+- 自动化入口：`patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch`, `scripts/ci/verify_r208_fallback_v3_source.py` and the package validation workflow.
+- 下一次触发：Any patch that moves a declaration or inserts lines before later hunks in a pinned external source tree.
