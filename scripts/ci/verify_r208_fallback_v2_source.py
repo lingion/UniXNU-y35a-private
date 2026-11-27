@@ -6,7 +6,6 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
-import shutil
 import subprocess
 import tempfile
 
@@ -20,15 +19,15 @@ def main() -> int:
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--repo-root", type=Path, required=True)
     args = parser.parse_args()
-    manifest = json.loads(args.manifest.read_text())
+    repo_root = args.repo_root.resolve(strict=True)
+    manifest_path = args.manifest.resolve(strict=True)
+    manifest = json.loads(manifest_path.read_text())
     source = manifest["source_ref"]
     patch_entries = [item for item in manifest["patches"]
                      if item["path"] == "patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch"]
     if len(patch_entries) != 1:
         raise SystemExit("fallback-v2 patch must appear exactly once in the candidate manifest")
-    patch = args.repo_root / patch_entries[0]["path"]
-    if not patch.is_file():
-        raise SystemExit(f"missing fallback-v2 patch: {patch}")
+    patch = (repo_root / patch_entries[0]["path"]).resolve(strict=True)
     with tempfile.TemporaryDirectory(prefix="r208-xnu-fallback-v2-") as directory:
         checkout = Path(directory) / "xnu"
         run(["git", "clone", "--filter=blob:none", "--no-checkout",
@@ -39,7 +38,9 @@ def main() -> int:
         if actual != source:
             raise SystemExit(f"XNU source identity mismatch: {actual} != {source}")
         run(["git", "-C", str(checkout), "apply", "--check", str(patch)])
-    print(json.dumps({"ok": True, "source_ref": source, "patch": str(patch)}, sort_keys=True))
+    print(json.dumps({"ok": True, "source_ref": source,
+                      "patch": patch_entries[0]["path"],
+                      "patch_sha256": patch_entries[0]["sha256"]}, sort_keys=True))
     return 0
 
 

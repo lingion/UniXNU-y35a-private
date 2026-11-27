@@ -323,3 +323,13 @@
 - 修复验证：Actions run `46049301112` on commit `23502821148473f4baa411ec4dfe81745a4a9aa7` passed the `tf-apfs-offline-control` job and uploaded artifact `y35a-tf-apfs-offline-control-46049301112` (ID `15224410131`, digest `sha256:4182dbabd5303ffb1a348221150a774ac7b1b308504573afd1c0ec1edadd3c74`). The image SHA-256 is `8b7fae9326a0530f231487e1b48735b92780069aa11bef970b38e74c8bf093d4`; the report records explicit GPT scheme, whole disk `disk6`, APFS volume `disk6s1`, and parent `disk6`.
 - 自动化入口：Commit `518f8f4` adds `detach_and_read_partition_map()` and `test_partition_map_read_waits_for_unmount_and_detach` in the TF/APFS builder and tests.
 - 下一次触发：Any hdiutil operation that reads an image backing file after a mounted image was modified.
+
+## L-2026-11-28-10 exact-source apply gate must resolve patch paths before changing cwd
+
+- 现象：Fallback v2 source-gate run `46054142955` failed at `git apply --check` before evaluating patch hunks; stderr output was hidden in the script traceback, while the command passed a repository-relative patch path from inside the XNU checkout.
+- 根因：The verifier resolved the patch path relative to the package repo but invoked Git with `cwd` set to the temporary XNU clone. Git returned 128 because it could not find the relative patch path; this was a verifier path error, not an XNU patch-context rejection.
+- 影响：Exact-source applicability remains unverified. Package contract unit tests passed, but the workflow stopped before its TF/APFS design gate and package jobs were skipped.
+- 正确做法：Resolve the manifest-pinned patch to an absolute readable path before invoking `git -C <exact-source> apply --check`, verify source HEAD equals the pinned commit, and preserve command/stdout/stderr on failure. Report `apply-check` only after Git returns zero.
+- 证据：Actions run `46054142955`, commit `b2c97a3baad03631c1ae1ba3bad94b95b466b052`, step `Verify fallback v2 applies to exact XNU source`; Git exited 128 at `git -C <temp>/xnu apply --check patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch`.
+- 自动化入口：`scripts/ci/verify_r208_fallback_v2_source.py` and package validation in `.github/workflows/y35a-ci-package.yml`.
+- 下一次触发：Any CI step that runs a repository-relative input path after changing cwd or using `git -C`.
