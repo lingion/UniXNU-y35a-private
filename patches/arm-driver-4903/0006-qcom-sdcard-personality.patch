@@ -13,7 +13,6 @@
 +    "     'IOProbeScore'    = 1000:32;"
 +    "   },"
 +#endif
+ #if defined(XNU_NATIVE_SDCC) && XNU_NATIVE_SDCC
      "   {"
-     "     'IOClass'         = IOPanicPlatform;"
-     "     'IOProviderClass' = IOPlatformExpertDevice;"
-     "     'IOProbeScore'    = 0:32;"
+     "     'IOClass'         = NativeSdcc;"

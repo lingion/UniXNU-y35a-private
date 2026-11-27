@@ -9,7 +9,7 @@
   "patches": [
     {"order": 0, "target_tree": "xnu-source", "path": "patches/arm-driver-4903/0003-kernel-personalities.patch", "sha256": "5f89b26aa1c39c79306fa0fcb5e26109b963016487e76d494ffcfdca82ade033"},
     {"order": 1, "target_tree": "xnu-source", "path": "patches/arm-driver-4903/0005-qcom-sdcc-personality.patch", "sha256": "9fac5ea8e9d090a73f974643201cb23d66ba646b2958db4726716a6409d1a8db"},
-    {"order": 2, "target_tree": "xnu-source", "path": "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch", "sha256": "8ca3787a589f38ae573d7a8157469e957a804a9bc25598062c57b1fd9b2995c6"},
+    {"order": 2, "target_tree": "xnu-source", "path": "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch", "sha256": "51a61655b607b10bb913da3b7d969a3e933fffeaad1ff0146cdfb0d2cc33e93d"},
     {"order": 3, "target_tree": "xnu-source", "path": "patches/xnu/local-availability.patch", "sha256": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0"}
   ],
   "external_driver_patches": [
