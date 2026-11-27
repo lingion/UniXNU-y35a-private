@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 import subprocess
@@ -23,6 +24,35 @@ def main() -> int:
     manifest_path = args.manifest.resolve(strict=True)
     manifest = json.loads(manifest_path.read_text())
     source = manifest["source_ref"]
+    provenance_path = (repo_root / manifest["source_provenance"]).resolve(strict=True)
+    provenance_sha = hashlib.sha256(provenance_path.read_bytes()).hexdigest()
+    if provenance_sha != manifest.get("source_provenance_sha256"):
+        print(json.dumps({
+            "ok": False,
+            "source_provenance": manifest["source_provenance"],
+            "expected_sha256": manifest.get("source_provenance_sha256"),
+            "actual_sha256": provenance_sha,
+        }, sort_keys=True))
+        raise SystemExit("candidate source provenance SHA mismatch; bind the reported actual digest")
+    provenance = json.loads(provenance_path.read_text())
+    if provenance.get("source", {}).get("commit") != source:
+        raise SystemExit("candidate source provenance commit does not match source_ref")
+    manifest_patches = [
+        {key: item.get(key) for key in ("order", "target_tree", "path", "sha256")}
+        for item in manifest.get("patches", [])
+    ]
+    provenance_patches = [
+        {key: item.get(key) for key in ("order", "target_tree", "path", "sha256")}
+        for item in provenance.get("patches", [])
+    ]
+    if provenance_patches != manifest_patches:
+        print(json.dumps({
+            "ok": False,
+            "source": source,
+            "manifest_patches": manifest_patches,
+            "provenance_patches": provenance_patches,
+        }, sort_keys=True))
+        raise SystemExit("candidate ordered patch list differs from source provenance")
     patch_entries = [item for item in manifest["patches"]
                      if item["path"] == "patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch"]
     if len(patch_entries) != 1:
@@ -40,7 +70,8 @@ def main() -> int:
         run(["git", "-C", str(checkout), "apply", "--check", str(patch)])
     print(json.dumps({"ok": True, "source_ref": source,
                       "patch": patch_entries[0]["path"],
-                      "patch_sha256": patch_entries[0]["sha256"]}, sort_keys=True))
+                      "patch_sha256": patch_entries[0]["sha256"],
+                      "source_provenance_sha256": provenance_sha}, sort_keys=True))
     return 0
 
 
