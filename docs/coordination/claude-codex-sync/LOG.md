@@ -3071,3 +3071,10 @@ device_run_allowed=false；persistent writes: none；未触碰设备、未本机
 类型: CI-STATUS / MILESTONE
 事实: Package branch commit `3d88e3b` adds a root-tree producer artifact from the RAM diagnostic package and a manual macOS-only GPT/APFS intermediate job consuming explicit root-tree and stock-QCDT/provenance artifacts. Validation run `45938145784` passed all 33 contract tests; package run `45938145777` completed the validate job and skipped RAM/TF image jobs because no native/root/QCDT dispatch inputs were supplied.
 裁决: R208 remains an intermediate offline stage. It does not prove a kernel artifact, launchd, SpringBoard, TF boot, or device operation. Mission remains `IN_PROGRESS`; D1/D2/D3 remain `NOT_MET`; `device_run_allowed=false`.
+
+## 2026-11-27T07:33:09Z — 修正主线实时目标与 CI 状态
+
+类型: STATE / PROCESS-RULE
+事实: Native run `45956827212` 绑定 package branch commit `bd7615046eb01a42e74fa0a3e6194331e0557a29`，进入实际 native build 后失败，未产出 kernel artifact。日志与主线最新消息表明 genassym、monotonic header、patch 和 manifest 前置检查已通过，剩余失败指向 XNU 4903 所需 Firehose 配置 API 与 selected libdispatch 输入不匹配。主线正在恢复 libdispatch 1477 API 并加入 provenance-bound atomic-private compatibility header。Actions 已成功启动。package contract run `45957683974` 成功，但因 push 事件没有 native artifact 输入，native resolution 和 package/TF jobs skipped。package branch commit `c30f085` 加入显式 native branch/SHA dispatch inputs，真实成功 native artifact 的消费仍待验证。
+修订: 移除 LIVE-TARGET 和 STATE 中已过期的 Billing blocker 与下一步，补充当前 run、实际 build 失败、活动修复及 package workflow 验证边界。清理 LIVE-TARGET 重复标题。GOAL 将“两轮无设备验证即停并请求用户决策”改为停止重复的无进展子任务、继续其他可执行路径，只有缺少具体用户输入且没有替代路径时才请求用户处理。
+裁决: Mission `IN_PROGRESS`; D1/D2/D3 `NOT_MET`; `device_run_allowed=false`. 本次只更新目标、状态与审计文档，未运行 UniXNU build、测试、静态门禁或设备操作。

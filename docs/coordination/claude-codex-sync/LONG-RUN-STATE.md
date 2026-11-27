@@ -1158,3 +1158,7 @@ Every registered stock boot/QCDT candidate under `/Volumes/Mobile` returned `Inp
 ## 2026-11-27 R208 validation and intermediate producer
 
 Package commit `3d88e3b` adds a root-tree producer artifact and a manual macOS-only GPT/APFS intermediate job. Validation `45938145784` passed 33 contract tests; package `45938145777` ran only the validate job and skipped both package/image jobs because no native/root/QCDT inputs were provided. The result remains an intermediate offline stage, not a device-ready package or D1/D2 evidence. Keep mission `IN_PROGRESS` with D1/D2/D3 unmet.
+
+## 2026-11-27 Native build and active repair
+
+Native run `45956827212` on `bd7615046eb01a42e74fa0a3e6194331e0557a29` failed during the actual build and emitted no kernel artifact. CI input preparation, source patches, manifest validation, genassym and monotonic-header compatibility passed. The build then exposed missing Firehose 1477 configuration declarations in the selected libdispatch inputs. The active package branch repair restores the 1477 Firehose API and adds a provenance-bound atomic-private compatibility header. Package validation run `45957683974` passed contract checks but skipped native resolution and package/TF jobs because it was triggered by push without a native artifact. CI runners are available. Mission remains `IN_PROGRESS`; D1/D2/D3 remain `NOT_MET`; `device_run_allowed=false`.

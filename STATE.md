@@ -1,8 +1,8 @@
 # UniXNU Y35A state
 
-Updated: 2026-11-27T04:11:34Z
+Updated: 2026-11-27T07:33:09Z
 Mission: IN_PROGRESS (D1 NOT_MET, D2 NOT_MET, D3 NOT_MET). The milestone below is offline only and is not mission completion.
-Milestone: `WAITING_FOR_CI`. R208 is an intermediate offline stage; validation `45938145784` passed 33 contract tests, while package `45938145777` ran only validate and skipped RAM/TF image jobs because native/root/QCDT inputs were absent. Native execute remains blocked by billing and stock QCDT unavailability. All local UniXNU compilation is disabled on every disk.
+Milestone: `NATIVE_BUILD_REPAIR`. Native run `45956827212` on `bd7615046eb01a42e74fa0a3e6194331e0557a29` failed during the actual build and emitted no kernel artifact. Mainline is repairing the libdispatch 1477 Firehose/atomic-private input closure for the next exact-SHA CI run. Actions starts successfully. Package run `45957683974` validated contracts but skipped native resolution and package/TF jobs because it was a push event without native artifact inputs. All local UniXNU compilation is disabled on every disk.
 Authority: intended /Volumes/Mobile/unixnu-research/UniXNU-y35a; current writable metadata mirror /Users/lingion_k/unixnu-y35a-private-sync; /Volumes/Mobile currently returns I/O errors.
 Device: R206 ended at verified efff9d92 / lk2nd-msm8916 / unlocked fastboot; no current device operation.
 Workspace: /Volumes/Mobile/unixnu-research stores source caches, run roots, CI artifacts, backups and raw only when readable; /Volumes/Portable is temporary staging only. No local UniXNU compilation, linking or large builds. External Git metadata restored, core.filemode=false, and fsck passed.
@@ -22,8 +22,8 @@ Current gates:
 - Historical failures: Native runs `45838744656` and `45838740886` on commit `4c817f03fbd5a0611fadfd2675381c32ae995363` failed at `Compile NativeSdcard object`; later successful runs supersede them.
 
 Next:
-1. Restore GitHub Actions Billing & plans / spending limit, then validate the isolated native-input restoration fix and run one `execute=true` native build on the exact package-stage SHA.
-2. Use that successful run's `unixnu-kernel-${run_id}` artifact as the only package input; package/probe and TF/root/fallback gates remain downstream.
-3. Keep runtime qualification and device_run_allowed false; do not run local UniXNU compilation on any disk.
+1. Finish the Firehose 1477 compatibility input and verify it with GitHub Actions, then dispatch one native build bound to the pushed commit SHA.
+2. If the native artifact passes provenance and hash checks, consume that exact run in package/probe CI. Stock PD1502A QCDT remains a separate downstream TF/APFS input requirement.
+3. Keep D1/D2/D3 NOT_MET and device_run_allowed false until independent device evidence meets the contract. Do not compile UniXNU on any local disk.
 
 Active agents: none. Persistent writes: none.
