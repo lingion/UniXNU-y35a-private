@@ -1390,6 +1390,6 @@ Artifact `y35a-tf-apfs-offline-control-46049301112`: ID `15224410131`, digest `s
 
 The artifact is a 4 GiB derived-QCDT `offline-control-only` intermediate, with `device_ready=false`, `device_run_allowed=false`, `bootable=false`, `ios_system_image=false`, `springboard_included=false`, and `touch_runtime_validated=false`. Root selection and eMMC fallback remain unverified. Stock PD1502A QCDT provenance and a production root/package/probe are still open. No device or TF operation occurred; D1/D2/D3 remain unmet.
 
-Next: find trusted stock QCDT provenance among readable repo/cache/CI artifact sources without scanning `/Volumes/Mobile`; independently close linked TF root selection and first-read eMMC fallback before building a production TF package.
+Next: recover trusted stock QCDT provenance among readable repo/cache/CI artifact sources without scanning `/Volumes/Mobile`; the bounded search found only third-party download pages and derived/declared repository references. Extend fallback beyond `!service` waiting to cover TF service first-read failure before building a production TF package.
 
 ## 2026-11-26 R205b paired MVE adjudication

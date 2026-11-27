@@ -1146,7 +1146,7 @@ Package candidate source commit `23502821148473f4baa411ec4dfe81745a4a9aa7`: host
 
 Artifact `y35a-tf-apfs-offline-control-46049301112` ID `15224410131`, digest `sha256:4182dbabd5303ffb1a348221150a774ac7b1b308504573afd1c0ec1edadd3c74`; image SHA-256 `8b7fae9326a0530f231487e1b48735b92780069aa11bef970b38e74c8bf093d4`, report SHA `62884f559efa7d9861738db5c977f9c82d352fd68467cc2310af4fa5ac50c3cd`, binding SHA `be14ac1ac9a3feefae4056eaba0bfb37639adb34f671e22f20c7f898c18564cd`. The image report proves GPT/APFS on the CI virtual image and parent identity there only.
 
-This is derived-QCDT offline-control output, not a device package. Stock PD1502A QCDT, production root, linked root selection, eMMC fallback, physical card binding and device qualification remain pending. D1/D2/D3 are unmet; `device_run_allowed=false`. Next work: bounded stock-QCDT provenance search outside the I/O-failing volume and linked root/fallback closure.
+This is derived-QCDT offline-control output, not a device package. Bounded readable-source search found no stock-PD1502A byte/hash provenance; only third-party download pages and derived/declared references remain. The fallback candidate currently covers only `!service` `boot-uuid-media` waiting and does not cover a found TF service whose first read fails. Production root, linked root selection, physical card binding and device qualification remain pending. D1/D2/D3 are unmet; `device_run_allowed=false`.
 
 
 ## R205b queue (historical)

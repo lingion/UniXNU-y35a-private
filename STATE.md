@@ -25,12 +25,14 @@ Persistent writes: none this turn. Full partition backup and EDL/firehose recove
 - Xattr CLI fallback uses `xattr -px` and decodes raw bytes before hashing. Its forced fallback contract test passed in the 64-test Actions validation on `2350282`; the macOS control job also completed the restored-tree metadata check.
 - Derived QCDT control images must remain `offline-control-only`, `bootable=false`, `ios_system_image=false`, and `device_run_allowed=false`.
 - Trusted stock PD1502A QCDT provenance remains unavailable. No true TF system package, kernel-linked root selection, eMMC fallback implementation, card binding, or device qualification is established.
+- Bounded readable-source search found only third-party PD1502A download pages and repository-derived/declared QCDT references; no candidate is provenance-bound to stock PD1502A firmware bytes. Do not use those pages as production input without a downloaded artifact plus source/board/hash binding.
+- The audited fallback patch `f886e829b94999e79af06964ee274992d975382827191912d2ab8c8a8bd291eb` changes selection only while `!service` and `mediaProperty == "boot-uuid-media"`; it does not yet prove or implement fallback after a TF service is found but its first read fails.
 - No local UniXNU build, test, lint, diff-check, static gate, package or image validation is allowed. Accidental local `git diff --check` output from this turn is explicitly excluded as evidence.
 
 ## Next actions
 
-1. Search for trusted stock PD1502A QCDT provenance only in readable repository/cache/CI-artifact sources; do not scan `/Volumes/Mobile` after its prior I/O errors.
-2. Close kernel-linked TF root selection and eMMC fallback implementation/contracts, then build the production root/package/probe chain in GitHub Actions.
+1. Recover a stock PD1502A QCDT artifact with source, board tuple and SHA binding from a readable repository/cache/CI artifact; do not scan `/Volumes/Mobile` after its prior I/O errors.
+2. Extend the fallback design to cover TF service first-read failure, then validate the linked root/fallback implementation in GitHub Actions.
 3. Keep the main goal D1/D2/D3 unmet. The derived-QCDT control artifact does not authorize or prove device/TF boot.
 
 Workspace: `/Users/lingion_k/unixnu-ci-package-worktree` is the active package topic worktree. `/Volumes/Mobile` has previously returned I/O errors; do not scan or write it. `/Volumes/Portable` is temporary staging only.

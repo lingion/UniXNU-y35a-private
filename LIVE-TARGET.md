@@ -17,7 +17,7 @@
 
 失败 run `46047971221` 的原因为镜像仍 attached 时查询 pmap。修复后手动 run `46049301112` 全部成功，实际验证了 scheme 与 parent binding，并上传中间 artifact `y35a-tf-apfs-offline-control-46049301112`：artifact ID `15224410131`，artifact digest `sha256:4182dbabd5303ffb1a348221150a774ac7b1b308504573afd1c0ec1edadd3c74`。镜像大小 4 GiB，image SHA-256 `8b7fae9326a0530f231487e1b48735b92780069aa11bef970b38e74c8bf093d4`；report SHA `62884f559efa7d9861738db5c977f9c82d352fd68467cc2310af4fa5ac50c3cd`，binding SHA `be14ac1ac9a3feefae4056eaba0bfb37639adb34f671e22f20c7f898c18564cd`。GPT scheme 是 `GPT`，该 CI image 的 whole-disk/volume/parent 为 `disk6`/`disk6s1`/`disk6`。这只是 CI 虚拟磁盘关系，不是手机卡绑定。
 
-该控制镜像使用 derived QCDT，报告为 `offline-control-only`、`device_run_allowed=false`、`bootable=false`、`ios_system_image=false`、`springboard_included=false`、`touch_runtime_validated=false`。root selection 和 eMMC fallback 仍为 `unverified`。stock PD1502A QCDT provenance、生产系统 root、TF 卡绑定、真正 TF/APFS system package、boot/probe 资格仍未闭合。不得称为可上机包或 iOS 启动成功。
+该控制镜像使用 derived QCDT，报告为 `offline-control-only`、`device_run_allowed=false`、`bootable=false`、`ios_system_image=false`、`springboard_included=false`、`touch_runtime_validated=false`。root selection 和 eMMC fallback 仍为 `unverified`。有界来源核查只找到第三方下载页和仓库里的 derived/stock 声明，未找到绑定 PD1502A stock firmware 字节的 QCDT provenance。现有 fallback patch 只处理 `!service` 的 `boot-uuid-media` 等待分支，未覆盖 TF service 已找到后的 first-read failure。生产 root、TF 卡绑定、真正 TF/APFS system package、boot/probe 资格仍未闭合。不得称为可上机包或 iOS 启动成功。
 
 ## 下一步
 
