@@ -57,6 +57,43 @@ class PackageToolchainContractTest(unittest.TestCase):
             self.assertEqual(result["android_ndk_host_tag"], "darwin-x86_64")
             self.assertEqual(set(result["tools"]), {"clang", "ld.lld", "llvm-objcopy"})
 
+    def test_ld_lld_symlink_name_is_preserved_for_version_probe(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            ndk = root / "android-sdk/ndk/27.0.12077973"
+            bindir = ndk / "toolchains/llvm/prebuilt/darwin-x86_64/bin"
+            bindir.mkdir(parents=True)
+            compiler = root / "xcode/clang"
+            compiler.parent.mkdir()
+            objcopy = bindir / "llvm-objcopy"
+            lld_impl = bindir / "lld"
+            lld_entry = bindir / "ld.lld"
+            for path, version in ((compiler, "clang-test"), (objcopy, "objcopy-test")):
+                path.write_text(f"#!/bin/sh\necho '{version}'\n")
+                path.chmod(0o755)
+            lld_impl.write_text("#!/bin/sh\n[ \"$(basename \"$0\")\" = ld.lld ] || exit 9\necho 'LLD test'\n")
+            lld_impl.chmod(0o755)
+            lld_entry.symlink_to(lld_impl.name)
+            tool_records = {}
+            for name, path, version in (("clang", compiler, "clang-test"),
+                                        ("ld.lld", lld_entry, "LLD test"),
+                                        ("llvm-objcopy", objcopy, "objcopy-test")):
+                tool_records[name] = {
+                    "path": str(path.absolute()),
+                    "sha256": hashlib.sha256(path.read_bytes()).hexdigest(),
+                    "version": version,
+                }
+            manifest = root / "toolchain.json"
+            manifest.write_text(json.dumps({
+                "android_ndk": {"revision": "27.0.12077973", "root": str(ndk),
+                                "host_tag": "darwin-x86_64"},
+                "tools": tool_records,
+            }))
+            result = package_ci.validate_package_toolchain(
+                manifest, {"toolchain": {"android_ndk_revision": "27.0.12077973"}},
+                compiler=compiler, linker=lld_entry, objcopy=objcopy)
+            self.assertEqual(result["tools"]["ld.lld"]["path"], str(lld_entry.absolute()))
+
     def test_toolchain_manifest_rejects_pinned_ndk_revision_mismatch(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)

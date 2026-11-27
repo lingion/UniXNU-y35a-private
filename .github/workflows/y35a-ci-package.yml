@@ -286,7 +286,9 @@ jobs:
           tools = {}
           names = ("clang", "ld.lld", "llvm-objcopy")
           for name, raw_path in zip(names, tool_paths):
-              path = Path(raw_path).resolve(strict=True)
+              # Keep the tool entry name (especially ld.lld) intact; resolving
+              # this NDK symlink changes its linker-driver behavior.
+              path = Path(raw_path).absolute()
               if not path.is_file() or not path.stat().st_mode & 0o111:
                   raise SystemExit(f"tool is not executable: {name}: {path}")
               result = subprocess.run([str(path), "--version"], capture_output=True, text=True, check=True)

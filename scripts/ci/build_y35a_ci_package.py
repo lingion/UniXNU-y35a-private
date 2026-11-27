@@ -78,9 +78,13 @@ def sha256(path: Path) -> str:
 
 def version_line(executable: Path) -> str:
     result = subprocess.run(
-        [str(executable), "--version"], check=True, capture_output=True, text=True,
+        [str(executable), "--version"], check=False, capture_output=True, text=True,
     )
     output = result.stdout or result.stderr
+    if result.returncode:
+        raise ValueError(
+            f"tool version probe failed ({result.returncode}): {executable}: "
+            f"{output.strip() or 'no diagnostic output'}")
     return output.splitlines()[0] if output else "version output unavailable"
 
 
@@ -108,8 +112,9 @@ def validate_package_toolchain(
     resolved = {}
     for name, expected_path in actual_paths.items():
         record = tools.get(name, {})
-        path = expected_path.resolve(strict=True)
-        if path != Path(record.get("path", "")).resolve(strict=True):
+        path = expected_path.expanduser().absolute()
+        recorded_path = Path(record.get("path", "")).expanduser().absolute()
+        if path != recorded_path:
             raise ValueError(f"package toolchain path mismatch for {name}")
         if not path.is_file() or not os.access(path, os.X_OK):
             raise ValueError(f"package tool is not executable: {name}")
@@ -119,7 +124,8 @@ def validate_package_toolchain(
         actual_version = version_line(path)
         if actual_version != record.get("version"):
             raise ValueError(f"package tool version mismatch: {name}")
-        if name != "clang" and path.relative_to(ndk_root).parts[:4] != (
+        resolved_path = path.resolve(strict=True)
+        if name != "clang" and resolved_path.relative_to(ndk_root).parts[:4] != (
                 "toolchains", "llvm", "prebuilt", host_tag):
             raise ValueError(f"package tool is outside pinned NDK host tools: {name}")
         resolved[name] = {"path": str(path), "sha256": actual_sha, "version": actual_version}
