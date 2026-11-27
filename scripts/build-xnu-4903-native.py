@@ -848,6 +848,7 @@ def _execute_run(
         command.extend([
             "--provenance", str(provenance_path),
             "--driver-manifest", str(run_root / "inputs/driver-manifest.json"),
+            "--staged-source", str(staged_source),
         ])
     provenance["kernel_static_verification"] = {"status": "running"}
     provenance["manifest_verification"] = {"status": "not-requested"}

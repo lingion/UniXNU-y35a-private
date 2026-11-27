@@ -23,6 +23,12 @@ class R208NativeKernelGateTests(unittest.TestCase):
             root = Path(temp)
             kernel = root / "kernel.macho"
             kernel.write_bytes(b"linked kernel fixture")
+            staged_source = root / "src"
+            staged_source.mkdir()
+            (staged_source / "kernel-source.c").write_text("source")
+            diff_path = root / "inputs/staged-source-compatibility.diff"
+            diff_path.parent.mkdir()
+            diff_path.write_bytes(b"compat diff")
             driver_manifest = root / "driver-manifest.json"
             driver_manifest.write_text(json.dumps({
                 "archive": {"sha256": "a" * 64},
@@ -30,13 +36,17 @@ class R208NativeKernelGateTests(unittest.TestCase):
             driver_manifest_sha = hashlib.sha256(driver_manifest.read_bytes()).hexdigest()
             provenance = root / "build-provenance.json"
             provenance.write_text(json.dumps({
+                "run_root": str(root),
                 "status": "prepared",
                 "source_identity": {"commit": "494ffe1c29d37ca720c37328feb83069c9641b67"},
                 "build_profile": {"y35a_a53": True, "phase_a_amfi": True,
                                    "other_cflags": ["-DXNU_Y35A_A53=1", "-DXNU_Y35A_PHASE_A_AMFI=1"]},
                 "staged_inputs": {
-                    "source_tree_after_compatibility_sha256": "b" * 64,
-                    "source_compatibility_diff": {"sha256": "c" * 64, "bytes": 12},
+                    "source_tree_after_compatibility_sha256": MODULE.tree_sha256(staged_source),
+                    "source_compatibility_diff": {
+                        "sha256": hashlib.sha256(diff_path.read_bytes()).hexdigest(),
+                        "bytes": diff_path.stat().st_size,
+                    },
                 },
                 "steps": [
                     {"name": "installhdrs", "status": "passed", "exit_code": 0},
@@ -60,7 +70,7 @@ class R208NativeKernelGateTests(unittest.TestCase):
                 "base": 0xfffffff007004000, "entry": 0xfffffff007004100,
             }):
                 result = MODULE.verify(
-                    kernel, provenance, driver_manifest,
+                    kernel, provenance, driver_manifest, staged_source,
                     nm_symbols={"_native_sdcard_started", "_native_sdcard_ready"})
             self.assertTrue(result["ok"])
             self.assertEqual(result["missing_driver_symbols"], [])
@@ -70,17 +80,27 @@ class R208NativeKernelGateTests(unittest.TestCase):
             root = Path(temp)
             kernel = root / "kernel.macho"
             kernel.write_bytes(b"linked kernel fixture")
+            staged_source = root / "src"
+            staged_source.mkdir()
+            (staged_source / "kernel-source.c").write_text("source")
+            diff_path = root / "inputs/staged-source-compatibility.diff"
+            diff_path.parent.mkdir()
+            diff_path.write_bytes(b"compat diff")
             driver_manifest = root / "driver-manifest.json"
             driver_manifest.write_text(json.dumps({"archive": {"sha256": "a" * 64}}))
             provenance = root / "build-provenance.json"
             provenance.write_text(json.dumps({
+                "run_root": str(root),
                 "status": "prepared",
                 "source_identity": {"commit": "494ffe1c29d37ca720c37328feb83069c9641b67"},
                 "build_profile": {"y35a_a53": True, "phase_a_amfi": True,
                                    "other_cflags": ["-DXNU_Y35A_A53=1", "-DXNU_Y35A_PHASE_A_AMFI=1"]},
                 "staged_inputs": {
-                    "source_tree_after_compatibility_sha256": "b" * 64,
-                    "source_compatibility_diff": {"sha256": "c" * 64, "bytes": 12},
+                    "source_tree_after_compatibility_sha256": MODULE.tree_sha256(staged_source),
+                    "source_compatibility_diff": {
+                        "sha256": hashlib.sha256(diff_path.read_bytes()).hexdigest(),
+                        "bytes": diff_path.stat().st_size,
+                    },
                 },
                 "steps": [
                     {"name": "installhdrs", "status": "passed", "exit_code": 0},
@@ -100,7 +120,15 @@ class R208NativeKernelGateTests(unittest.TestCase):
                 "base": 0xfffffff007004000, "entry": 0xfffffff007004100,
             }):
                 with self.assertRaisesRegex(ValueError, "kernel bytes do not match"):
-                    MODULE.verify(kernel, provenance, driver_manifest, nm_symbols=set())
+                    MODULE.verify(kernel, provenance, driver_manifest, staged_source, nm_symbols=set())
+            data = json.loads(provenance.read_text())
+            data["kernel_artifact"]["sha256"] = hashlib.sha256(kernel.read_bytes()).hexdigest()
+            provenance.write_text(json.dumps(data))
+            with mock.patch.object(MODULE, "parse_macho", return_value={
+                "base": 0xfffffff007004000, "entry": 0xfffffff007004100,
+            }):
+                with self.assertRaisesRegex(ValueError, "missing TF-storage symbols"):
+                    MODULE.verify(kernel, provenance, driver_manifest, staged_source, nm_symbols=set())
 
 
 if __name__ == "__main__":

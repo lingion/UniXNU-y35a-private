@@ -31,7 +31,7 @@
   },
   "static_verification": {
     "script": "scripts/ci/verify_r208_native_kernel.py",
-    "sha256": "8ef3a06395627135bcc902d36521d430bd032f15e434486c9d61518b3c3e365e"
+    "sha256": "00263cf635c3b20bf9d76cd1f90485b8d5bddbd7a47b4bf25f99a45bd5860120"
   },
   "build_policy": {
     "executor": "GitHub Actions",

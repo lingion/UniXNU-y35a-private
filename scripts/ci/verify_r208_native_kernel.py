@@ -5,7 +5,9 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
+import struct
 import subprocess
 import sys
 
@@ -14,11 +16,32 @@ sys.path.insert(0, str(REPO_ROOT / "scripts/y35a"))
 from boot_layout import parse_macho  # noqa: E402
 
 
+def tree_sha256(root: Path) -> str:
+    root = root.resolve(strict=True)
+    digest = hashlib.sha256()
+    for item in sorted(root.rglob("*"), key=lambda path: path.relative_to(root).as_posix()):
+        relative = item.relative_to(root).as_posix().encode("utf-8")
+        mode = item.lstat().st_mode
+        kind = b"L" if item.is_symlink() else b"D" if item.is_dir() else b"F"
+        digest.update(kind)
+        digest.update(struct.pack(">I", len(relative)))
+        digest.update(relative)
+        digest.update(struct.pack(">I", mode & 0o777))
+        if item.is_symlink():
+            digest.update(os.readlink(item).encode("utf-8"))
+        elif item.is_file():
+            digest.update(hashlib.sha256(item.read_bytes()).digest())
+        elif not item.is_dir():
+            raise ValueError(f"unsupported staged XNU filesystem entry: {item}")
+    return digest.hexdigest()
+
+
 def verify(kernel: Path, provenance_path: Path, driver_manifest_path: Path,
-           *, nm_symbols: set[str] | None = None) -> dict:
+           staged_source_path: Path, *, nm_symbols: set[str] | None = None) -> dict:
     kernel = kernel.resolve(strict=True)
     provenance_path = provenance_path.resolve(strict=True)
     driver_manifest_path = driver_manifest_path.resolve(strict=True)
+    staged_source_path = staged_source_path.resolve(strict=True)
     provenance = json.loads(provenance_path.read_text())
     driver_manifest = json.loads(driver_manifest_path.read_text())
 
@@ -36,9 +59,17 @@ def verify(kernel: Path, provenance_path: Path, driver_manifest_path: Path,
         raise ValueError("Phase-A AMFI macro is absent from recorded build flags")
     if not provenance.get("staged_inputs", {}).get("source_tree_after_compatibility_sha256"):
         raise ValueError("final staged source tree hash is missing")
+    if staged_source_path != Path(provenance.get("run_root", ""), "src").resolve(strict=True):
+        raise ValueError("static verifier source root is not the staged source for this build")
+    if tree_sha256(staged_source_path) != provenance["staged_inputs"]["source_tree_after_compatibility_sha256"]:
+        raise ValueError("staged XNU tree bytes differ from build provenance")
     diff = provenance.get("staged_inputs", {}).get("source_compatibility_diff", {})
     if not diff.get("sha256") or not isinstance(diff.get("bytes"), int):
         raise ValueError("staged source compatibility diff is not bound")
+    diff_path = Path(provenance["run_root"]) / "inputs/staged-source-compatibility.diff"
+    if (not diff_path.is_file() or diff_path.stat().st_size != diff["bytes"]
+            or hashlib.sha256(diff_path.read_bytes()).hexdigest() != diff["sha256"]):
+        raise ValueError("staged source compatibility diff does not match its provenance")
 
     steps = {step.get("name"): step for step in provenance.get("steps", [])}
     for name in ("installhdrs", "build"):
@@ -97,9 +128,10 @@ def main() -> int:
     parser.add_argument("--kernel", type=Path, required=True)
     parser.add_argument("--provenance", type=Path, required=True)
     parser.add_argument("--driver-manifest", type=Path, required=True)
+    parser.add_argument("--staged-source", type=Path, required=True)
     args = parser.parse_args()
     try:
-        result = verify(args.kernel, args.provenance, args.driver_manifest)
+        result = verify(args.kernel, args.provenance, args.driver_manifest, args.staged_source)
     except (OSError, ValueError, KeyError, json.JSONDecodeError) as error:
         print(json.dumps({"ok": False, "failure": str(error)}, indent=2))
         return 1
