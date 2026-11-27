@@ -597,6 +597,15 @@ def validate_gpt_apfs(
     }
 
 
+def detach_and_read_partition_map(image: Path, mountpoint: str, attached: str) -> str:
+    """Read the image map only after the mounted volume and image are released."""
+    if not mountpoint or not attached:
+        raise ValueError("mounted volume and attached device are required before reading the image map")
+    run_checked(["diskutil", "unmount", "force", mountpoint])
+    run_checked(["hdiutil", "detach", "-quiet", attached])
+    return run_checked(["hdiutil", "pmap", "-simple", str(image)]).stdout
+
+
 def write_report_binding(report_path: Path) -> dict:
     binding = {
         "schema_version": 1,
@@ -667,9 +676,9 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
         whole_info = plistlib.loads(run_checked(
             ["diskutil", "info", "-plist", f"/dev/{whole_name}"], text=False,
         ).stdout)
-        partition_map_output = run_checked(
-            ["hdiutil", "pmap", "-simple", str(output)],
-        ).stdout
+        partition_map_output = detach_and_read_partition_map(output, mountpoint, attached)
+        mountpoint = None
+        attached = None
         gpt_apfs = validate_gpt_apfs(
             whole_info, fs_info, partition_map_output, expected_whole_disk=whole_name,
         )

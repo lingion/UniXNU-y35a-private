@@ -312,3 +312,23 @@
 - 证据：GitHub Actions run `46044011970`, commit `10e998ac199dae277fb551deac35b3aa4ed65154`, failed in `tf-apfs-offline-control` at `Build non-bootable derived-QCDT control image`; log reported the APFS partition GUID as the supposed GPT evidence. No control artifact was emitted.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
 - 下一次触发：Any GPT/APFS image validation or APFS-volume-to-parent-disk report.
+
+## L-2026-11-28-09 hdiutil pmap requires the image to be detached
+
+- 现象：R208 offline-control run `46047971221` passed package identity, artifact download, APFS creation, root-tree copy and metadata checks, then `hdiutil pmap -simple` failed with `Resource temporarily unavailable`.
+- 根因：The image was still attached while the host tried to open the backing image file for its partition map; unmount/detach were only in the later cleanup block.
+- 影响：The GPT scheme could not be read and no offline-control image artifact was uploaded. This run does not show an invalid GPT image or a failure in root-tree copy.
+- 正确做法：After sync and diskutil info capture, successfully unmount the APFS volume and detach the image, then read `hdiutil pmap -simple` from the backing file. If unmount or detach fails, stop before scheme validation and keep cleanup best-effort in `finally`.
+- 证据：GitHub Actions run `46047971221`, commit `a739997574207411b916c0c04b10849f3e9ac508`, step `Build non-bootable derived-QCDT control image`; stderr was `hdiutil: pmap: unable to open ... - Resource temporarily unavailable`.
+- 自动化入口：`detach_and_read_partition_map()` and `test_partition_map_read_waits_for_unmount_and_detach` in the TF/APFS builder and tests.
+- 下一次触发：Any hdiutil operation that reads an image backing file after a mounted image was modified.
+
+## L-2026-11-28-09 hdiutil pmap requires the image to be detached
+
+- 现象：R208 offline-control run `46047971221` passed package identity, artifact download, APFS creation, root-tree copy and metadata checks, then `hdiutil pmap -simple` failed with `Resource temporarily unavailable`.
+- 根因：The image was still attached while the host tried to open the backing image file for its partition map; unmount/detach were only in the later cleanup block.
+- 影响：The GPT scheme could not be read and no offline-control image artifact was uploaded. This run does not show an invalid GPT image or a failure in root-tree copy.
+- 正确做法：After sync and diskutil info capture, successfully unmount the APFS volume and detach the image, then read `hdiutil pmap -simple` from the backing file. If unmount or detach fails, stop before scheme validation and keep cleanup best-effort in `finally`.
+- 证据：GitHub Actions run `46047971221`, commit `a739997574207411b916c0c04b10849f3e9ac508`, step `Build non-bootable derived-QCDT control image`; stderr was `hdiutil: pmap: unable to open ... - Resource temporarily unavailable`.
+- 自动化入口：`detach_and_read_partition_map()` and `test_partition_map_read_waits_for_unmount_and_detach` in the TF/APFS builder and tests.
+- 下一次触发：Any hdiutil operation that reads an image backing file after a mounted image was modified.

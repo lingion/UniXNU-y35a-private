@@ -31,6 +31,25 @@ class TfApfsImageInputTest(unittest.TestCase):
                 MODULE.run_checked(["hdiutil", "create"])
         self.assertIn("hdiutil", str(raised.exception))
 
+    def test_partition_map_read_waits_for_unmount_and_detach(self):
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            return SimpleNamespace(stdout="SCHEME: 1 GPT, \"GPT Partition Scheme\" [16]\n")
+
+        with mock.patch.object(MODULE, "run_checked", side_effect=fake_run):
+            output = MODULE.detach_and_read_partition_map(
+                Path("/tmp/image.dmg"), "/Volumes/Y35A-TF-ROOT", "/dev/disk6s1",
+            )
+
+        self.assertEqual(output, 'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n')
+        self.assertEqual(calls, [
+            ["diskutil", "unmount", "force", "/Volumes/Y35A-TF-ROOT"],
+            ["hdiutil", "detach", "-quiet", "/dev/disk6s1"],
+            ["hdiutil", "pmap", "-simple", "/tmp/image.dmg"],
+        ])
+
     def test_hdiutil_empty_image_uses_udif_type(self):
         # hdiutil's -type selects the empty image type; UDRW is the resulting
         # read/write image and is not itself a valid -type argument.
