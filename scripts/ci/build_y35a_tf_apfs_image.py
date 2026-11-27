@@ -10,7 +10,6 @@ fallback still require linked and runtime proof.
 from __future__ import annotations
 
 import argparse
-import errno
 import hashlib
 import json
 import os
@@ -37,6 +36,32 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def xattr_manifest(path: Path) -> list:
+    """Read xattrs through Python where supported, falling back to macOS xattr."""
+    if hasattr(os, "listxattr") and hasattr(os, "getxattr"):
+        names = sorted(os.listxattr(path, follow_symlinks=False))
+        return [[name, hashlib.sha256(os.getxattr(path, name, follow_symlinks=False)).hexdigest()]
+                for name in names]
+    executable = shutil.which("xattr")
+    if not executable:
+        raise RuntimeError("Python xattr APIs and the macOS xattr utility are unavailable")
+    list_command = [executable]
+    if path.is_symlink():
+        list_command.append("-s")
+    list_command.append(str(path))
+    listed = subprocess.run(list_command, check=True, capture_output=True)
+    names = sorted(line.decode("utf-8", errors="strict") for line in listed.stdout.splitlines() if line)
+    values = []
+    for name in names:
+        value_command = [executable]
+        if path.is_symlink():
+            value_command.append("-s")
+        value_command.extend(["-p", name, str(path)])
+        value = subprocess.run(value_command, check=True, capture_output=True).stdout
+        values.append([name, hashlib.sha256(value).hexdigest()])
+    return values
+
+
 def tree_metadata_manifest(root: Path) -> dict:
     root = root.resolve(strict=True)
     entries = []
@@ -58,20 +83,7 @@ def tree_metadata_manifest(root: Path) -> dict:
                 ["getfacl", "--absolute-names", "--omit-header", str(path)],
                 check=True, capture_output=True, text=True,
             ).stdout.splitlines()
-        try:
-            xattr_names = sorted(os.listxattr(path, follow_symlinks=False))
-        except OSError as error:
-            if error.errno in {errno.ENOTSUP, getattr(errno, "EOPNOTSUPP", errno.ENOTSUP)}:
-                xattr_names = []
-            else:
-                raise ValueError(f"cannot enumerate extended attributes for {path}") from error
-        xattrs = []
-        for name in xattr_names:
-            try:
-                value = os.getxattr(path, name, follow_symlinks=False)
-            except OSError as error:
-                raise ValueError(f"cannot read extended attribute {name!r} from {path}") from error
-            xattrs.append([name, hashlib.sha256(value).hexdigest()])
+        xattrs = xattr_manifest(path)
         hardlink_to = None
         if stat.S_ISREG(metadata.st_mode) and metadata.st_nlink > 1:
             inode_key = (metadata.st_dev, metadata.st_ino)

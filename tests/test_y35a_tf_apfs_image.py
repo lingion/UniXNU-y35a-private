@@ -428,8 +428,8 @@ class TfApfsImageInputTest(unittest.TestCase):
                 )
 
     def test_tree_digest_changes_with_xattr_when_supported(self):
-        if not hasattr(os, "setxattr"):
-            self.skipTest("xattrs are unsupported")
+        if not hasattr(os, "setxattr") or not hasattr(os, "listxattr"):
+            self.skipTest("Python xattrs are unsupported in this validation environment")
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "root"
             root.mkdir()
