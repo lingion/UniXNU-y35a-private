@@ -333,3 +333,13 @@
 - 证据：Actions run `46054142955`, commit `b2c97a3baad03631c1ae1ba3bad94b95b466b052`, step `Verify fallback v2 applies to exact XNU source`; Git exited 128 at `git -C <temp>/xnu apply --check patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch`.
 - 自动化入口：`scripts/ci/verify_r208_fallback_v2_source.py` and package validation in `.github/workflows/y35a-ci-package.yml`.
 - 下一次触发：Any CI step that runs a repository-relative input path after changing cwd or using `git -C`.
+
+## L-2026-11-28-11 native candidate provenance hash must match its own manifest
+
+- 现象：Fallback-v2 native execute run `46057855212` passed exact-source apply and all native input preparation, then stopped before compilation with `native source provenance SHA-256 does not match native build manifest`.
+- 根因：The candidate manifest was copied from the production manifest and retained its old provenance digest `7dcb2b64...`; the new fallback-v2 provenance file had a different measured SHA.
+- 影响：No compile or link ran and no kernel artifact was produced. The run does not evaluate the fallback source or kernel.
+- 正确做法：Read the exact expected and actual digest from the CI preflight diagnostic, update only the candidate manifest binding, and rerun source/plan gates before the next execute build. Preserve the production manifest unchanged.
+- 证据：Run `46057855212` on source workflow SHA `7672b05d4c3235951925fa825c21403a84ce5c72` reported old expected digest `7dcb2b64efbe9c094acd0f0ca68ca278089770dc6c398fb5c9859c95f5aa66d5`; exact file digest was `3cfcc009098eb9316f69675028f1ce8344b6e54babb46b3b2a51c2d47f0ea905`.
+- 自动化入口：`ci/native-build-manifest.r208-fallback-v2.json`, `ci/native-source-provenance.r208-fallback-v2.json`, and native manifest validation in `scripts/ci/run_native_build.py`.
+- 下一次触发：Any isolated candidate manifest copied or derived from a production native manifest.
