@@ -24,6 +24,7 @@ import package_native
 
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 from build_y35a_qcdt import build_qcdt
+from build_y35a_tf_apfs_image import tree_sha256
 from extract_ios12_package_inputs import extract_inputs
 from verify_y35a_trustcache import verify_staged_root
 
@@ -48,6 +49,7 @@ PACKAGE_SOURCE_FILES = (
     "ci/y35a-ci-package-manifest.json",
     "ci/manifests/r208-tf-apfs-package-contract.json",
     "scripts/ci/build_y35a_ci_package.py",
+    "scripts/ci/build_y35a_tf_apfs_image.py",
     "scripts/ci/build_y35a_qcdt.py",
     "scripts/ci/extract_ios12_package_inputs.py",
     "scripts/ci/patch_xnu_host_tools.py",
@@ -504,6 +506,7 @@ def build_package(args) -> dict:
         shutil.copy2(qcdt_path.with_suffix(qcdt_path.suffix + ".json"), output / "y35a.qcdt.json")
         shutil.copy2(firmware_dir / "firmware-inputs.json", output / "firmware-inputs.json")
         shutil.copy2(root_tree / "CLOSURE.json", output / "rootfs-closure.json")
+        shutil.copytree(root_tree, output / "root-tree", symlinks=True)
         shutil.copy2(rootfs_path, output / "ramdisk-hfs.raw")
         shutil.copy2(firmware_dir / "restore-trustcache.im4p", output / "restore-trustcache.im4p")
         shutil.copy2(firmware_dir / "restore-trustcache.bin", output / "restore-trustcache.bin")
@@ -554,6 +557,8 @@ def build_package(args) -> dict:
                 **rootfs_report,
                 "closure_sha256": sha256(output / "rootfs-closure.json"),
                 "scope": "launchd diagnostic closure",
+                "tree_artifact": "root-tree",
+                "tree_sha256": tree_sha256(output / "root-tree"),
             },
             "trust_cache": {
                 "restore": firmware_report["restore_trustcache_payload"],

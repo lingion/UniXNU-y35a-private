@@ -11,6 +11,7 @@ on:
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
       - 'scripts/ci/build_y35a_ci_package.py'
+      - 'scripts/ci/build_y35a_tf_apfs_image.py'
       - 'scripts/ci/build_y35a_qcdt.py'
       - 'scripts/ci/extract_ios12_package_inputs.py'
       - 'scripts/ci/verify_y35a_trustcache.py'
@@ -31,6 +32,7 @@ on:
       - 'tests/test_ci_y35a_package.py'
       - 'tests/test_ci_native_input_prep.py'
       - 'tests/test_r208_tf_apfs_package_contract.py'
+      - 'tests/test_y35a_tf_apfs_image.py'
   pull_request:
     paths:
       - '.github/workflows/y35a-ci-package.yml'
@@ -41,6 +43,7 @@ on:
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
       - 'scripts/ci/build_y35a_ci_package.py'
+      - 'scripts/ci/build_y35a_tf_apfs_image.py'
       - 'scripts/ci/build_y35a_qcdt.py'
       - 'scripts/ci/extract_ios12_package_inputs.py'
       - 'scripts/ci/verify_y35a_trustcache.py'
@@ -61,11 +64,48 @@ on:
       - 'tests/test_ci_y35a_package.py'
       - 'tests/test_ci_native_input_prep.py'
       - 'tests/test_r208_tf_apfs_package_contract.py'
+      - 'tests/test_y35a_tf_apfs_image.py'
   workflow_dispatch:
     inputs:
       native_run_id:
         description: Successful UniXNU native build Actions run on this branch
-        required: true
+        required: false
+        default: ''
+        type: string
+      root_tree_run_id:
+        description: Actions run containing a root-tree artifact for TF/APFS intermediate packaging
+        required: false
+        default: ''
+        type: string
+      root_tree_artifact:
+        description: Root-tree artifact name
+        required: false
+        default: ''
+        type: string
+      root_tree_path:
+        description: Directory path inside the root-tree artifact
+        required: false
+        default: ''
+        type: string
+      stock_qcdt_run_id:
+        description: Actions run containing the stock PD1502A QCDT artifact
+        required: false
+        default: ''
+        type: string
+      stock_qcdt_artifact:
+        description: Stock QCDT artifact name
+        required: false
+        default: ''
+        type: string
+      stock_qcdt_path:
+        description: QCDT path inside the stock artifact
+        required: false
+        default: ''
+        type: string
+      stock_qcdt_provenance_path:
+        description: Stock QCDT provenance path inside the stock artifact
+        required: false
+        default: ''
         type: string
   workflow_run:
     workflows:
@@ -98,14 +138,14 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test package contracts
-        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_tf_apfs_package_contract.py
+        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py
       - name: Validate R208 TF/APFS device-package design contract
         run: |
           python3 scripts/y35a/verify_r208_tf_apfs_package_contract.py \
             --contract ci/manifests/r208-tf-apfs-package-contract.json
       - name: Resolve successful native run
         id: native
-        if: github.event_name == 'workflow_run' || github.event_name == 'workflow_dispatch'
+        if: github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && inputs.native_run_id != '')
         env:
           GH_TOKEN: ${{ github.token }}
           NATIVE_RUN_ID: ${{ github.event.workflow_run.id || inputs.native_run_id }}
@@ -242,5 +282,64 @@ jobs:
         with:
           name: y35a-ramboot-${{ github.run_id }}
           path: ${{ runner.temp }}/y35a-ramboot-package
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload root-tree producer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: y35a-root-tree-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/y35a-ramboot-package/root-tree
+            ${{ runner.temp }}/y35a-ramboot-package/rootfs-closure.json
+          if-no-files-found: error
+          retention-days: 30
+
+  tf-apfs-intermediate:
+    if: github.event_name == 'workflow_dispatch' && inputs.root_tree_run_id != ''
+    runs-on: macos-15
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.root_tree_artifact }}
+          run-id: ${{ inputs.root_tree_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/root-tree
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.stock_qcdt_artifact }}
+          run-id: ${{ inputs.stock_qcdt_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/stock-qcdt
+      - name: Build and verify TF/APFS intermediate
+        env:
+          ROOT_TREE_PATH: ${{ inputs.root_tree_path }}
+          STOCK_QCDT_PATH: ${{ inputs.stock_qcdt_path }}
+          STOCK_QCDT_PROVENANCE_PATH: ${{ inputs.stock_qcdt_provenance_path }}
+        run: |
+          set -euo pipefail
+          ROOT_TREE="$RUNNER_TEMP/root-tree/$ROOT_TREE_PATH"
+          STOCK_QCDT="$RUNNER_TEMP/stock-qcdt/$STOCK_QCDT_PATH"
+          STOCK_PROVENANCE="$RUNNER_TEMP/stock-qcdt/$STOCK_QCDT_PROVENANCE_PATH"
+          test -d "$ROOT_TREE"
+          test -f "$STOCK_QCDT"
+          test -f "$STOCK_PROVENANCE"
+          python3 scripts/ci/build_y35a_tf_apfs_image.py \
+            --root-tree "$ROOT_TREE" \
+            --stock-qcdt "$STOCK_QCDT" \
+            --stock-qcdt-provenance "$STOCK_PROVENANCE" \
+            --output "$RUNNER_TEMP/y35a-tf-root.apfs.img"
+      - name: Upload TF/APFS intermediate
+        uses: actions/upload-artifact@v4
+        with:
+          name: y35a-tf-apfs-intermediate-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/y35a-tf-root.apfs.img
+            ${{ runner.temp }}/y35a-tf-root.apfs.img.json
+            ${{ runner.temp }}/y35a-tf-root.apfs.img.json.binding.json
           if-no-files-found: error
           retention-days: 30
