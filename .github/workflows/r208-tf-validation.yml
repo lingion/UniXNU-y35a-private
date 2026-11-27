@@ -56,9 +56,9 @@ jobs:
       - name: Fetch exact IOStorageFamily source
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/IOStorageFamily.git "$RUNNER_TEMP/IOStorageFamily"
-          git -C "$RUNNER_TEMP/IOStorageFamily" fetch --depth=1 origin c95d31401f0ff950a883727f5e47d313685fde33
-          git -C "$RUNNER_TEMP/IOStorageFamily" checkout --detach c95d31401f0ff950a883727f5e47d313685fde33
-          test "$(git -C "$RUNNER_TEMP/IOStorageFamily" rev-parse HEAD)" = c95d31401f0ff950a883727f5e47d313685fde33
+          git -C "$RUNNER_TEMP/IOStorageFamily" fetch --depth=1 origin 0e637763592184691a0e51a0995f10fa110f0780
+          git -C "$RUNNER_TEMP/IOStorageFamily" checkout --detach 0e637763592184691a0e51a0995f10fa110f0780
+          test "$(git -C "$RUNNER_TEMP/IOStorageFamily" rev-parse HEAD)" = 0e637763592184691a0e51a0995f10fa110f0780
       - name: Generate exact XNU headers
         run: |
           python scripts/ci/patch_xnu_host_tools.py --xnu-source "$RUNNER_TEMP/xnu"

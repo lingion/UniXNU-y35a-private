@@ -63,7 +63,7 @@ def main() -> int:
     if commit != expected:
         raise SystemExit(f"XNU checkout {commit} does not match {expected}")
     iostorage_commit = run(["git", "-C", str(iostorage), "rev-parse", "HEAD"])
-    expected_iostorage = "c95d31401f0ff950a883727f5e47d313685fde33"
+    expected_iostorage = "0e637763592184691a0e51a0995f10fa110f0780"
     if iostorage_commit != expected_iostorage:
         raise SystemExit(f"IOStorageFamily checkout {iostorage_commit} does not match {expected_iostorage}")
     iostorage_headers = generated / "r208-iostorage-headers/IOKit/storage"
