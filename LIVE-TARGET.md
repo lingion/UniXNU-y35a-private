@@ -1,6 +1,6 @@
 # UniXNU 当前实时目标
 
-更新时间：2026-11-27 07:44 UTC。每次恢复和每轮开始先读此文件。本文只描述当前阶段，阶段变化必须同步 `STATE.md`、`CURRENT.md`、`LONG-RUN-STATE.md` 和 `LOG.md`。
+更新时间：2026-11-27 08:01 UTC。每次恢复和每轮开始先读此文件。本文只描述当前阶段，阶段变化必须同步 `STATE.md`、`CURRENT.md`、`LONG-RUN-STATE.md` 和 `LOG.md`。
 
 ## 任务状态（最高优先级，不随阶段变化）
 
@@ -17,11 +17,12 @@ MISSION: IN_PROGRESS | D1 NOT_MET | D2 NOT_MET | D3 NOT_MET
 ## 当前执行状态
 
 - 截至 2026-11-27 07:33 UTC，MISSION 为 `IN_PROGRESS`，D1、D2、D3 均为 `NOT_MET`，`device_run_allowed=false`。
-- Native execute run `45956827212` 绑定提交 `bd7615046eb01a42e74fa0a3e6194331e0557a29`，已在实际 native build 步骤失败，没有 kernel artifact。修复已推送到 package 分支提交 `e007c2ed6cf09038ed32d6e99c6d394f50628606`，统一采用 libdispatch 1477 Firehose API，并加入 provenance-bound atomic-private compatibility header。
-- 当前 native execute run `45960088944` 绑定 `e007c2ed6cf09038ed32d6e99c6d394f50628606`，状态为 `in_progress`，当前步骤为 `Fetch native input sources`。同提交的 TF validation run `45960008744` 成功。等待该唯一 native run 进入实际 build 并取得终态。
-- Package 分支最新已推送提交为 `c30f0852346a7ec1b9cfcb8c04c83b7fb431a102`。package workflow 的合同验证 run `45957683974` 成功，但 native-run 校验步骤以及 package 和 TF/APFS jobs 被跳过。`workflow_dispatch` 对真实成功 native artifact 的消费仍待验证。
+- Native execute run `45956827212` 绑定提交 `bd7615046eb01a42e74fa0a3e6194331e0557a29`，在实际 build 步骤失败。Firehose 兼容修复已推送到 package 分支提交 `e007c2ed6cf09038ed32d6e99c6d394f50628606`，采用 libdispatch 1477 API 并加入 provenance-bound atomic-private compatibility header。
+- Native execute run `45960088944` 绑定 `e007c2ed6cf09038ed32d6e99c6d394f50628606`，已完成但在最终 arm64 kernel link 失败，没有 kernel artifact。缺失符号属于 `libQcomSdcard.a(IOStorageFamily-QcomSdcard.o)` vtable，引用 `_RESERVEDIOService33` 至 `_RESERVEDIOService47`，而 XNU 4903 `IOService` 不提供这些槽。archive provenance 指向 `IOStorageFamily` commit `c95d314`，该源码版本与目标 IOKit ABI 不匹配。
+- 当前主线正在确认与 Darwin 18/XNU 4903 ABI 同代的 IOStorageFamily 源版本，并准备将 driver archive 的源版本和 provenance 一起固定。此前输入准备、patch、manifest、genassym、monotonic header、Firehose 兼容以及其他编译步骤均已通过此 run。
+- Package 分支最新已推送提交为 `e007c2ed6cf09038ed32d6e99c6d394f50628606`。package run `45960008735` 的合同验证成功，但 native-run 校验步骤以及 package 和 TF/APFS jobs 因该 push 未提供 native artifact 输入而跳过。`workflow_dispatch` 对真实成功 native artifact 的消费仍待验证。
 - GitHub Actions 当前能够启动。Billing 不再是当前阻塞条件。stock PD1502A QCDT 仍未取得可核验来源，Mobile 卷读取曾返回 I/O error。该输入影响后续 TF/APFS 设备包闭环，不阻止 native kernel build 继续推进。
-- 当前下一步是跟踪 `45960088944` 的输入准备、实际 build 和产物闭包。若生成成功且哈希绑定的 kernel artifact，再用 package workflow 的显式 native run、branch 和 SHA 输入验证消费路径。
+- 当前下一步是确定并锁定适配 XNU 4903 IOKit ABI 的 IOStorageFamily 源码，更新 CI archive producer 和 provenance，再由 Actions 编译 archive 并重跑精确 SHA 的 native link。成功且哈希绑定的 kernel artifact 生成后，再验证 package workflow 对该 run 的消费。
 - 真机、TF 卡、USB、fastboot、adb 和串口目前均未操作。native build、package、TF/APFS、root selection、eMMC fallback 和设备运行仍需各自证据闭环。
 
 ## 历史事实与边界

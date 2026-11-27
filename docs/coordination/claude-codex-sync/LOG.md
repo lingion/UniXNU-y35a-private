@@ -3084,3 +3084,11 @@ device_run_allowed=false；persistent writes: none；未触碰设备、未本机
 类型: CI-STATUS / MILESTONE
 事实: package branch commit `e007c2ed6cf09038ed32d6e99c6d394f50628606` 统一 libdispatch 1477 Firehose API，并加入 provenance-bound atomic-private compatibility header。Native execute run `45960088944` 绑定该完整 SHA，当前状态 `in_progress`，当前步骤 `Fetch native input sources`。TF validation run `45960008744` 成功。Main documentation commit `580330d49ea04b94445d56be60d466f29b35d716` 已推送，GitHub validation run `45960185781` 与 Docs run `45960185715` 均成功。
 裁决: 45960088944 尚无终态，不能据此认定 native build 或 kernel artifact 成功。Mission `IN_PROGRESS`; D1/D2/D3 `NOT_MET`; `device_run_allowed=false`。本次更新实时目标快照与状态索引，没有执行本机 UniXNU build、测试、静态门禁或设备操作。
+
+## 2026-11-27T08:01:15Z — native link 暴露 IOStorageFamily ABI 不匹配
+
+类型: CI-FAILURE / ROOT-CAUSE
+SUPERSEDES: 2026-11-27T07:44:47Z — Firehose 输入修复已派发 native CI (run `45960088944` 状态更新)
+事实: Native run `45960088944` 绑定 package commit `e007c2ed6cf09038ed32d6e99c6d394f50628606`，输入准备、manifest 校验和编译步骤通过，最终 arm64 kernel link 失败。`libQcomSdcard.a(IOStorageFamily-QcomSdcard.o)` 的 vtable 引用 `_RESERVEDIOService33` 至 `_RESERVEDIOService47`，但 pinned XNU 4903 的 `IOService` 没有这些 reserved slots。artifact provenance 将该 object 源码追溯到 IOStorageFamily commit `c95d314`，ABI 与目标内核不兼容。run 未产出 kernel artifact。
+下一步: 选择并固定与 Darwin 18/XNU 4903 ABI 对应的 IOStorageFamily 源版本，更新 CI archive producer、manifest 和 provenance，由 GitHub Actions 重建 archive 后再运行精确 SHA native link。不得通过给 XNU `IOService` 伪造 reserved slots 来掩盖 archive ABI 不匹配。
+裁决: Firehose、genassym、monotonic 与 patch/input 闭包不再是 run `45960088944` 的阻塞。Native kernel link、package/probe、TF/APFS 与真机目标仍未完成。Mission `IN_PROGRESS`; D1/D2/D3 `NOT_MET`; `device_run_allowed=false`。
