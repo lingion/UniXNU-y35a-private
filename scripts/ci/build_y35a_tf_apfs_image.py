@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import plistlib
 import posixpath
+import re
 import shutil
 import stat
 import subprocess
@@ -71,8 +72,12 @@ def xattr_manifest(path: Path) -> list:
         value_command = [executable]
         if path.is_symlink():
             value_command.append("-s")
-        value_command.extend(["-p", name, str(path)])
-        value = subprocess.run(value_command, check=True, capture_output=True).stdout
+        value_command.extend(["-px", name, str(path)])
+        encoded_value = subprocess.run(value_command, check=True, capture_output=True).stdout
+        try:
+            value = bytes.fromhex(encoded_value.decode("ascii"))
+        except (UnicodeDecodeError, ValueError) as error:
+            raise RuntimeError(f"xattr returned invalid hexadecimal data for {name!r}: {path}") from error
         values.append([name, hashlib.sha256(value).hexdigest()])
     return values
 
@@ -509,40 +514,86 @@ def plist_entities(value):
     return []
 
 
-def validate_gpt_apfs(whole_disk: dict, volume: dict, partition_list: dict | None = None) -> dict:
-    partition_map = str(whole_disk.get("PartitionMapType", ""))
-    content = str(whole_disk.get("Content", ""))
-    partition_list = partition_list or {}
-    list_content = str(partition_list.get("Content", ""))
-    list_map = str(partition_list.get("PartitionMapType", ""))
-    if not list_content and isinstance(partition_list.get("AllDisksAndPartitions"), list):
-        for disk in partition_list["AllDisksAndPartitions"]:
-            if isinstance(disk, dict):
-                list_content = str(disk.get("Content", list_content))
-                list_map = str(disk.get("PartitionMapType", list_map))
-                if list_content or list_map:
-                    break
+_GPT_SCHEMES = {"GPT", "GUID_PARTITION_SCHEME"}
+
+
+def _normalize_scheme(value: object) -> str:
+    return re.sub(r"[^A-Z0-9]+", "_", str(value).upper()).strip("_")
+
+
+def _normalize_disk_identifier(value: object) -> str:
+    identifier = str(value or "").strip()
+    return identifier.removeprefix("/dev/")
+
+
+def parse_hdiutil_partition_scheme(output: str) -> str:
+    """Extract hdiutil pmap's explicit top-level SCHEME record."""
+    for line in output.splitlines():
+        match = re.match(r"^\s*SCHEME:\s*\d+\s+([^,\[]+)", line, re.IGNORECASE)
+        if match:
+            value = match.group(1).strip()
+            return value if _normalize_scheme(value) in _GPT_SCHEMES else ""
+    return ""
+
+
+def validate_gpt_apfs(
+    whole_disk: dict,
+    volume: dict,
+    partition_map_output: str,
+    *,
+    expected_whole_disk: str,
+) -> dict:
+    """Require explicit GPT evidence, APFS volume facts, and parent-device binding.
+
+    Partition-type GUIDs such as Apple's APFS GUID are not partition-map schemes.
+    Only the hdiutil pmap top-level SCHEME record can establish GPT here.
+    """
+    pmap_scheme = parse_hdiutil_partition_scheme(partition_map_output)
     volume_content = str(volume.get("Content", ""))
     filesystem = str(volume.get("FilesystemType", ""))
-    map_facts = f"{partition_map} {content} {list_map} {list_content}".upper()
-    if "GPT" not in map_facts and "GUID" not in map_facts:
-        raise ValueError(f"TF image does not report a GPT partition map: {partition_map or content or list_map or list_content}")
+    normalized_pmap_scheme = _normalize_scheme(pmap_scheme)
+    if normalized_pmap_scheme not in _GPT_SCHEMES:
+        raise ValueError(
+            "TF image does not report a GPT partition map: "
+            f"hdiutil={pmap_scheme or 'unreported'!r}"
+        )
     if "APFS" not in volume_content.upper() and "APFS" not in filesystem.upper():
         raise ValueError(f"TF image volume is not APFS: {volume_content}/{filesystem}")
+    whole_device = _normalize_disk_identifier(
+        whole_disk.get("DeviceIdentifier") or whole_disk.get("DeviceNode")
+    )
+    volume_device = _normalize_disk_identifier(
+        volume.get("DeviceIdentifier") or volume.get("DeviceNode")
+    )
+    parent_device = _normalize_disk_identifier(
+        volume.get("ParentWholeDisk") or volume.get("ParentWholeDiskDevice")
+    )
+    expected_whole_disk = _normalize_disk_identifier(expected_whole_disk)
+    if not expected_whole_disk:
+        raise ValueError("expected whole-disk identifier is required")
+    if not whole_device or not volume_device or not parent_device:
+        raise ValueError("GPT/APFS relation is missing whole-disk, volume, or parent device identity")
+    if whole_device != expected_whole_disk:
+        raise ValueError(
+            f"queried whole disk {whole_device!r} does not match expected {expected_whole_disk!r}"
+        )
+    if parent_device != expected_whole_disk:
+        raise ValueError(
+            f"APFS volume parent {parent_device!r} does not match expected whole disk {expected_whole_disk!r}"
+        )
+    if volume_device == expected_whole_disk:
+        raise ValueError("APFS volume device must identify a partition or APFS volume, not the whole disk")
     return {
-        "partition_map_type": partition_map,
-        "partition_map_source": (
-            "PartitionMapType" if partition_map else
-            "diskutil-list:PartitionMapType" if list_map else
-            "diskutil-list:Content" if list_content else "Content"
-        ),
-        "diskutil_list_content": list_content,
-        "diskutil_list_partition_map_type": list_map,
-        "whole_disk_content": content,
+        "partition_map_type": pmap_scheme,
+        "partition_map_source": "hdiutil-pmap:SCHEME",
+        "partition_map_report_sha256": hashlib.sha256(partition_map_output.encode()).hexdigest(),
+        "whole_disk_content": str(whole_disk.get("Content", "")),
         "volume_content": volume_content,
         "filesystem_type": filesystem,
-        "whole_disk": whole_disk.get("DeviceIdentifier") or whole_disk.get("DeviceNode"),
-        "volume_device": volume.get("DeviceIdentifier") or volume.get("DeviceNode"),
+        "whole_disk": whole_device,
+        "volume_device": volume_device,
+        "volume_parent_whole_disk": parent_device,
+        "expected_whole_disk": expected_whole_disk,
     }
 
 
@@ -616,10 +667,12 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
         whole_info = plistlib.loads(run_checked(
             ["diskutil", "info", "-plist", f"/dev/{whole_name}"], text=False,
         ).stdout)
-        partition_list = plistlib.loads(run_checked(
-            ["diskutil", "list", "-plist", f"/dev/{whole_name}"], text=False,
-        ).stdout)
-        gpt_apfs = validate_gpt_apfs(whole_info, fs_info, partition_list)
+        partition_map_output = run_checked(
+            ["hdiutil", "pmap", "-simple", str(output)],
+        ).stdout
+        gpt_apfs = validate_gpt_apfs(
+            whole_info, fs_info, partition_map_output, expected_whole_disk=whole_name,
+        )
         report = {
             "schema_version": 1,
             "status": "intermediate-built",

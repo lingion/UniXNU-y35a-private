@@ -8,6 +8,7 @@ import subprocess
 import tarfile
 import tempfile
 import sys
+from types import SimpleNamespace
 import unittest
 from unittest import mock
 
@@ -210,24 +211,87 @@ class TfApfsImageInputTest(unittest.TestCase):
     def test_gpt_apfs_relation_is_required(self):
         with self.assertRaisesRegex(ValueError, "GPT partition map"):
             MODULE.validate_gpt_apfs(
-                {"PartitionMapType": "FDisk_partition_scheme"},
+                {"PartitionMapType": "GUID_partition_scheme"},
                 {"Content": "Apple_APFS", "FilesystemType": "apfs"},
+                "SCHEME: 1 FDisk_partition_scheme\n",
+                expected_whole_disk="disk6",
             )
 
-    def test_gpt_apfs_relation_accepts_guid_content_when_partition_map_field_is_absent(self):
+    def test_gpt_apfs_relation_accepts_explicit_guid_partition_scheme(self):
         result = MODULE.validate_gpt_apfs(
-            {"Content": "GUID_partition_scheme", "DeviceIdentifier": "disk6"},
-            {"Content": "Apple_APFS", "FilesystemType": "apfs", "DeviceIdentifier": "disk6s1"},
+            {"DeviceIdentifier": "disk6"},
+            {"Content": "Apple_APFS", "FilesystemType": "apfs", "DeviceIdentifier": "disk6s1",
+             "ParentWholeDisk": "disk6"},
+            "SCHEME: 1 GUID_partition_scheme\n",
+            expected_whole_disk="disk6",
         )
-        self.assertEqual(result["partition_map_source"], "Content")
+        self.assertEqual(result["partition_map_source"], "hdiutil-pmap:SCHEME")
 
-    def test_gpt_apfs_relation_accepts_guid_partition_list_content(self):
+    def test_gpt_apfs_relation_accepts_explicit_gpt_scheme(self):
         result = MODULE.validate_gpt_apfs(
-            {"Content": "EF57347C-0000-11AA-AA11-00306543ECAC"},
-            {"Content": "Apple_APFS", "FilesystemType": "apfs"},
-            {"AllDisksAndPartitions": [{"Content": "GUID_partition_scheme"}]},
+            {"DeviceIdentifier": "disk6"},
+            {"Content": "Apple_APFS", "FilesystemType": "apfs", "DeviceIdentifier": "disk6s1",
+             "ParentWholeDisk": "disk6"},
+            'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n',
+            expected_whole_disk="disk6",
         )
-        self.assertEqual(result["partition_map_source"], "diskutil-list:Content")
+        self.assertEqual(result["partition_map_source"], "hdiutil-pmap:SCHEME")
+
+    def test_gpt_apfs_relation_normalizes_dev_device_nodes(self):
+        result = MODULE.validate_gpt_apfs(
+            {"DeviceNode": "/dev/disk6"},
+            {"Content": "Apple_APFS", "FilesystemType": "apfs", "DeviceNode": "/dev/disk6s1",
+             "ParentWholeDiskDevice": "/dev/disk6"},
+            'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n',
+            expected_whole_disk="disk6",
+        )
+        self.assertEqual(result["whole_disk"], "disk6")
+        self.assertEqual(result["volume_parent_whole_disk"], "disk6")
+
+    def test_apfs_partition_type_guid_is_not_gpt_scheme(self):
+        with self.assertRaisesRegex(ValueError, "GPT partition map"):
+            MODULE.validate_gpt_apfs(
+                {"Content": "EF57347C-0000-11AA-AA11-00306543ECAC"},
+                {"Content": "Apple_APFS", "FilesystemType": "apfs"},
+                "SECTION: 1 Type:'MAP'\n"
+                " 1 EF57347C-0000-11AA-AA11-00306543ECAC 40 8380000 APFS\n",
+                expected_whole_disk="disk6",
+            )
+
+    def test_gpt_apfs_relation_rejects_missing_or_mismatched_device_binding(self):
+        with self.assertRaisesRegex(ValueError, "missing whole-disk"):
+            MODULE.validate_gpt_apfs(
+                {},
+                {"Content": "Apple_APFS", "FilesystemType": "apfs"},
+                'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n',
+                expected_whole_disk="disk6",
+            )
+        with self.assertRaisesRegex(ValueError, "does not match expected"):
+            MODULE.validate_gpt_apfs(
+                {"DeviceIdentifier": "disk7"},
+                {"Content": "Apple_APFS", "FilesystemType": "apfs", "DeviceIdentifier": "disk7s1",
+                 "ParentWholeDisk": "disk7"},
+                'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n',
+                expected_whole_disk="disk6",
+            )
+        with self.assertRaisesRegex(ValueError, "parent.*does not match expected"):
+            MODULE.validate_gpt_apfs(
+                {"DeviceIdentifier": "disk6"},
+                {"Content": "Apple_APFS", "FilesystemType": "apfs", "DeviceIdentifier": "disk7s1",
+                 "ParentWholeDisk": "disk7"},
+                'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n',
+                expected_whole_disk="disk6",
+            )
+
+    def test_hdiutil_pmap_scheme_parser_requires_explicit_scheme_record(self):
+        self.assertEqual(
+            MODULE.parse_hdiutil_partition_scheme("SCHEME: 1 GUID_partition_scheme\n"),
+            "GUID_partition_scheme",
+        )
+        self.assertEqual(
+            MODULE.parse_hdiutil_partition_scheme("SECTION: 1 Apple_APFS\n"),
+            "",
+        )
 
     def test_tree_digest_changes_with_mode(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -475,6 +539,25 @@ class TfApfsImageInputTest(unittest.TestCase):
             except (OSError, AttributeError):
                 self.skipTest("filesystem does not permit xattr fixtures")
             self.assertNotEqual(first, second)
+
+    def test_xattr_cli_fallback_when_python_api_is_missing(self):
+        path = Path("/tmp/xattr-fixture")
+        expected = hashlib.sha256(b"value").hexdigest()
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            stdout = b"com.example.test\n" if "-px" not in command else b"76 61 6c 75 65\n"
+            return SimpleNamespace(stdout=stdout)
+
+        with mock.patch.object(MODULE, "os", SimpleNamespace()), \
+                mock.patch.object(MODULE.shutil, "which", return_value="/usr/bin/xattr"), \
+                mock.patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+            result = MODULE.xattr_manifest(path)
+
+        self.assertEqual(result, [["com.example.test", expected]])
+        self.assertEqual(calls[0], ["/usr/bin/xattr", str(path)])
+        self.assertEqual(calls[1], ["/usr/bin/xattr", "-px", "com.example.test", str(path)])
 
 
 if __name__ == "__main__":
