@@ -21,6 +21,13 @@ import package_native
 
 
 class PackageToolchainContractTest(unittest.TestCase):
+    def test_package_workflow_only_downgrades_gcc_specific_dtc_warning(self):
+        workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
+        self.assertIn("make -C .ci-tools/dtc dtc EXTRA_CFLAGS=-Wno-error=unknown-warning-option", workflow)
+        self.assertNotIn("-Wno-error", workflow.replace(
+            "-Wno-error=unknown-warning-option", ""))
+        self.assertIn("DTC_REVISION: 2d10aa2afe35527728db30b35ec491ecb6959e5c", workflow)
+
     def test_toolchain_manifest_binds_pinned_ndk_paths_versions_and_hashes(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = Path(temporary)
