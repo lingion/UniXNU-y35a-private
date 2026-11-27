@@ -1,7 +1,6 @@
 --- a/bsd/kern/bsd_init.c
 +++ b/bsd/kern/bsd_init.c
-@@ -261,8 +261,11 @@
- __private_extern__ int os_reason_debug_disabled = 0; /* disable asserts for when we fail to allocate OS reasons */
+@@ -262,6 +262,9 @@
  #endif
  
  extern kern_return_t IOFindBSDRoot(char *, unsigned int, dev_t *, u_int32_t *);
@@ -11,9 +10,7 @@
  extern void IOSecureBSDRoot(const char * rootName);
  extern kern_return_t IOKitBSDInit(void );
  extern void kminit(void);
- extern void file_lock_init(void);
-@@ -446,8 +449,11 @@
- 	struct ucred temp_cred;
+@@ -447,6 +450,9 @@
  	struct posix_cred temp_pcred;
  #if NFSCLIENT || CONFIG_IMAGEBOOT
  	boolean_t       netboot = FALSE;
@@ -23,9 +20,7 @@
  #endif
  
  #define bsd_init_kprintf(x...) /* kprintf("bsd_init: " x) */
- 
-@@ -935,8 +941,19 @@
- 		bsd_init_kprintf("vfs_mountroot\n");
+@@ -936,6 +942,17 @@
  		if (0 == (err = vfs_mountroot())) {
  			break;
  		}
@@ -43,9 +38,7 @@
  		rootdevice[0] = '\0';
  #if NFSCLIENT
  		if (netboot) {
- 			PE_display_icon( 0, "noroot");  /* XXX a netboot-specific icon would be nicer */
-@@ -1102,8 +1119,16 @@
- 	u_int32_t       flags;
+@@ -1103,6 +1120,14 @@
  	kern_return_t   err;
  
  	err = IOFindBSDRoot(rootdevice, sizeof(rootdevice), &rootdev, &flags);
@@ -60,11 +53,9 @@
  	if (err) {
  		printf("setconf: IOFindBSDRoot returned an error (%d);"
  		    "setting rootdevice to 'sd0a'.\n", err);     /* XXX DEBUG TEMP */
- 		rootdev = makedev( 6, 0 );
 --- a/iokit/bsddev/IOKitBSDInit.cpp
 +++ b/iokit/bsddev/IOKitBSDInit.cpp
-@@ -398,8 +398,30 @@
- 
+@@ -399,6 +399,28 @@
  static int didRam = 0;
  enum { kMaxPathBuf = 512, kMaxBootVar = 128 };
  
@@ -93,9 +84,7 @@
  kern_return_t
  IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
      dev_t * root, u_int32_t * oflags )
- {
-@@ -406,4 +428,8 @@
- 	mach_timespec_t     t;
+@@ -407,6 +429,10 @@
  	IOService *         service;
  	IORegistryEntry *   regEntry;
  	OSDictionary *      matching = 0;
@@ -103,8 +92,10 @@
 +	boolean_t           y35aBoundedRootWait = FALSE;
 +	UInt32              y35aRootWaitAttempts = 0;
 +#endif
-@@ -452,15 +478,31 @@
- 	if (!PE_parse_boot_argn("rd", rdBootVar, kMaxBootVar )
+ 	OSString *          iostr;
+ 	OSNumber *          off;
+ 	OSData *            data = 0;
+@@ -453,13 +479,29 @@
  	    && !PE_parse_boot_argn("rootdev", rdBootVar, kMaxBootVar )) {
  		rdBootVar[0] = 0;
  	}
@@ -134,9 +125,7 @@
  				if (matching) {
  					continue;
  				}
- 			}
-@@ -472,8 +514,11 @@
- 
+@@ -473,6 +515,9 @@
  				// match the boot-args boot-uuid processing below
  				if (uuidString) {
  					IOLog("rooting via boot-uuid from /chosen: %s\n", uuidStr);
@@ -146,9 +135,7 @@
  					IOService::publishResource( "boot-uuid", uuidString );
  					uuidString->release();
  					matching = IOUUIDMatching();
- 					mediaProperty = "boot-uuid-media";
-@@ -485,8 +530,20 @@
- 			}
+@@ -486,6 +531,18 @@
  			regEntry->release();
  		}
  	} while (false);
@@ -167,22 +154,19 @@
  
  //
  //	See if we have a RAMDisk property in /chosen/memory-map.  If so, make it into a device.
- //	It will become /dev/mdx, where x is 0-f.
-@@ -605,8 +662,12 @@
- 			IOLog( "Waiting on %s\n", s->text());
- 			s->release();
+@@ -607,6 +664,11 @@
  		}
  	}
+ 
 +#if defined(XNU_Y35A_STORAGE_FALLBACK) && XNU_Y35A_STORAGE_FALLBACK
 +	y35aBoundedRootWait = native_y35a_tf_root_selected && matching;
 +	y35aRootWaitAttempts = 0;
 +#endif
- 
++
  	do {
  		t.tv_sec = ROOTDEVICETIMEOUT;
  		t.tv_nsec = 0;
-@@ -629,15 +690,33 @@
- 				if (gIOKitDebug & kIOLogMemory) {
+@@ -630,13 +692,31 @@
  					IOPrintMemory();
  				}
  			}
@@ -214,4 +198,3 @@
  
  	mjr = 0;
  	mnr = 0;
- 
