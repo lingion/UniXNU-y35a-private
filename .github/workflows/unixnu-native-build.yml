@@ -81,7 +81,7 @@ jobs:
       - name: Test native build and input contracts
         env:
           UNIXNU_XNU_SOURCE: ${{ runner.temp }}/xnu
-        run: python -m unittest -v tests/test_native_xnu_build_contract.py tests/test_ci_native_build_gate.py
+        run: python -m unittest -v tests/test_native_xnu_build_contract.py tests/test_ci_native_build_gate.py tests/test_r208_native_kernel_gate.py
       - name: Fetch native input sources
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/AvailabilityVersions.git "$RUNNER_TEMP/AvailabilityVersions"
@@ -244,6 +244,28 @@ jobs:
           name: unixnu-native-link-diagnostics-${{ github.run_id }}
           path: ${{ runner.temp }}/unixnu-native-build/logs/link-symbol-diagnostics.txt
           if-no-files-found: warn
+      - name: Preserve linked kernel candidate for verifier diagnosis
+        if: always()
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/unixnu-native-build"
+          KERNEL="$ROOT/obj/DEVELOPMENT_ARM64_T7001/mach.development.t7001.unstripped"
+          if [[ -f "$KERNEL" ]]; then
+            OUT="$RUNNER_TEMP/unixnu-native-kernel-candidate"
+            mkdir -p "$OUT"
+            cp "$KERNEL" "$OUT/mach.development.t7001.unstripped"
+            cp "$ROOT/kernel-artifact.json" "$OUT/kernel-artifact.json"
+            cp "$ROOT/build-provenance.json" "$OUT/build-provenance.json"
+            cp "$RUNNER_TEMP/native-build-plan.json" "$OUT/native-build-plan.json"
+          fi
+      - name: Upload linked kernel candidate for diagnosis
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: unixnu-native-kernel-candidate-${{ github.run_id }}
+          path: ${{ runner.temp }}/unixnu-native-kernel-candidate
+          if-no-files-found: ignore
+          retention-days: 90
       - name: Prepare kernel artifact contract
         if: ${{ inputs.execute == true && success() }}
         env:

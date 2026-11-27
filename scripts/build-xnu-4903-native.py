@@ -611,6 +611,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="archive-builder manifest binding the force-loaded integration")
     parser.add_argument("--driver-contract", type=Path,
                         help="native-build manifest pinning the exact driver producer artifact")
+    parser.add_argument("--static-verifier", type=Path,
+                        help="candidate-specific offline kernel verifier")
+    parser.add_argument("--static-verifier-sha256",
+                        help="expected SHA-256 of --static-verifier")
     parser.add_argument("--plan-only", action="store_true",
                         help="validate inputs and print argv without creating output or running make")
     return parser.parse_args(argv)
@@ -715,7 +719,9 @@ def _execute_run(
         shutil.copy2(archive, staged)
         staged_driver_archives.append(staged)
     if driver_manifest is not None:
-        _write_json(run_root / "inputs/driver-manifest.json", driver_manifest)
+        if args.driver_manifest is None:
+            raise SystemExit("driver manifest source path is missing")
+        shutil.copy2(args.driver_manifest.resolve(strict=True), run_root / "inputs/driver-manifest.json")
     staged_source = run_root / "src"
     fakeroot = run_root / "fakeroot"
     overlay = run_root / "sdk-overlay"
@@ -836,8 +842,13 @@ def _execute_run(
             f"kernel SHA-256 {artifact['sha256']} does not match expected {args.expected_sha256}; "
             f"run preserved at {run_root}"
         )
-    verifier = ROOT / "scripts/y35a/verify_phase_instrumentation.py"
+    verifier = args.static_verifier or (ROOT / "scripts/y35a/verify_phase_instrumentation.py")
     command = [sys.executable, str(verifier), "--kernel", str(kernel)]
+    if args.static_verifier is not None:
+        command.extend([
+            "--provenance", str(provenance_path),
+            "--driver-manifest", str(run_root / "inputs/driver-manifest.json"),
+        ])
     provenance["kernel_static_verification"] = {"status": "running"}
     provenance["manifest_verification"] = {"status": "not-requested"}
     _write_json(provenance_path, provenance)
@@ -894,6 +905,13 @@ def main(argv: list[str] | None = None) -> int:
     driver_manifest = load_driver_integration(
         driver_archives, args.driver_manifest,
         expected=driver_contract.get("driver_artifact") if driver_contract else None)
+    static_verifier = args.static_verifier.resolve(strict=True) if args.static_verifier else None
+    if static_verifier is not None:
+        actual_verifier_sha = sha256_file(static_verifier)
+        if not args.static_verifier_sha256 or actual_verifier_sha != args.static_verifier_sha256:
+            raise SystemExit("candidate static verifier SHA-256 does not match native manifest")
+    elif driver_contract is not None:
+        raise SystemExit("R208 native build requires its candidate-specific static verifier")
     source = args.source.resolve(strict=True)
     source_identity = validate_source_tree(source)
     source_diff = args.source_diff.resolve(strict=True) if args.source_diff else None
@@ -926,6 +944,9 @@ def main(argv: list[str] | None = None) -> int:
         "driver_contract": ({"path": str(args.driver_contract.resolve(strict=True)),
                              "sha256": sha256_file(args.driver_contract.resolve(strict=True))}
                             if args.driver_contract else None),
+        "static_verifier": ({"path": str(static_verifier),
+                             "sha256": sha256_file(static_verifier)}
+                            if static_verifier else None),
     }
     if args.plan_only:
         plan_root = Path("/tmp/<new-xnu4903-native-run>")
@@ -971,6 +992,8 @@ def main(argv: list[str] | None = None) -> int:
         input_paths.append(args.driver_manifest.resolve(strict=True))
     if args.driver_contract:
         input_paths.append(args.driver_contract.resolve(strict=True))
+    if static_verifier is not None:
+        input_paths.append(static_verifier)
     run_root = allocate_isolated_run_root(
         explicit=args.run_root, parent=args.run_parent, input_paths=input_paths,
     )

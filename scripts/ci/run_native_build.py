@@ -95,6 +95,15 @@ def validate_native_provenance(manifest: dict, repo_root: Path) -> dict:
     }
     if source_provenance.get("native_input_commits") != commit_map:
         raise SystemExit("native input commits differ from source provenance")
+    static_contract = manifest.get("static_verification", {})
+    static_path = resolve(repo_root, static_contract.get("script"))
+    if (source_provenance.get("static_verification", {}).get("script")
+            != static_contract.get("script")
+            or source_provenance.get("static_verification", {}).get("sha256")
+            != static_contract.get("sha256")
+            or static_path is None or not static_path.is_file()
+            or sha256(static_path) != static_contract.get("sha256")):
+        raise SystemExit("candidate-specific static verifier does not match source provenance")
     return source_provenance
 
 
@@ -147,6 +156,18 @@ def validate_native_inputs_manifest(
     return data
 
 
+def validate_static_verifier(manifest: dict, repo_root: Path) -> tuple[Path, str]:
+    contract = manifest.get("static_verification", {})
+    path = resolve(repo_root, contract.get("script"))
+    expected = contract.get("sha256")
+    if path is None or not path.is_file() or not expected:
+        raise SystemExit("native static verifier path and SHA-256 are required")
+    actual = sha256(path)
+    if actual != expected:
+        raise SystemExit("native static verifier SHA-256 does not match native manifest")
+    return path, actual
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--manifest", type=Path, required=True)
@@ -171,7 +192,8 @@ def main() -> int:
     manifest_path = args.manifest.resolve()
     manifest = json.loads(manifest_path.read_text())
     failures: list[str] = []
-    for key in ("source_ref", "source_provenance", "native_inputs", "driver_artifact", "patches", "build"):
+    for key in ("source_ref", "source_provenance", "native_inputs", "driver_artifact",
+                "static_verification", "patches", "build"):
         if key not in manifest:
             failures.append(f"missing manifest field: {key}")
     patches = manifest.get("patches", [])
@@ -239,12 +261,14 @@ def main() -> int:
         return 1
     try:
         source_provenance = validate_native_provenance(manifest, repo_root)
+        static_verifier, static_verifier_sha = validate_static_verifier(manifest, repo_root)
         native_inputs = validate_native_inputs_manifest(
             args.native_inputs_manifest.resolve(strict=True), manifest["native_inputs"],
             source_ref=manifest["source_ref"], fakeroot=args.fakeroot,
             sdk_overlay=args.sdk_overlay, xcrun_wrapper=args.xcrun_wrapper)
         if not isinstance(native_inputs, dict):
             raise SystemExit("native inputs manifest is invalid")
+        static_verifier, static_verifier_sha = validate_static_verifier(manifest, repo_root)
     except (OSError, ValueError, json.JSONDecodeError, SystemExit) as error:
         print(json.dumps({"ok": False, "failures": [str(error)]}, indent=2))
         return 1
@@ -288,6 +312,10 @@ def main() -> int:
         command.extend(["--driver-manifest", str(args.driver_manifest.resolve())])
     if args.driver_archive:
         command.extend(["--driver-contract", str(manifest_path)])
+    command.extend(["--static-verifier", str(static_verifier),
+                    "--static-verifier-sha256", static_verifier_sha])
+    command.extend(["--static-verifier", str(static_verifier),
+                    "--static-verifier-sha256", static_verifier_sha])
 
     report = {
         "ok": True,
@@ -302,6 +330,10 @@ def main() -> int:
         "driver_artifact": manifest["driver_artifact"],
         "driver_head_branch": manifest["driver_artifact"].get("head_branch"),
         "driver_manifest_sha256": sha256(args.driver_manifest.resolve()) if args.driver_manifest else None,
+        "static_verifier": str(static_verifier),
+        "static_verifier_sha256": static_verifier_sha,
+        "static_verifier": str(static_verifier),
+        "static_verifier_sha256": static_verifier_sha,
         "patches": [{"path": str(path), "sha256": sha256(path)} for path in patch_paths],
         "command": command,
         "plan_only": args.plan_only,

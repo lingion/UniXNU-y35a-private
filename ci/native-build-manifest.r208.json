@@ -16,7 +16,11 @@
     "xnu_commit": "494ffe1c29d37ca720c37328feb83069c9641b67",
     "iostorage_commit": "0e637763592184691a0e51a0995f10fa110f0780"
   },
-  "source_provenance_sha256": "53d2d6fcfbe76721a8c1fed7ad7b2fcad3b8e7b92154b6220f084635ef0b4452",
+  "source_provenance_sha256": "a2b15df00cecc0709cf78a14d85de67adddea3afc7fb4f6c3ecb1fb7d71a158c",
+  "static_verification": {
+    "script": "scripts/ci/verify_r208_native_kernel.py",
+    "sha256": "8ef3a06395627135bcc902d36521d430bd032f15e434486c9d61518b3c3e365e"
+  },
   "native_inputs": {
     "availability_tag": "AvailabilityVersions-33.200.7",
     "availability_commit": "f17c3d161f882128fb55324d3fb92adb6a7a6f7b",

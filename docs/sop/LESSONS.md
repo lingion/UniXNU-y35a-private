@@ -201,3 +201,23 @@
 - 证据：runs `45960088944`, `45964692949`, and `45969385915`; XNU 4903 `libkern/libkern/c++/OSMetaClass.h:119-140,2056-2062,2122-2128`; XNU `iokit/Kernel/IOService.cpp:7213-7270`; run `45969385915` `link.filelist` confirms base objects are included. The inference from the old archive's `_RESERVED*` imports to padding mode is independently checked by the `CONFIG_EMBEDDED` branches in the pinned header.
 - 自动化入口：`scripts/ci/compile_r208_sdcard.py` and `tests/test_r208_storage_abi_contract.py`, run by `.github/workflows/r208-tf-validation.yml`.
 - 下一次触发：any external C++ KEXT/base-family objects force-loaded into an embedded XNU kernel.
+
+## L-2026-11-27-03 native static gates must match the build candidate
+
+- 现象：Run `45993248246` successfully completed native `installhdrs` and kernel link, then marked the build failed because `verify_phase_instrumentation.py` required R326/R68E7 diagnostic symbols, carrier slots, and historical handoff markers absent from the R208 candidate.
+- 根因：The native runner unconditionally used the legacy R326 phase verifier for every 4903 build profile. Those checks were unrelated to R208's force-loaded storage driver and caused a false rejection after a real linked Mach-O already existed.
+- 影响：The kernel artifact contract and upload were skipped, so the linked candidate was not reusable by the package workflow; the run provided no accepted kernel artifact.
+- 正确做法：Pin a candidate-specific static verifier path and SHA in both native/source provenance. For R208, validate arm64 Mach-O structure, successful recorded installhdrs/build steps, post-compatibility staged-source hash/diff, profile flags, driver archive/manifest provenance, and the required force-loaded symbols in the final kernel. Retain a separate diagnostic kernel artifact on any post-link gate failure; only publish the package-consumable `unixnu-kernel-*` artifact after the candidate gate passes.
+- 证据：Run `45993248246` build provenance records linked kernel bytes and `driver_integration.status=passed`; its `kernel-static-verification.log` fails on legacy R326 markers such as `_native_early_fault_address`, `ARMENTRY`, `PREMMU00`, and R68E7 slots.
+- 自动化入口：`scripts/ci/verify_r208_native_kernel.py`, `scripts/build-xnu-4903-native.py`, `ci/native-build-manifest.r208.json`, and `.github/workflows/unixnu-native-build.yml`.
+- 下一次触发：Every native candidate with a different instrumentation/build purpose than the legacy R326 probe ladder.
+
+## L-2026-11-27-04 local verification is forbidden for UniXNU
+
+- 现象：During the native-link audit, `git diff --check` was run on the local working tree.
+- 根因：The CI-only constraint was followed for builds/tests but not for this local static check.
+- 影响：That command is not an admissible UniXNU verification result and must not be cited as acceptance evidence.
+- 正确做法：Run text checks, tests, static gates, and builds only in GitHub Actions; label any accidental local command as excluded evidence and rely on a matching Actions run.
+- 证据：Codex local session command history for this task; no claim is derived from its result.
+- 自动化入口：`.github/workflows/unixnu-validation.yml` and the candidate-specific GitHub Actions workflows.
+- 下一次触发：Any UniXNU change review or pre-commit check.

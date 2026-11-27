@@ -29,6 +29,10 @@
     "llvm": "58c46bae21181fb4240cf964461bea738d96d50e",
     "libc": "899a3b2d52d95d75e05fb286a5e64975ec3de757"
   },
+  "static_verification": {
+    "script": "scripts/ci/verify_r208_native_kernel.py",
+    "sha256": "8ef3a06395627135bcc902d36521d430bd032f15e434486c9d61518b3c3e365e"
+  },
   "build_policy": {
     "executor": "GitHub Actions",
     "local_build_allowed": false,

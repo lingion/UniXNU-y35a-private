@@ -16,6 +16,20 @@ SPEC.loader.exec_module(MODULE)
 
 
 class NativeBuildGateTests(unittest.TestCase):
+    def test_static_verifier_must_match_pinned_source_hash(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            verifier = root / "verify.py"
+            verifier.write_text("print('verified')\n")
+            manifest = {"static_verification": {
+                "script": "verify.py", "sha256": MODULE.sha256(verifier)}}
+            path, digest = MODULE.validate_static_verifier(manifest, root)
+            self.assertEqual(path, verifier)
+            self.assertEqual(digest, MODULE.sha256(verifier))
+            manifest["static_verification"]["sha256"] = "0" * 64
+            with self.assertRaisesRegex(SystemExit, "SHA-256 does not match"):
+                MODULE.validate_static_verifier(manifest, root)
+
     def test_source_provenance_must_match_ordered_manifest_and_dependencies(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -31,11 +45,17 @@ class NativeBuildGateTests(unittest.TestCase):
                 "native_input_commits": {
                     "availability": "availability-commit", "libdispatch": "dispatch-commit",
                     "libplatform": "platform-commit", "llvm": "llvm-commit", "libc": "libc-commit"},
+                "static_verification": {"script": "verify.py", "sha256": "z" * 64},
             }
+            source_path.write_text(json.dumps(source))
+            verifier = root / "verify.py"
+            verifier.write_text("print('fixture')\n")
+            source["static_verification"]["sha256"] = MODULE.sha256(verifier)
             source_path.write_text(json.dumps(source))
             manifest = {
                 "source_ref": "xnu-pin", "source_provenance": "source.json",
                 "source_provenance_sha256": MODULE.sha256(source_path),
+                "static_verification": {"script": "verify.py", "sha256": MODULE.sha256(verifier)},
                 "patches": patches,
                 "external_driver_patches": [],
                 "native_inputs": {

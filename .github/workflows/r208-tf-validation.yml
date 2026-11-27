@@ -15,6 +15,7 @@ on:
       - 'tests/test_y35a_sd_root_fallback_contract.py'
       - 'tests/test_r208_storage_abi_contract.py'
       - 'tests/test_native_xnu_build_contract.py'
+      - 'tests/test_r208_native_kernel_gate.py'
       - 'tests/test_ci_native_build_gate.py'
       - 'scripts/ci/run_native_build.py'
       - 'scripts/ci/prepare_native_inputs.py'
@@ -91,7 +92,7 @@ jobs:
       - name: Test embedded KEXT ABI contract
         run: python3 -m unittest -v tests/test_r208_storage_abi_contract.py
       - name: Test native link input binding contracts
-        run: python3 -m unittest -v tests/test_native_xnu_build_contract.py tests/test_ci_native_build_gate.py
+        run: python3 -m unittest -v tests/test_native_xnu_build_contract.py tests/test_ci_native_build_gate.py tests/test_r208_native_kernel_gate.py
       - name: Fetch exact XNU source
         run: |
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/xnu.git "$RUNNER_TEMP/xnu"
