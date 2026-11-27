@@ -144,6 +144,7 @@ jobs:
     outputs:
       native_run_id: ${{ steps.native.outputs.run_id }}
       native_head_sha: ${{ steps.native.outputs.head_sha }}
+      package_source_sha: ${{ steps.package_source.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -157,6 +158,14 @@ jobs:
         run: |
           python3 scripts/y35a/verify_r208_tf_apfs_package_contract.py \
             --contract ci/manifests/r208-tf-apfs-package-contract.json
+      - name: Resolve package source SHA
+        id: package_source
+        env:
+          PACKAGE_SOURCE_SHA: ${{ github.event.workflow_run.head_sha || github.sha }}
+        run: |
+          set -euo pipefail
+          [[ "$PACKAGE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          echo "sha=$PACKAGE_SOURCE_SHA" >> "$GITHUB_OUTPUT"
       - name: Resolve successful native run
         id: native
         if: github.event_name == 'workflow_run' || (github.event_name == 'workflow_dispatch' && inputs.native_run_id != '')
@@ -208,7 +217,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          ref: ${{ needs.validate.outputs.native_head_sha }}
+          ref: ${{ needs.validate.outputs.package_source_sha }}
           persist-credentials: false
       - uses: actions/setup-python@v5
         with:
@@ -314,7 +323,7 @@ jobs:
         env:
           NATIVE_RUN_ID: ${{ needs.validate.outputs.native_run_id }}
           NATIVE_HEAD_SHA: ${{ needs.validate.outputs.native_head_sha }}
-          PACKAGE_SOURCE_SHA: ${{ needs.validate.outputs.native_head_sha }}
+          PACKAGE_SOURCE_SHA: ${{ needs.validate.outputs.package_source_sha }}
           PACKAGE_RUN_ID: ${{ github.run_id }}
           PACKAGE_TOOLCHAIN_MANIFEST: ${{ runner.temp }}/y35a-package-toolchain.json
           DTC_REVISION: 2d10aa2afe35527728db30b35ec491ecb6959e5c
