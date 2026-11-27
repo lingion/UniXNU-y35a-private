@@ -32,7 +32,7 @@
       "order": 2,
       "target_tree": "xnu-source",
       "path": "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch",
-      "sha256": "c243eb2991bc707ad30bd22f0ca1b27b129f0beeec85995eefaf5849909347fa"
+      "sha256": "8ca3787a589f38ae573d7a8157469e957a804a9bc25598062c57b1fd9b2995c6"
     },
     {
       "order": 3,

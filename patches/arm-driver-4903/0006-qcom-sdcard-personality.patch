@@ -1,18 +1,19 @@
 --- a/iokit/KernelConfigTables.cpp
 +++ b/iokit/KernelConfigTables.cpp
-@@ -34,7 +34,15 @@
- 
- const char * gIOKernelConfigTables =
-     "("
+@@ -45,6 +45,14 @@
+     "     'IOProviderClass' = IOPlatformExpertDevice;"
+     "     'IONameMatch'     = 'device-tree';"
+     "     'IOProbeScore'    = 5000:32;"
+     "   },"
 +#if defined(XNU_NATIVE_SDCARD) && XNU_NATIVE_SDCARD
-     "   {"
++    "   {"
 +    "     'IOClass'         = NativeSdcard;"
 +    "     'IOProviderClass' = IOPlatformDevice;"
 +    "     'IONameMatch'     = sdhc2;"
 +    "     'IOProbeScore'    = 1000:32;"
 +    "   },"
 +#endif
-+    "   {"
+     "   {"
      "     'IOClass'         = IOPanicPlatform;"
      "     'IOProviderClass' = IOPlatformExpertDevice;"
      "     'IOProbeScore'    = 0:32;"

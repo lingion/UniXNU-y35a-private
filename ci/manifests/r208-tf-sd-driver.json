@@ -81,7 +81,7 @@
     {
       "order": 0,
       "path": "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch",
-      "sha256": "c243eb2991bc707ad30bd22f0ca1b27b129f0beeec85995eefaf5849909347fa"
+      "sha256": "8ca3787a589f38ae573d7a8157469e957a804a9bc25598062c57b1fd9b2995c6"
     }
   ],
   "root_mount": {
@@ -101,7 +101,7 @@
   },
   "source_files": {
     "components.toml": "abc2efe231e7903dceaf3889b3f329b0819c1bb4980b004de5fec2e81a1cd390",
-    "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch": "c243eb2991bc707ad30bd22f0ca1b27b129f0beeec85995eefaf5849909347fa",
+    "patches/arm-driver-4903/0006-qcom-sdcard-personality.patch": "8ca3787a589f38ae573d7a8157469e957a804a9bc25598062c57b1fd9b2995c6",
     "patches/lk2nd/msm8916-sd-boot.patch": "8fffc29599a7bea709d66b8b68672a7eba214b526fcdb5a68341cb4bf7027bdc",
     "patches/xnu/local-availability.patch": "dd873642eaebf3df84bdff857a13c52764abbf01476bbba61cd6fb3b224a9ab0",
     "scripts/build-xnu-4903-native.py": "059cf6bd9850eabd40a28fbea66c5f18421ab752c0c62406a71c23e0524c7b3f",
