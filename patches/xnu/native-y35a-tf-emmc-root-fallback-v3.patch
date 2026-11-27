@@ -94,7 +94,6 @@
  IOFindBSDRoot( char * rootName, unsigned int rootNameSize,
      dev_t * root, u_int32_t * oflags )
  {
-
 @@ -406,4 +428,8 @@
  	mach_timespec_t     t;
  	IOService *         service;
