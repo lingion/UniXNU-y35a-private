@@ -203,6 +203,51 @@ def stage_source_tree(source: Path, destination: Path, patches: list[Path], *, o
     return tree_sha256(destination)
 
 
+def patch_genassym_for_clang(source: Path) -> dict[str, str]:
+    """Make XNU 4903 genassym output stable under current Apple clang."""
+    genassym = source / "osfmk/arm64/genassym.c"
+    makefile = source / "osfmk/conf/Makefile.template"
+    gen_text = genassym.read_text()
+    old_forms = (r'.ascii \"%0\"" : : "n"', r'.ascii \"%0\"" : : "i"')
+    replacement = r'.ascii \"#%0\"" : : "i"'
+    if replacement not in gen_text:
+        for old in old_forms:
+            if old in gen_text:
+                gen_text = gen_text.replace(old, replacement)
+                genassym.write_text(gen_text)
+                break
+        else:
+            raise SystemExit(f"{genassym}: unsupported DECLARE() form")
+
+    make_text = makefile.read_text()
+    marker = "# UNIXNU_XCODE16_GENASSYM_FIX"
+    if marker not in make_text:
+        lines = make_text.splitlines(keepends=True)
+        target = None
+        for index, line in enumerate(lines):
+            if line.startswith("assym.s: genassym.o"):
+                for candidate in range(index + 1, min(index + 4, len(lines))):
+                    if "DEFINITION__define__" in lines[candidate] and "sed -e" in lines[candidate]:
+                        target = candidate
+                        break
+                break
+        if target is None:
+            raise SystemExit(f"{makefile}: assym.s sed rule not found")
+        line = lines[target]
+        anchor = "-e '/^[[:space:]]*DEFINITION__define__/!d;{N;s/\\n//;}'"
+        if anchor not in line:
+            raise SystemExit(f"{makefile}: assym.s sed anchor changed")
+        fixes = []
+        for code, digit in zip(range(48, 58), "0123456789"):
+            fixes.append(
+                "-e 's/^\\([[:space:]]*DEFINITION__define__[^:]*:[[:space:]]*\\)"
+                f"\\.byte {code}\\([^0-9].*\\)$/\\1.ascii \"{digit}\"\\2/'"
+            )
+        lines[target] = line.replace(anchor, marker + " " + " ".join(fixes) + " " + anchor, 1)
+        makefile.write_text("".join(lines))
+    return {"genassym": str(genassym.relative_to(source)), "makefile": str(makefile.relative_to(source)), "status": "passed"}
+
+
 def make_step_command(
     target: str,
     *,
@@ -659,6 +704,10 @@ def _execute_run(
         "sdk_overlay_tree_sha256": tree_sha256(overlay),
         "xcrun_wrapper_sha256": sha256_file(wrapper),
     }
+    provenance["staged_source_compatibility"] = {
+        "genassym": patch_genassym_for_clang(staged_source),
+    }
+    _write_json(provenance_path, provenance)
     host_tool_patch = ROOT / "scripts/ci/patch_xnu_host_tools.py"
     compatibility_target = staged_source / "bsd/kern/makekdebugevents.py"
     if compatibility_target.is_file():
