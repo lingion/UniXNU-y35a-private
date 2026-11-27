@@ -155,7 +155,7 @@ jobs:
           archive = report.get("archive", {})
           if archive.get("sha256") != expected:
               raise SystemExit("produced driver archive SHA does not match the R208 manifest")
-          if archive.get("bytes", 0) <= 0:
+          if archive.get("size", 0) <= 0:
               raise SystemExit("produced driver archive has invalid size")
           if driver.get("archive", {}).get("sha256") != archive.get("sha256"):
               raise SystemExit("driver manifest archive hash differs from compile report")
@@ -183,7 +183,7 @@ jobs:
               "run_id": provenance["run_id"],
               "head_sha": provenance["head_sha"],
               "archive_sha256": archive["sha256"],
-              "archive_bytes": archive["bytes"],
+              "archive_bytes": archive["size"],
               "driver_manifest_sha256": hashlib.sha256(driver_manifest_path.read_bytes()).hexdigest(),
           }, indent=2))
           PY
