@@ -253,12 +253,12 @@
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
 - 下一次触发：Any CI subprocess that captures output and fails with check=True.
 
-## L-2026-11-28-03 hdiutil empty image uses -type, not -format
+## L-2026-11-28-03 hdiutil format requires a source
 
 - 现象：R208 offline-control run `46040773916` reached the macOS image builder after all artifact identity and tar restore gates passed, then failed at `hdiutil create`.
-- 根因：The command used `-format UDRW` without `-srcfolder` or `-srcdevice`; hdiutil reported `-format requires -srcfolder or -srcdevice`.
+- 根因：The command used `-format UDRW` without `-srcfolder` or `-srcdevice`; hdiutil reported `-format requires -srcfolder or -srcdevice`. A follow-up attempt with `-type UDRW` also failed as an invalid `-type` argument.
 - 影响：The derived-QCDT APFS control image was not created or uploaded. This is an image-builder command contract failure, not evidence against the root tree or QCDT provenance.
-- 正确做法：For an empty writable image, use the hdiutil image type option (`-type UDRW`) with the GPT/APFS layout, then attach and populate it; preserve hdiutil stdout/stderr in failures.
-- 证据：GitHub Actions run `46040773916`, job `tf-apfs-offline-control`, exact stderr from `hdiutil create`.
+- 正确做法：When specifying `-format UDRW`, provide an empty source directory with `-srcfolder`, then attach and populate the resulting GPT/APFS image; preserve hdiutil stdout/stderr in failures.
+- 证据：GitHub Actions run `46040773916` reported `-format requires -srcfolder or -srcdevice`; run `46041415209` reported `invalid argument for -type`.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
 - 下一次触发：Any macOS hdiutil empty-image creation or GPT/APFS intermediate builder.

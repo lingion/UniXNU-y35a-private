@@ -30,12 +30,12 @@ class TfApfsImageInputTest(unittest.TestCase):
                 MODULE.run_checked(["hdiutil", "create"])
         self.assertIn("hdiutil", str(raised.exception))
 
-    def test_hdiutil_empty_image_uses_type_not_format(self):
-        # The production command is covered by the CI macOS image job; this
-        # assertion locks the hdiutil flag spelling in the source contract.
+    def test_hdiutil_formatted_empty_image_uses_source_folder(self):
+        # The empty source-folder mode is required when specifying -format.
         text = (ROOT / "scripts/ci/build_y35a_tf_apfs_image.py").read_text()
-        self.assertIn('"-type", "UDRW"', text)
-        self.assertNotIn('"-format", "UDRW"', text)
+        self.assertIn('"-srcfolder", empty_source', text)
+        self.assertIn('"-format", "UDRW"', text)
+        self.assertNotIn('"-type", "UDRW"', text)
 
     def test_main_offline_control_binds_arguments_by_name(self):
         with tempfile.TemporaryDirectory() as directory:
