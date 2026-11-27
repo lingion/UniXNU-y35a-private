@@ -88,7 +88,7 @@
     }
   ],
   "source_provenance": "ci/native-source-provenance.r208-fallback-v3.json",
-  "source_provenance_sha256": "764af0417c66f411bbcf8709f341993277c1446b81f3e0beb6c95eb7673c9983",
+  "source_provenance_sha256": "c279e80f60e43fa5a92df36053620c99de92d71d5ca5ba6be791d6007c20c08e",
   "source_ref": "494ffe1c29d37ca720c37328feb83069c9641b67",
   "static_verification": {
     "script": "scripts/ci/verify_r208_native_kernel.py",
