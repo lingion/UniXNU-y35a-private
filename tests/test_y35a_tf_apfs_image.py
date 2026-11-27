@@ -214,6 +214,13 @@ class TfApfsImageInputTest(unittest.TestCase):
                 {"Content": "Apple_APFS", "FilesystemType": "apfs"},
             )
 
+    def test_gpt_apfs_relation_accepts_guid_content_when_partition_map_field_is_absent(self):
+        result = MODULE.validate_gpt_apfs(
+            {"Content": "GUID_partition_scheme", "DeviceIdentifier": "disk6"},
+            {"Content": "Apple_APFS", "FilesystemType": "apfs", "DeviceIdentifier": "disk6s1"},
+        )
+        self.assertEqual(result["partition_map_source"], "Content")
+
     def test_tree_digest_changes_with_mode(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory) / "root"

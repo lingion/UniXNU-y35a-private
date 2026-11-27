@@ -514,12 +514,14 @@ def validate_gpt_apfs(whole_disk: dict, volume: dict) -> dict:
     content = str(whole_disk.get("Content", ""))
     volume_content = str(volume.get("Content", ""))
     filesystem = str(volume.get("FilesystemType", ""))
-    if "GPT" not in partition_map.upper() and "GUID" not in partition_map.upper():
-        raise ValueError(f"TF image does not report a GPT partition map: {partition_map}")
+    map_facts = f"{partition_map} {content}".upper()
+    if "GPT" not in map_facts and "GUID" not in map_facts:
+        raise ValueError(f"TF image does not report a GPT partition map: {partition_map or content}")
     if "APFS" not in volume_content.upper() and "APFS" not in filesystem.upper():
         raise ValueError(f"TF image volume is not APFS: {volume_content}/{filesystem}")
     return {
         "partition_map_type": partition_map,
+        "partition_map_source": "PartitionMapType" if partition_map else "Content",
         "whole_disk_content": content,
         "volume_content": volume_content,
         "filesystem_type": filesystem,

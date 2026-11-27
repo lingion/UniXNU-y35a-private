@@ -272,3 +272,13 @@
 - 证据：GitHub Actions run `46041901430`, after `-type UDIF` the create command returned success; the next attach to `/Users/runner/work/_temp/y35a-tf-offline-control.apfs.img` failed `No such file or directory`.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
 - 下一次触发：Any hdiutil create/convert step whose output suffix differs from the format-recognized extension.
+
+## L-2026-11-28-05 diskutil plist may report GPT in Content, not PartitionMapType
+
+- 现象：R208 offline-control run `46042368705` successfully created, attached and force-unmounted the APFS volume, then the GPT/APFS gate rejected an empty `PartitionMapType`.
+- 根因：The macOS `diskutil info -plist` whole-disk record did not populate `PartitionMapType`; the available whole-disk `Content` field carried the GUID partition-scheme fact.
+- 影响：The image was structurally created and mounted, but the gate produced no control artifact because it required one plist key name rather than the partition-map fact.
+- 正确做法：Accept GPT/GUID evidence from either `PartitionMapType` or whole-disk `Content`, record which field supplied it, and continue requiring APFS volume content/filesystem and parent whole-disk binding.
+- 证据：GitHub Actions run `46042368705`, job `tf-apfs-offline-control`, failure `TF image does not report a GPT partition map:` after the volume was force-unmounted.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py` and `tests/test_y35a_tf_apfs_image.py`.
+- 下一次触发：Any diskutil plist schema change or GPT/APFS image gate.
