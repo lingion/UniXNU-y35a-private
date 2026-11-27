@@ -76,8 +76,8 @@ jobs:
           git -C "$RUNNER_TEMP/AvailabilityVersions" fetch --depth=1 origin AvailabilityVersions-33.200.7
           git -C "$RUNNER_TEMP/AvailabilityVersions" checkout --detach AvailabilityVersions-33.200.7
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/libdispatch.git "$RUNNER_TEMP/libdispatch"
-          git -C "$RUNNER_TEMP/libdispatch" fetch --depth=1 origin libdispatch-913.60.2
-          git -C "$RUNNER_TEMP/libdispatch" checkout --detach libdispatch-913.60.2
+          git -C "$RUNNER_TEMP/libdispatch" fetch --depth=1 origin libdispatch-1477.100.9
+          git -C "$RUNNER_TEMP/libdispatch" checkout --detach libdispatch-1477.100.9
           git clone --filter=blob:none --no-checkout https://github.com/apple-oss-distributions/libplatform.git "$RUNNER_TEMP/libplatform"
           git -C "$RUNNER_TEMP/libplatform" fetch --depth=1 origin libplatform-177.270.1
           git -C "$RUNNER_TEMP/libplatform" checkout --detach libplatform-177.270.1

@@ -181,3 +181,13 @@
 - 证据：XNU 4903 `IOKitBSDInit.cpp` root wait path lines 600-650 in the pinned upstream source; candidate patch `patches/xnu/native-y35a-tf-emmc-root-fallback.patch` SHA-256 `f886e829b94999e79af06964ee274992d975382827191912d2ab8c8a8bd291eb` passes `git apply --check` against that source.
 - 自动化入口：`tests/test_y35a_tf_emmc_root_fallback_patch.py` and `ci/manifests/r208-root-fallback-contract.json`。
 - 下一次触发：before adding the candidate patch to native build/package inputs, require linked XNU and package/probe evidence.
+
+## L-2026-11-27-01 libdispatch Firehose ABI closure
+
+- 现象：native build 已通过输入准备，`libkern/os/log.c` 的第一组 Firehose 符号在启用 `OS_FIREHOSE_SPI` 后消失，但 `bsd/kern/subr_log.c` 仍缺 `FIREHOSE_BUFFER_KERNEL_DEFAULT_*` 和 `__firehose_kernel_configuration_valid`。
+- 根因：`libdispatch-913.60.2` 提供同代 `internal/atomic.h` 路径，却没有 XNU 4903 `subr_log.c` 需要的 Firehose 配置 API；这些 API 位于 `libdispatch-1477.100.9`。1477 的 `firehose_buffer.c` 直接 include `os/atomic_private.h`，需要显式兼容头转接到已固定的 libplatform 177 internal atomic header。
+- 影响：只切换依赖版本或向 `log.c` 添加声明都不能形成完整输入闭包。
+- 正确做法：回到 1477，记录真实版本；在 `prepare_native_inputs.py` 生成带 `__OS_EXPOSE_INTERNALS_INDIRECT__` 的 `os/atomic_private.h` compatibility header，继续由 CI 编译和验证。
+- 证据：native run `45956827212` 的 `build.log`；同代 libdispatch 913/1477 的 `os/firehose_buffer_private.h` 与 `src/firehose/firehose_buffer.c`。
+- 自动化入口：`scripts/ci/prepare_native_inputs.py`、native input manifest 和 native build workflow。
+- 下一次触发：任何 XNU 4903 Firehose 版本切换或私有头适配。

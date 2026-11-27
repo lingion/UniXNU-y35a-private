@@ -174,8 +174,14 @@ def build_firehose(xnu: Path, libdispatch: Path, libplatform: Path,
     firehose_text = firehose_source.read_text()
     if "#include <os/atomic_private.h>" in firehose_text:
         atomic_header = fakeroot / "usr/local/include/kernel/os/atomic_private.h"
-        if not atomic_header.is_file():
-            raise SystemExit(f"XNU installhdrs did not produce {atomic_header}")
+        atomic_header.parent.mkdir(parents=True, exist_ok=True)
+        atomic_header.write_text(
+            "#ifndef UNIXNU_LIBDISPATCH_ATOMIC_PRIVATE_COMPAT_H\n"
+            "#define UNIXNU_LIBDISPATCH_ATOMIC_PRIVATE_COMPAT_H\n"
+            "#define __OS_EXPOSE_INTERNALS_INDIRECT__ 1\n"
+            "#include <internal/atomic.h>\n"
+            "#endif\n"
+        )
     elif "#include <internal/atomic.h>" in firehose_text:
         if not (fakeroot / "usr/local/include/os/internal/atomic.h").is_file():
             raise SystemExit("libplatform internal atomic header was not staged")
@@ -335,7 +341,7 @@ def main() -> int:
         "schema": 1,
         "source": {"xnu_commit": "494ffe1c29d37ca720c37328feb83069c9641b67",
                     "availability_tag": "AvailabilityVersions-33.200.7",
-                    "libdispatch_tag": "libdispatch-913.60.2",
+                    "libdispatch_tag": "libdispatch-1477.100.9",
                     "llvm_commit": LLVM_COMMIT, "libc_commit": LIBC_COMMIT},
         "paths": {"fakeroot": str(fakeroot), "sdk_overlay": str(overlay), "xcrun_wrapper": str(wrapper)},
         "trees": {"fakeroot_sha256": tree_sha256(fakeroot), "sdk_overlay_sha256": tree_sha256(overlay),

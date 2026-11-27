@@ -19,7 +19,7 @@
   ],
   "source_diff": null,
   "kernel_dependency_versions": {
-    "libdispatch": "libdispatch-913.60.2",
+    "libdispatch": "libdispatch-1477.100.9",
     "libplatform": "libplatform-177.270.1"
   },
   "build_policy": {

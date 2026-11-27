@@ -110,7 +110,8 @@
     "scripts/ci/patch_xnu_host_tools.py": "a626197ff726a6c5a091be59b5bf775db8168c34e9ae9eccf6e23818c45e078e",
     "scripts/y35a/build_arm_driver_4903.py": "993dee39fc4a1b3a12b1c966a54b995e2ddb64d2f80e8977f253da6e642d56b9",
     "scripts/y35a/make_adt.py": "72bcafc305f3a1cc1cbe9899e5df3e326da91c42a76595cde9f376a5936f4847",
-    "scripts/y35a/test_board_adt.py": "02b5a58e74df2c2308d6b4ee81b241821533484147b2328ded2e9c477ec9fbce"
+    "scripts/y35a/test_board_adt.py": "02b5a58e74df2c2308d6b4ee81b241821533484147b2328ded2e9c477ec9fbce",
+    "scripts/ci/prepare_native_inputs.py": "cd1b5605cc02de906b593fec1b0a73ffb92c84ce974886099d1af746a5658187"
   },
   "status": "offline-plan-only",
   "toolchain": {
