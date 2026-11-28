@@ -845,6 +845,8 @@ jobs:
             and .qualification.root_selection_bound == false
             and .qualification.emmc_fallback_bound == false
             and .target_apfs_volume.uuid != null
+            and .target_image.configured_capacity == .image_capacity_plan.size
+            and .target_image.capacity_bytes == .image_capacity_plan.capacity_bytes
             and .tree_metadata_manifest.entries > 0
             and .source_system_artifact.artifact_id != null
           ' "$OUT.json" > /dev/null
@@ -861,6 +863,8 @@ jobs:
             echo "Source package run: $SOURCE_RUN_ID"
             echo "Source artifact ID: $SOURCE_ARTIFACT_ID"
             echo "Image SHA-256: $(shasum -a 256 "$OUT" | awk '{print $1}')"
+            echo "Selected APFS capacity: $(jq -r '.image_capacity_plan.size' "$OUT.json") ($(jq -r '.image_capacity_plan.capacity_bytes' "$OUT.json") bytes)"
+            echo "Source tree file bytes: $(jq -r '.image_capacity_plan.source_file_bytes' "$OUT.json"); reserved APFS metadata bytes: $(jq -r '.image_capacity_plan.apfs_metadata_reserve_bytes' "$OUT.json")"
             echo "Qualification: non-bootable; no Y35A, stock-QCDT, root-selection, or card qualification"
           } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload full-System APFS offline control

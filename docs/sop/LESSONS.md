@@ -460,3 +460,13 @@
 - 证据：Run `46108679205`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`; traceback ends in `tree_metadata_manifest` at `path.open("rb")`, source path `.file`, `Errno 13 Permission denied`. The earlier xattr-only failure is separately recorded under run `46107959796`.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py::file_content_sha256`, `tree_metadata_manifest`, `tests/test_y35a_tf_apfs_image.py`, and the System APFS control job.
 - 下一次触发：Full content-plus-metadata hashing of read-only Apple System volumes on hosted macOS runners.
+
+## L-2026-11-28-24 APFS control capacity must be derived after measuring the expanded System tree
+
+- 现象：Full-System control run `46109564122` completed source artifact verification and the full tree metadata/content scan, then stopped before image creation because the configured 4 GiB target would leave less than the required 10% free space.
+- 根因：The input artifact is a compressed/packaged DMG; its 2.8 GB artifact size does not represent the expanded sum of the APFS tree's file sizes. A fixed 4 GiB control image is not necessarily large enough.
+- 影响：No APFS control image or artifact was created. This is a capacity-contract failure after source scanning, not a GPT/APFS creation or source-integrity failure.
+- 正确做法：After measuring total regular-file bytes, compute the smallest whole-GiB image capacity satisfying `(source_file_bytes + apfs_metadata_reserve) / capacity <= 1 - minimum_free_fraction`, then clamp to the manifest floor. Keep the 10% free-space guard, report measured bytes/reserve/selected capacity, and reject insufficient runner free space before image creation.
+- 证据：Actions run `46109564122`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`; the manifest's fixed `4g` capacity failed the 10% guard after tree inventory. The failed error did not emit the measured byte count, so do not invent one; the next report records it.
+- 自动化入口：`scripts/ci/build_y35a_system_apfs_control.py::select_control_capacity`, `ci/y35a-ci-package-manifest.json::system_root_apfs_control`, and `tests/test_y35a_system_apfs_control.py` capacity boundary tests.
+- 下一次触发：Any full-System APFS control build where expanded file bytes are close to the manifest's minimum image size.

@@ -77,7 +77,10 @@
   "system_root_apfs_control": {
     "kind": "offline-system-root-apfs-control",
     "source_artifact_kind": "pinned-ios12-system-volume-source",
-    "target_image_size": "4g",
+    "minimum_target_image_size": "4g",
+    "apfs_metadata_reserve_bytes": 536870912,
+    "minimum_free_fraction": 0.10,
+    "capacity_rounding_bytes": 1073741824,
     "partition_layout": "GPTSPUD",
     "filesystem": "APFS",
     "volume_name": "IOS12-SYSTEM-CONTROL",

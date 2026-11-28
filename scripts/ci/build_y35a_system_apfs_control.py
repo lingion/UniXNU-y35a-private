@@ -291,11 +291,56 @@ def validate_control_contract(contract: dict) -> tuple[str, str]:
                 "y35a_board_qualified",
             ))):
         raise ValueError("package manifest has an invalid System-root APFS control contract")
-    size = contract.get("target_image_size")
+    size = contract.get("minimum_target_image_size")
     volume_name = contract.get("volume_name")
     if not isinstance(size, str) or not isinstance(volume_name, str) or not volume_name:
-        raise ValueError("package manifest is missing the APFS control image size or volume name")
+        raise ValueError("package manifest is missing the minimum APFS control image size or volume name")
+    if (not isinstance(contract.get("apfs_metadata_reserve_bytes"), int)
+            or isinstance(contract.get("apfs_metadata_reserve_bytes"), bool)
+            or contract["apfs_metadata_reserve_bytes"] < 0
+            or not isinstance(contract.get("capacity_rounding_bytes"), int)
+            or isinstance(contract.get("capacity_rounding_bytes"), bool)
+            or contract["capacity_rounding_bytes"] <= 0
+            or not isinstance(contract.get("minimum_free_fraction"), (int, float))
+            or isinstance(contract.get("minimum_free_fraction"), bool)
+            or not 0 <= contract["minimum_free_fraction"] < 1):
+        raise ValueError("package manifest has invalid APFS capacity margins")
     return size, volume_name
+
+
+def select_control_capacity(contract: dict, source_file_bytes: int) -> dict:
+    if not isinstance(source_file_bytes, int) or isinstance(source_file_bytes, bool) or source_file_bytes < 0:
+        raise ValueError("source file byte count must be a non-negative integer")
+    minimum_size, _ = validate_control_contract(contract)
+    match = re.fullmatch(r"([1-9][0-9]*)([kKmMgGtT])", minimum_size)
+    if not match:
+        raise ValueError("minimum target image size must use a positive k/m/g/t suffix")
+    unit = {"k": 1 << 10, "m": 1 << 20, "g": 1 << 30, "t": 1 << 40}[match.group(2).lower()]
+    minimum_capacity = int(match.group(1)) * unit
+    reserve = contract["apfs_metadata_reserve_bytes"]
+    step = contract["capacity_rounding_bytes"]
+    free_percent = round(contract["minimum_free_fraction"] * 100)
+    if abs(contract["minimum_free_fraction"] - free_percent / 100) > 1e-9:
+        raise ValueError("minimum free-space fraction must be an integer percentage")
+    required = source_file_bytes + reserve
+    available_fraction = 100 - free_percent
+    required_capacity = (required * 100 + available_fraction - 1) // available_fraction
+    rounded_capacity = ((required_capacity + step - 1) // step) * step
+    capacity_bytes = max(minimum_capacity, rounded_capacity)
+    if required * 100 > capacity_bytes * available_fraction:
+        raise ValueError("derived APFS capacity does not preserve the minimum free-space fraction")
+    unit_gib = 1 << 30
+    size = f"{capacity_bytes // unit_gib}g" if capacity_bytes % unit_gib == 0 else f"{capacity_bytes}b"
+    return {
+        "size": size,
+        "capacity_bytes": capacity_bytes,
+        "minimum_capacity_bytes": minimum_capacity,
+        "source_file_bytes": source_file_bytes,
+        "apfs_metadata_reserve_bytes": reserve,
+        "minimum_free_fraction": contract["minimum_free_fraction"],
+        "required_capacity_bytes_before_rounding": required_capacity,
+        "rounding_bytes": step,
+    }
 
 
 def build_control_image(
@@ -315,7 +360,7 @@ def build_control_image(
 ) -> dict:
     if not re.fullmatch(r"[0-9a-f]{40}", builder_commit):
         raise ValueError("builder commit must be a full lowercase Git SHA-1")
-    size, volume_name = validate_control_contract(contract)
+    _, volume_name = validate_control_contract(contract)
     image_path = image_path.resolve(strict=True)
     source_report_path = source_report_path.resolve(strict=True)
     source_report, source_binding = validate_source_binding(
@@ -351,17 +396,17 @@ def build_control_image(
         source_file_bytes = sum(
             entry.get("bytes", 0) for entry in source_tree["entries"] if entry.get("type") == "file"
         )
-        size_match = re.fullmatch(r"([1-9][0-9]*)([kKmMgGtT])", size)
-        if not size_match:
-            raise ValueError("control image size must use a positive k/m/g/t suffix")
-        capacity_bytes = int(size_match.group(1)) * {
-            "k": 1 << 10, "m": 1 << 20, "g": 1 << 30, "t": 1 << 40,
-        }[size_match.group(2).lower()]
-        if source_file_bytes > capacity_bytes * 9 // 10:
-            raise ValueError("selected APFS control-image capacity leaves less than 10% free space")
+        capacity_plan = select_control_capacity(contract, source_file_bytes)
+        size = capacity_plan["size"]
+        capacity_bytes = capacity_plan["capacity_bytes"]
         free = os.statvfs(output_path.parent)
-        if free.f_bavail * free.f_frsize < source_file_bytes + (1 << 30):
-            raise ValueError("insufficient runner free space for the source tree plus APFS overhead")
+        available_bytes = free.f_bavail * free.f_frsize
+        required_runner_space = source_file_bytes + capacity_plan["apfs_metadata_reserve_bytes"] + (1 << 30)
+        if available_bytes < required_runner_space:
+            raise ValueError(
+                f"insufficient runner free space: available {available_bytes} bytes, "
+                f"required {required_runner_space} bytes including APFS overhead"
+            )
 
         create_result = run_checked([
             "hdiutil", "create", "-size", size, "-layout", contract["partition_layout"],
@@ -467,7 +512,12 @@ def build_control_image(
             "source_image_apfs_relation": source_relation,
             "source_system_tree_sha256": source_tree["tree_sha256"],
             "source_tree_file_bytes": source_file_bytes,
-            "target_image": {"path": output_path.name, "bytes": output_path.stat().st_size,
+            "image_capacity_plan": capacity_plan,
+            "configured_image_capacity_bytes": capacity_bytes,
+            "runner_free_space_bytes_at_preflight": available_bytes,
+            "target_image": {"path": output_path.name, "configured_capacity": capacity_plan["size"],
+                             "capacity_bytes": capacity_bytes,
+                             "bytes": output_path.stat().st_size,
                              "sha256": sha256(output_path),
                              "format": f"UDIF {contract['partition_layout']} {contract['filesystem']}"},
             "target_apfs_volume": {

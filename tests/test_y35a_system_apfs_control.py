@@ -120,6 +120,49 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         manifest = json.loads((ROOT / "ci/y35a-ci-package-manifest.json").read_text())
         control = manifest["system_root_apfs_control"]
         self.assertEqual(MODULE.validate_control_contract(control), ("4g", "IOS12-SYSTEM-CONTROL"))
+        self.assertEqual(control["minimum_free_fraction"], 0.10)
+        self.assertEqual(control["capacity_rounding_bytes"], 1 << 30)
+
+    def test_control_capacity_derives_rounded_size_from_source_bytes(self):
+        manifest = json.loads((ROOT / "ci/y35a-ci-package-manifest.json").read_text())
+        control = manifest["system_root_apfs_control"]
+        gib = 1 << 30
+        plan = MODULE.select_control_capacity(control, 4 * gib)
+        self.assertEqual(plan["size"], "5g")
+        required = plan["source_file_bytes"] + plan["apfs_metadata_reserve_bytes"]
+        self.assertLessEqual(required * 100, plan["capacity_bytes"] * 90)
+        self.assertEqual(plan["capacity_bytes"] % plan["rounding_bytes"], 0)
+
+    def test_control_capacity_rounding_boundary_at_minimum_free_fraction(self):
+        manifest = json.loads((ROOT / "ci/y35a-ci-package-manifest.json").read_text())
+        control = manifest["system_root_apfs_control"]
+        gib = 1 << 30
+        exact = MODULE.select_control_capacity(control, 4 * gib)
+        self.assertEqual(exact["size"], "5g")
+        self.assertEqual(
+            (exact["source_file_bytes"] + exact["apfs_metadata_reserve_bytes"]) * 100,
+            exact["capacity_bytes"] * 90,
+        )
+        over = MODULE.select_control_capacity(control, 4 * gib + 1)
+        self.assertEqual(over["size"], "6g")
+        self.assertLessEqual(
+            (over["source_file_bytes"] + over["apfs_metadata_reserve_bytes"]) * 100,
+            over["capacity_bytes"] * 90,
+        )
+
+    def test_control_capacity_keeps_manifest_floor_for_small_source(self):
+        manifest = json.loads((ROOT / "ci/y35a-ci-package-manifest.json").read_text())
+        control = manifest["system_root_apfs_control"]
+        plan = MODULE.select_control_capacity(control, 1 << 20)
+        self.assertEqual(plan["size"], "4g")
+        self.assertEqual(plan["capacity_bytes"], 4 << 30)
+
+    def test_control_capacity_rejects_non_integer_free_space_margin(self):
+        manifest = json.loads((ROOT / "ci/y35a-ci-package-manifest.json").read_text())
+        control = dict(manifest["system_root_apfs_control"])
+        control["minimum_free_fraction"] = 0.105
+        with self.assertRaisesRegex(ValueError, "integer percentage"):
+            MODULE.select_control_capacity(control, 4 << 30)
 
     def test_control_contract_rejects_bootable_or_target_qualified_claims(self):
         manifest = json.loads((ROOT / "ci/y35a-ci-package-manifest.json").read_text())
@@ -185,6 +228,8 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         self.assertIn('(cd "$RUNNER_TEMP" && shasum -a 256 -c y35a-system-root-apfs-control.SHA256SUMS)',
                       workflow)
         self.assertIn(".entries_sha256 == .target_entries_sha256", workflow)
+        self.assertIn(".target_image.configured_capacity == .image_capacity_plan.size", workflow)
+        self.assertIn("Selected APFS capacity:", workflow)
 
 
 if __name__ == "__main__":
