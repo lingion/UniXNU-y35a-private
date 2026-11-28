@@ -338,6 +338,9 @@ class TfRootBootPackageContractTest(unittest.TestCase):
         self.assertIn("--root-tree-artifact-binding", workflow)
         self.assertIn("Resolve source RAM package bound to the TF root tree", workflow)
         self.assertIn("Download exact source RAM package", workflow)
+        self.assertEqual(workflow.count("id: source_ram_package"), 1)
+        self.assertEqual(workflow.count("- name: Resolve source RAM package bound to the TF root tree"), 1)
+        self.assertEqual(workflow.count("- name: Download exact source RAM package"), 1)
         self.assertIn("--source-package-artifact-digest", workflow)
         self.assertIn("--native-artifact-digest", workflow)
         self.assertIn('"root_tree_artifact": root_tree_artifact_binding',
