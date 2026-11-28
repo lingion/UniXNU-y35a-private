@@ -2,6 +2,7 @@
 
 import hashlib
 import importlib.util
+import inspect
 import json
 from pathlib import Path
 import re
@@ -50,6 +51,12 @@ class TfRootBootPackageContractTest(unittest.TestCase):
         )
         self.assertEqual(result["artifact_id"], 456)
         self.assertEqual(result["run_id"], "123")
+
+    def test_package_caller_does_not_forward_an_unavailable_emmc_uuid(self):
+        self.assertNotIn("emmc_root_uuid", inspect.signature(MODULE.build_bundle).parameters)
+        package_source = (ROOT / "scripts/ci/build_y35a_ci_package.py").read_text()
+        self.assertNotIn("emmc_root_uuid=args.emmc_root_uuid", package_source)
+        self.assertNotIn('parser.add_argument("--emmc-root-uuid")', package_source)
 
     def test_tf_artifact_api_binding_rejects_skipped_intermediate_job(self):
         run, artifact = self.api_facts()

@@ -571,6 +571,16 @@
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py::validate_root_tree_artifact_binding`, `tests/test_y35a_tf_root_boot_package.py` and `.github/workflows/y35a-ci-package.yml` contract-test step.
 - 下一次触发：Any fixture for artifact bindings that now include an inner archive checksum sidecar.
 
+## L-2026-11-29-04 Caller arguments must match the single package builder API
+
+- 现象：Package run `46166142837` passed validation, downloaded the exact native kernel and TF/APFS intermediate, built and verified the RAM diagnostic package, then failed before uploads with `TypeError: build_bundle() got an unexpected keyword argument 'emmc_root_uuid'`.
+- 根因：`build_y35a_tf_root_boot_package.build_bundle()` deliberately removed the unproven eMMC UUID argument to keep the report `unavailable`, but `build_y35a_ci_package.py` still exposed the old CLI and forwarded `args.emmc_root_uuid`.
+- 影响：No package or TF diagnostic artifact was uploaded by this run. The RAM package existed only in the Actions runner temporary directory. No device operation occurred.
+- 正确做法：Use one supported `build_y35a_ci_package.py` CLI entry point; remove the obsolete eMMC UUID option and keyword. Keep the fallback UUID unavailable until a sourced, hash-bound eMMC APFS UUID exists.
+- 证据：GitHub Actions run `46166142837`, job `package`, step `Build and verify RAM-boot package`; the exact traceback is from `scripts/ci/build_y35a_ci_package.py` calling `build_bundle` with the removed keyword. The preceding package manifest showed `emmc_fallback.status=unavailable`.
+- 自动化入口：`scripts/ci/build_y35a_ci_package.py::main`, `scripts/ci/build_y35a_tf_root_boot_package.py::build_bundle`, and `.github/workflows/y35a-ci-package.yml` package step.
+- 下一次触发：Any change to the external-root bundle builder signature or optional root UUID inputs.
+
 跟进 run `46130315528` 的证据：添加 `hdiutil -owners on` 后，UID/GID 改动从 159,082/171,044 条降到各 1 条，只剩 volume 根目录 UID/GID（来源 `0:0`、目标 `501:20`）；mtime 差异仍为 1,069 条，全部 bounded samples 落在目录/文件路径中，缺失项计数变为 0。修复须从原 source manifest 显式恢复 volume 根 UID/GID，并在复制完成后恢复记录的 nanosecond mtime（文件与目录，目录由深到浅、根目录最后）；最终仍以重扫全树 equality gate 作为验收。该 run 的 diagnostics artifact ID `15259816488`，digest `sha256:0be17f510b28adcc63f26c1aa1af6355f4a600a84fb43d15b8e540bcee39759c`。
 
 跟进 run `46135948784`：ownership/mTime restore 分支未进入树比较，失败为 `NameError: name 'sys' is not defined`，调用点在 mtime restore helper。没有产出 control 或 diagnostics artifact。修复加入生产模块 import 并新增 helper contract test，随后用同一个精确 System artifact 再跑；不能把该 run 计为 metadata gate 结果。

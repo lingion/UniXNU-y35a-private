@@ -1139,7 +1139,6 @@ def main() -> int:
     parser.add_argument("--tf-apfs-head-sha")
     parser.add_argument("--tf-apfs-stock-boot", type=Path)
     parser.add_argument("--tf-bundle-output", type=Path)
-    parser.add_argument("--emmc-root-uuid")
     parser.add_argument("--config", type=Path,
                         default=ROOT / "ci/y35a-ci-package-manifest.json")
     args = parser.parse_args()
@@ -1170,7 +1169,6 @@ def main() -> int:
             compiler=args.compiler,
             objcopy=args.objcopy,
             output=args.tf_bundle_output,
-            emmc_root_uuid=args.emmc_root_uuid,
         )
         report["tf_apfs_boot_bundle"] = {
             "path": args.tf_bundle_output.name,
