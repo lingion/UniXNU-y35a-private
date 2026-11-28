@@ -247,6 +247,57 @@ class TfApfsImageInputTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Y35A board tuple"):
                 self.parse_stock_fixture(path, provenance)
 
+    def _write_two_entry_qcdt(self, path: Path, *, second_offset: int, second_size: int) -> Path:
+        """Create a valid two-row table with either shared or partial DTB ranges."""
+        table_end = 12 + 2 * 40
+        first_offset = 2048
+        first_size = 64 if second_offset != first_offset else 40
+        payload = bytearray(max(first_offset + first_size, second_offset + second_size))
+        payload[first_offset:first_offset + 4] = b"\xd0\x0d\xfe\xed"
+        payload[second_offset:second_offset + 4] = b"\xd0\x0d\xfe\xed"
+        data = bytearray(b"QCDT" + (3).to_bytes(4, "little") + (2).to_bytes(4, "little"))
+        rows = (
+            (206, 8, 23, first_offset, first_size),
+            (206, 8, 24, second_offset, second_size),
+        )
+        for platform, variant, subtype, offset, size in rows:
+            data.extend(struct.pack("<10I", platform, variant, subtype, 0, 0, 0, 0, 0, offset, size))
+        self.assertEqual(len(data), table_end)
+        data.extend(bytes(first_offset - len(data)))
+        data.extend(payload[first_offset:])
+        path.write_bytes(data)
+        provenance = path.with_suffix(".json")
+        provenance.write_text(json.dumps({
+            "schema_version": 1,
+            "source_type": "derived",
+            "dts_sha256": "a" * 64,
+            "dtc_sha256": "b" * 64,
+            "dtc_revision": "pinned-dtc-commit",
+            "qcdt_path": path.name,
+            "qcdt_sha256": hashlib.sha256(data).hexdigest(),
+        }))
+        return provenance
+
+    def test_qcdt_exact_payload_alias_is_accepted_and_reported(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "shared.qcdt"
+            provenance = self._write_two_entry_qcdt(path, second_offset=2048, second_size=40)
+            parsed = MODULE.parse_qcdt(path, provenance, offline_control_derived=True)
+            self.assertEqual(len(parsed["entries"]), 2)
+            self.assertEqual(parsed["payload_alias_groups"], [{
+                "offset": 2048,
+                "bytes": 40,
+                "entry_indexes": [0, 1],
+                "payload_sha256": hashlib.sha256(path.read_bytes()[2048:2088]).hexdigest(),
+            }])
+
+    def test_qcdt_partial_payload_overlap_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "partial.qcdt"
+            provenance = self._write_two_entry_qcdt(path, second_offset=2060, second_size=40)
+            with self.assertRaisesRegex(ValueError, "partially overlap: 0 and 1"):
+                MODULE.parse_qcdt(path, provenance, offline_control_derived=True)
+
     def test_derived_qcdt_provenance_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "derived.qcdt"

@@ -490,3 +490,23 @@
 - 证据：Actions run `46113032644`, commit `e3e7ed94dbdb3050721bab3b3d2be4ac1e4b1265`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`, final exception `full System-root metadata/content changed while copied into the control volume`; artifact API count was zero.
 - 自动化入口：`scripts/ci/build_y35a_system_apfs_control.py::diff_tree_manifests`, `tests/test_y35a_system_apfs_control.py`, and `.github/workflows/y35a-ci-package.yml` failure-diagnostics artifact step.
 - 下一次触发：Any future source-to-target tree digest mismatch in the System APFS control job.
+
+## L-2026-11-28-27 QCDT match rows may alias one exact DTB payload
+
+- 现象：TF/APFS intermediate run `46121563431` passed package contracts, exact-source fallback validation, package contract validation, stock-boot identity checks, and QCDT extraction, then failed in `parse_qcdt()` with `QCDT entries overlap: 0 and 113`.
+- 根因：The parser treated every intersecting payload range as corruption. Qualcomm QCDT tables can have multiple hardware-match rows that reference the same DTB bytes; exact `[offset, end)` aliases are not ambiguous. Partial overlaps remain malformed because the table gives no independent payload boundary for the intersecting bytes.
+- 影响：The original pinned PD1502A stock boot image and extracted QCDT passed their byte/provenance checks, but the TF/APFS image was not created and no intermediate artifact was uploaded. No root-selection, card, bootability, or device claim follows.
+- 正确做法：Accept and explicitly report groups whose entries have identical payload start and end, including entry indexes and payload SHA-256. Continue rejecting all partial intersections, header/table overlap, out-of-file ranges, invalid FDT magic, and missing Y35A tuple. Cover exact alias acceptance and partial-overlap rejection in the Actions contract suite before re-dispatching the same root-tree and stock-boot inputs.
+- 证据：Actions run `46121563431`, commit `6d71e753a714dce78a0faf617b43e4e91277a7c1`, job `tf-apfs-intermediate`, step `Build and verify TF/APFS intermediate`; extracted QCDT SHA-256 `4e717950b65b1a65a3071d8935f9aa5e47e595ec6df9d80679d306a68342c010`, source boot SHA-256 `92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012`, failing entries 0 and 113.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py::parse_qcdt`, `tests/test_y35a_tf_apfs_image.py`, and the `tf-apfs-intermediate` job in `.github/workflows/y35a-ci-package.yml`.
+- 下一次触发：Any parser or verifier that rejects intersecting table references without distinguishing exact aliases from partial overlaps.
+
+## L-2026-11-28-28 Local diff checks are prohibited for UniXNU even when preparing a commit
+
+- 现象：During this CI-only change, `git diff --cached --check` was accidentally executed on the local machine while reviewing the staged change.
+- 根因：The commit-preparation command batch included a local whitespace check despite the project execution SOP prohibiting all local UniXNU static checks.
+- 影响：Its result is excluded as verification evidence; no claim of local or CI validation follows from it.
+- 正确做法：Use only passive local source/status reads. Submit the candidate to the public topic branch and use the GitHub Actions tracked-text and contract-test steps as the verification source.
+- 证据：Local command output showed the three staged files and no reported whitespace issue; that output is explicitly not counted as a pass. CI result remains pending.
+- 自动化入口：`.github/workflows/unixnu-validation.yml` tracked-text job and `.github/workflows/y35a-ci-package.yml` package-contract job.
+- 下一次触发：Any local Git review command batch for this CI-only repository.

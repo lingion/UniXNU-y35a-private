@@ -304,9 +304,30 @@ def parse_qcdt(path: Path, provenance_path: Path, *, offline_control_derived: bo
             "offset": dt_offset,
             "bytes": dt_size,
         })
-    for left, right in zip(sorted(ranges), sorted(ranges)[1:]):
-        if right[0] < left[1]:
-            raise ValueError(f"QCDT entries overlap: {left[2]} and {right[2]}")
+    # Qualcomm's QCDT table can contain multiple hardware-match rows that
+    # intentionally point at one shared DTB payload. Accept only exact range
+    # aliases; a partial overlap still makes the payload boundaries ambiguous.
+    ordered_ranges = sorted(ranges)
+    alias_groups = []
+    index = 0
+    while index < len(ordered_ranges):
+        start, end, entry_index = ordered_ranges[index]
+        aliases = [entry_index]
+        index += 1
+        while index < len(ordered_ranges) and ordered_ranges[index][:2] == (start, end):
+            aliases.append(ordered_ranges[index][2])
+            index += 1
+        if index < len(ordered_ranges) and ordered_ranges[index][0] < end:
+            raise ValueError(
+                f"QCDT entries partially overlap: {aliases[0]} and {ordered_ranges[index][2]}"
+            )
+        if len(aliases) > 1:
+            alias_groups.append({
+                "offset": start,
+                "bytes": end - start,
+                "entry_indexes": aliases,
+                "payload_sha256": hashlib.sha256(data[start:end]).hexdigest(),
+            })
     if not any((entry["platform_id"], entry["variant_id"], entry["subtype_id"]) == Y35A_BOARD_TUPLE
                for entry in entries):
         raise ValueError("QCDT has no Y35A board tuple 206/8/23")
@@ -320,6 +341,7 @@ def parse_qcdt(path: Path, provenance_path: Path, *, offline_control_derived: bo
         "bytes": len(data),
         "version": version,
         "entries": entries,
+        "payload_alias_groups": alias_groups,
         "stock_boot_source": (
             {
                 "bytes": boot["boot_bytes"],
