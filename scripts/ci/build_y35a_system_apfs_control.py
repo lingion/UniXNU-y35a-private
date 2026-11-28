@@ -59,7 +59,7 @@ def control_output_paths(output_path: Path) -> dict[str, Path]:
         "report": output_path.with_name(output_path.name + ".json"),
         "binding": output_path.with_name(output_path.name + ".json.binding.json"),
         "tree_metadata": output_path.with_name(output_path.name + ".tree-metadata.json"),
-        "checksums": output_path.parent / "SHA256SUMS",
+        "checksums": output_path.parent / "y35a-system-root-apfs-control.SHA256SUMS",
     }
 
 
@@ -81,8 +81,89 @@ def find_volume_device(value, volume_name: str) -> str | None:
     return None
 
 
+def find_volume_container(value, volume_name: str, container: dict | None = None):
+    if isinstance(value, dict):
+        current = value if isinstance(value.get("PhysicalStores"), list) else container
+        if (value.get("Name") == volume_name or value.get("VolumeName") == volume_name):
+            identifier = value.get("DeviceIdentifier") or value.get("APFSVolumeDisk")
+            if isinstance(identifier, str):
+                return value, current
+        for child in value.values():
+            found = find_volume_container(child, volume_name, current)
+            if found:
+                return found
+    elif isinstance(value, list):
+        for child in value:
+            found = find_volume_container(child, volume_name, container)
+            if found:
+                return found
+    return None
+
+
+def validate_apfs_store_binding(attached_whole_disk: str, mounted_volume_info: dict,
+                                apfs_listing: dict) -> dict:
+    if not isinstance(attached_whole_disk, str):
+        raise ValueError("attached image did not resolve to a whole-disk identifier")
+    volume_name = mounted_volume_info.get("VolumeName")
+    found = find_volume_container(apfs_listing, volume_name)
+    if not found:
+        raise ValueError(f"attached APFS volume is missing from container listing: {volume_name}")
+    apfs_volume, container = found
+    if not container:
+        raise ValueError("APFS volume listing has no parent container or PhysicalStores")
+    mounted_identifier = mounted_volume_info.get("DeviceIdentifier") or mounted_volume_info.get("DeviceNode")
+    listed_identifier = apfs_volume.get("DeviceIdentifier") or apfs_volume.get("APFSVolumeDisk")
+    mounted_uuid = mounted_volume_info.get("VolumeUUID")
+    listed_uuid = apfs_volume.get("APFSVolumeUUID") or apfs_volume.get("VolumeUUID")
+    if (mounted_identifier != listed_identifier
+            or (mounted_uuid and listed_uuid and mounted_uuid != listed_uuid)):
+        raise ValueError("mounted APFS volume device/UUID does not match the APFS container listing")
+    mounted_parent = mounted_volume_info.get("ParentWholeDisk") or mounted_volume_info.get("ParentWholeDiskDevice")
+    container_reference = container.get("ContainerReference") or container.get("APFSContainerReference")
+    if mounted_parent and container_reference and mounted_parent != container_reference:
+        raise ValueError("mounted APFS volume parent does not match its listed APFS container")
+    physical_stores = container.get("PhysicalStores", [])
+    store_ids = sorted({
+        item.get("DeviceIdentifier") for item in physical_stores
+        if isinstance(item, dict) and isinstance(item.get("DeviceIdentifier"), str)
+    })
+    attached_stores = [item for item in store_ids
+                       if item == attached_whole_disk or item.startswith(attached_whole_disk + "s")]
+    if not attached_stores:
+        raise ValueError(
+            f"APFS physical stores {store_ids!r} are not partitions of attached image disk {attached_whole_disk!r}"
+        )
+    return {
+        "attached_whole_disk": attached_whole_disk,
+        "container_reference": container.get("ContainerReference"),
+        "physical_stores": store_ids,
+        "attached_physical_stores": attached_stores,
+        "volume_device": listed_identifier,
+        "volume_uuid": listed_uuid,
+    }
+
+
+def verify_attached_apfs_volume(attached_device_path: str, mounted_volume_info: dict) -> dict:
+    attached_info = plistlib.loads(run_checked(
+        ["diskutil", "info", "-plist", attached_device_path], text=False,
+    ).stdout)
+    attached_identifier = attached_info.get("DeviceIdentifier")
+    attached_whole_disk = (
+        attached_identifier if attached_info.get("WholeDisk") is True
+        else attached_info.get("ParentWholeDisk") or attached_info.get("ParentWholeDiskDevice")
+    )
+    listing = plistlib.loads(run_checked(["diskutil", "apfs", "list", "-plist"], text=False).stdout)
+    return validate_apfs_store_binding(attached_whole_disk, mounted_volume_info, listing)
+
+
 def attached_device(output: bytes) -> str:
     entities = plistlib.loads(output).get("system-entities", [])
+    whole = next((item for item in entities
+                  if item.get("whole-disk") is True
+                  and isinstance(item.get("dev-entry"), str)
+                  and item["dev-entry"].startswith("/dev/")), None)
+    if whole:
+        return whole["dev-entry"]
     for entity in entities:
         value = entity.get("dev-entry")
         if isinstance(value, str) and value.startswith("/dev/"):
@@ -168,18 +249,8 @@ def mounted_apfs_volume(image: Path, mountpoint: Path, *, readonly: bool) -> tup
                      f"/dev/{volume_name}", str(mountpoint)])
         mounted = True
         info = plistlib.loads(run_checked(["diskutil", "info", "-plist", str(mountpoint)], text=False).stdout)
-        attached_info = plistlib.loads(run_checked(
-            ["diskutil", "info", "-plist", device], text=False,
-        ).stdout)
-        attached_whole = (attached_info.get("ParentWholeDisk")
-                          or attached_info.get("ParentWholeDiskDevice")
-                          or attached_info.get("DeviceIdentifier"))
-        mounted_parent = info.get("ParentWholeDisk") or info.get("ParentWholeDiskDevice")
-        if mounted_parent != attached_whole:
-            raise ValueError(
-                f"mounted APFS volume parent {mounted_parent!r} differs from attached image parent {attached_whole!r}"
-            )
-        return device, info
+        relation = verify_attached_apfs_volume(device, info)
+        return device, info, relation
     except Exception:
         if mounted:
             subprocess.run(["diskutil", "unmount", "force", str(mountpoint)], check=False)
@@ -269,7 +340,7 @@ def build_control_image(
     if create_path.exists():
         raise ValueError(f"refusing to overwrite intermediate image path: {create_path}")
     try:
-        source_device, source_info = mounted_apfs_volume(image_path, source_mount, readonly=True)
+        source_device, source_info, source_relation = mounted_apfs_volume(image_path, source_mount, readonly=True)
         source_mounted = True
         if (source_info.get("FilesystemType") != "apfs"
                 or source_info.get("VolumeName") != source_report.get("apfs_volume", {}).get("name")
@@ -324,9 +395,10 @@ def build_control_image(
         target_info = plistlib.loads(run_checked(
             ["diskutil", "info", "-plist", str(target_mount)], text=False,
         ).stdout)
-        whole_name = target_info.get("ParentWholeDisk") or target_info.get("ParentWholeDiskDevice")
-        if not whole_name:
-            raise RuntimeError("control APFS volume did not report its parent whole disk")
+        target_relation = verify_attached_apfs_volume(target_device, target_info)
+        whole_name = target_relation["attached_whole_disk"]
+        normalized_volume_info = dict(target_info)
+        normalized_volume_info["ParentWholeDisk"] = whole_name
         whole_info = plistlib.loads(run_checked(
             ["diskutil", "info", "-plist", f"/dev/{whole_name}"], text=False,
         ).stdout)
@@ -336,7 +408,7 @@ def build_control_image(
         target_device = None
         partition_map = run_checked(["hdiutil", "pmap", "-simple", str(create_path)]).stdout
         gpt_apfs = validate_gpt_apfs(
-            whole_info, target_info, partition_map, expected_whole_disk=whole_name,
+            whole_info, normalized_volume_info, partition_map, expected_whole_disk=whole_name,
         )
 
         run_checked(["diskutil", "unmount", "force", str(source_mount)])
@@ -392,6 +464,7 @@ def build_control_image(
             "source_system_artifact": source_binding,
             "source_system_report_sha256": sha256(source_report_path),
             "source_system_image_sha256": source_report["system_root_image"]["sha256"],
+            "source_image_apfs_relation": source_relation,
             "source_system_tree_sha256": source_tree["tree_sha256"],
             "source_tree_file_bytes": source_file_bytes,
             "target_image": {"path": output_path.name, "bytes": output_path.stat().st_size,
@@ -402,6 +475,7 @@ def build_control_image(
                 "uuid": target_info.get("VolumeUUID"),
                 "filesystem_type": target_info.get("FilesystemType"),
             },
+            "target_image_apfs_relation": target_relation,
             "target_tree_sha256": target_tree["tree_sha256"],
             "tree_metadata_manifest": {
                 "path": tree_metadata_path.name,

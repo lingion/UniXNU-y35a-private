@@ -827,7 +827,11 @@ jobs:
             --manifest ci/y35a-ci-package-manifest.json \
             --output "$RUNNER_TEMP/y35a-system-root-apfs-control.dmg"
           OUT="$RUNNER_TEMP/y35a-system-root-apfs-control.dmg"
-          (cd "$RUNNER_TEMP" && shasum -a 256 -c SHA256SUMS)
+          (cd "$RUNNER_TEMP" && shasum -a 256 -c y35a-system-root-apfs-control.SHA256SUMS)
+          REPORT_SHA="$(shasum -a 256 "$OUT.json" | awk '{print $1}')"
+          jq -e --arg path "$(basename "$OUT.json")" --arg sha "$REPORT_SHA" \
+            '.schema_version == 1 and .report_path == $path and .report_sha256 == $sha' \
+            "$OUT.json.binding.json" > /dev/null
           jq -e '
             .status == "offline-system-root-apfs-control-built"
             and .candidate_kind == "pinned-j96ap-system-root-apfs-control"
@@ -840,7 +844,17 @@ jobs:
             and .qualification.stock_pd1502a_qcdt_bound == false
             and .qualification.root_selection_bound == false
             and .qualification.emmc_fallback_bound == false
+            and .target_apfs_volume.uuid != null
+            and .tree_metadata_manifest.entries > 0
+            and .source_system_artifact.artifact_id != null
           ' "$OUT.json" > /dev/null
+          jq -e --arg report_tree_sha "$(jq -r '.source_system_tree_sha256' "$OUT.json")" \
+            --arg target_tree_sha "$(jq -r '.target_tree_sha256' "$OUT.json")" \
+            --arg entries_sha "$(jq -r '.tree_metadata_manifest.entries_sha256' "$OUT.json")" \
+            '.tree_sha256 == $report_tree_sha and .target_tree_sha256 == $target_tree_sha
+             and .entries_sha256 == $entries_sha and .entries_sha256 == .target_entries_sha256
+             and .entry_count > 0' \
+            "$OUT.tree-metadata.json" > /dev/null
           {
             echo "## Full-System APFS offline control"
             echo
@@ -858,7 +872,7 @@ jobs:
             ${{ runner.temp }}/y35a-system-root-apfs-control.dmg.json
             ${{ runner.temp }}/y35a-system-root-apfs-control.dmg.json.binding.json
             ${{ runner.temp }}/y35a-system-root-apfs-control.dmg.tree-metadata.json
-            ${{ runner.temp }}/SHA256SUMS
+            ${{ runner.temp }}/y35a-system-root-apfs-control.SHA256SUMS
           if-no-files-found: error
           retention-days: 7
           compression-level: 0

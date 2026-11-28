@@ -103,6 +103,19 @@ class SystemApfsControlBindingTest(unittest.TestCase):
                     expected_branch="codex/unixnu-ci-package-v2",
                 )
 
+    def test_source_binding_rejects_checksum_manifest_mismatch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image, report, run, artifact = self.inputs(root)
+            (root / "SHA256SUMS").write_text("0" * 64 + "  system-root.dmg\n")
+            with self.assertRaisesRegex(ValueError, "must bind exactly"):
+                MODULE.validate_source_binding(
+                    image, report, run, artifact,
+                    source_run_id="46100598017", artifact_id=15245028918,
+                    artifact_digest="sha256:" + "b" * 64,
+                    expected_branch="codex/unixnu-ci-package-v2",
+                )
+
     def test_repository_manifest_pins_nonbootable_control_contract(self):
         manifest = json.loads((ROOT / "ci/y35a-ci-package-manifest.json").read_text())
         control = manifest["system_root_apfs_control"]
@@ -121,7 +134,39 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         self.assertEqual(paths["report"].name, "system-root-control.dmg.json")
         self.assertEqual(paths["binding"].name, "system-root-control.dmg.json.binding.json")
         self.assertEqual(paths["tree_metadata"].name, "system-root-control.dmg.tree-metadata.json")
-        self.assertEqual(paths["checksums"].name, "SHA256SUMS")
+        self.assertEqual(paths["checksums"].name, "y35a-system-root-apfs-control.SHA256SUMS")
+
+    def test_apfs_container_store_must_belong_to_attached_image(self):
+        volume = {
+            "VolumeName": "System", "DeviceIdentifier": "disk6s1",
+            "ParentWholeDisk": "disk6", "VolumeUUID": "uuid-1",
+        }
+        listing = {"Containers": [{
+            "ContainerReference": "disk6",
+            "PhysicalStores": [{"DeviceIdentifier": "disk5s1"}],
+            "Volumes": [{"Name": "System", "DeviceIdentifier": "disk6s1",
+                         "APFSVolumeUUID": "uuid-1"}],
+        }]}
+        relation = MODULE.validate_apfs_store_binding("disk5", volume, listing)
+        self.assertEqual(relation["attached_physical_stores"], ["disk5s1"])
+        with self.assertRaisesRegex(ValueError, "not partitions of attached image"):
+            MODULE.validate_apfs_store_binding(
+                "disk4", volume, listing,
+            )
+
+    def test_apfs_volume_container_must_match_the_reported_parent(self):
+        volume = {
+            "VolumeName": "System", "DeviceIdentifier": "disk6s1",
+            "ParentWholeDisk": "disk9", "VolumeUUID": "uuid-1",
+        }
+        listing = {"Containers": [{
+            "ContainerReference": "disk6",
+            "PhysicalStores": [{"DeviceIdentifier": "disk5s1"}],
+            "Volumes": [{"Name": "System", "DeviceIdentifier": "disk6s1",
+                         "APFSVolumeUUID": "uuid-1"}],
+        }]}
+        with self.assertRaisesRegex(ValueError, "parent does not match"):
+            MODULE.validate_apfs_store_binding("disk5", volume, listing)
 
     def test_dispatch_workflow_binds_system_artifact_and_preserves_offline_scope(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
@@ -136,6 +181,10 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         self.assertIn(".qualification.bootable == false", workflow)
         self.assertIn(".qualification.device_run_allowed == false", workflow)
         self.assertIn(".qualification.stock_pd1502a_qcdt_bound == false", workflow)
+        self.assertIn("y35a-system-root-apfs-control.SHA256SUMS", workflow)
+        self.assertIn('(cd "$RUNNER_TEMP" && shasum -a 256 -c y35a-system-root-apfs-control.SHA256SUMS)',
+                      workflow)
+        self.assertIn(".entries_sha256 == .target_entries_sha256", workflow)
 
 
 if __name__ == "__main__":
