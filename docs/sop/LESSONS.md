@@ -601,6 +601,16 @@
 - 自动化入口：`.github/workflows/y35a-ci-package.yml` source RAM package resolver and `tests/test_y35a_tf_root_boot_package.py::test_package_workflow_consumes_exact_tf_artifact_and_uploads_unqualified_bundle`.
 - 下一次触发：Any repeated `apply_patch` to workflow step blocks; inspect occurrence counts and push through Actions before dispatching downstream jobs.
 
+## L-2026-11-29-07 Workflow contract tests must follow the selected CLI boundary
+
+- 现象：Validation run `46170223759` reached `Test package contracts` and failed one assertion in `test_package_workflow_consumes_exact_tf_artifact_and_uploads_unqualified_bundle`: the test expected wrapper flags `--tf-apfs-artifact-digest` and `--tf-bundle-output` in the workflow text.
+- 根因：The external-root path was refactored to call `build_y35a_tf_root_boot_package.py` directly with its own CLI (`--tf-artifact-digest`, `--tf-head-sha`, `--output`), but the workflow contract test still asserted the previous `build_y35a_ci_package.py` wrapper flags.
+- 影响：The package workflow validation job failed before any native/package/TF work; no artifact was uploaded by run `46170223759`.
+- 正确做法：Contract assertions must match the actual executable selected for each branch: direct TF bundle mode uses the external-root builder CLI; RAM mode continues using the RAM package wrapper. Keep assertions for both the exact artifact binding arguments and qualification checks.
+- 证据：GitHub Actions run `46170223759`, job `validate`, test `test_package_workflow_consumes_exact_tf_artifact_and_uploads_unqualified_bundle`; `Resolve native run` and package jobs were skipped after the contract failure.
+- 自动化入口：`tests/test_y35a_tf_root_boot_package.py` and `.github/workflows/y35a-ci-package.yml` contract-test step.
+- 下一次触发：Any refactor that moves arguments between workflow wrapper and package-builder CLI.
+
 跟进 run `46130315528` 的证据：添加 `hdiutil -owners on` 后，UID/GID 改动从 159,082/171,044 条降到各 1 条，只剩 volume 根目录 UID/GID（来源 `0:0`、目标 `501:20`）；mtime 差异仍为 1,069 条，全部 bounded samples 落在目录/文件路径中，缺失项计数变为 0。修复须从原 source manifest 显式恢复 volume 根 UID/GID，并在复制完成后恢复记录的 nanosecond mtime（文件与目录，目录由深到浅、根目录最后）；最终仍以重扫全树 equality gate 作为验收。该 run 的 diagnostics artifact ID `15259816488`，digest `sha256:0be17f510b28adcc63f26c1aa1af6355f4a600a84fb43d15b8e540bcee39759c`。
 
 跟进 run `46135948784`：ownership/mTime restore 分支未进入树比较，失败为 `NameError: name 'sys' is not defined`，调用点在 mtime restore helper。没有产出 control 或 diagnostics artifact。修复加入生产模块 import 并新增 helper contract test，随后用同一个精确 System artifact 再跑；不能把该 run 计为 metadata gate 结果。
