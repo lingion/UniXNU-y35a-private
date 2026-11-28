@@ -589,7 +589,7 @@ def build_full_system_root_source(
     source_hash = sha256(system_dmg)
     source_bytes = system_dmg.stat().st_size
     if (source_hash != component.get("sha256") or source_bytes != component.get("size")):
-        raise ValueError("System DMG bytes do not match the pinned IPSW component")
+        raise ValueError("System DMG does not match the pinned IPSW component size/hash")
 
     if (system_version.get("product_version") != identity["product_version"]
             or system_version.get("build") != identity["build"]):

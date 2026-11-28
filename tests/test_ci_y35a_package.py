@@ -219,7 +219,7 @@ class FullSystemRootSourceTest(unittest.TestCase):
             root = Path(temporary)
             image, system_root, firmware, whole, volume = self.make_inputs(root)
             firmware["components"]["OS"]["sha256"] = "0" * 64
-            with self.assertRaisesRegex(ValueError, "does not match the pinned IPSW component"):
+            with self.assertRaisesRegex(ValueError, "does not match the pinned IPSW component size/hash"):
                 version, critical = package_ci.inspect_full_system_volume(
                     system_root, firmware["identity"],
                 )
