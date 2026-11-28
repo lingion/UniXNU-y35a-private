@@ -88,6 +88,9 @@ class TfRootBootPackageContractTest(unittest.TestCase):
                 "artifact_id": 456, "artifact_name": "y35a-root-tree-123",
                 "artifact_digest": "sha256:" + "b" * 64,
                 "head_branch": "codex/test",
+                "archive_path": "root-tree.tar",
+                "archive_bytes": archive.stat().st_size,
+                "archive_sha256": hashlib.sha256(archive.read_bytes()).hexdigest(),
             }
             result = MODULE.validate_root_tree_artifact_binding(binding, archive)
             self.assertEqual(result["archive_sha256"], hashlib.sha256(b"root tree archive").hexdigest())

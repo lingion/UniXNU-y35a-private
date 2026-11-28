@@ -561,6 +561,16 @@
 - 自动化入口：`tests/test_ci_y35a_package.py`, `tests/test_y35a_tf_apfs_image.py`, `tests/test_y35a_tf_root_boot_package.py`, and `.github/workflows/y35a-ci-package.yml` contract-test step.
 - 下一次触发：Any artifact handoff whose consumer re-hashes an extracted file covered by an API digest or sidecar binding.
 
+## L-2026-11-29-03 Root-tree binding fixtures must include the full archive sidecar schema
+
+- 现象：Package validation run `46164266762` ran 179 tests and had one remaining error: `test_root_tree_artifact_binding_records_exact_archive_identity` raised `ValueError` because its synthetic binding contained run/artifact identity but omitted archive path, byte count and SHA fields.
+- 根因：The test fixture had not been advanced to the producer's complete root-tree artifact sidecar contract added with the downloaded-archive byte check.
+- 影响：The `validate` job failed before source, TF/APFS and package stages. No downstream artifact was produced by this run.
+- 正确做法：Fixtures for the root-tree binding must include the immutable Actions identity plus `archive_path`, `archive_bytes` and `archive_sha256`; negative fixtures should mutate one field at a time and prove mismatch rejection.
+- 证据：GitHub Actions run `46164266762`, job `validate`, step `Test package contracts`; `test_root_tree_artifact_binding_records_exact_archive_identity` failed at `MODULE.validate_root_tree_artifact_binding` with `root-tree source archive must be named root-tree.tar`. All previously reported three assertion failures and one unrelated-module error from run `46163829353` passed in this run.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py::validate_root_tree_artifact_binding`, `tests/test_y35a_tf_root_boot_package.py` and `.github/workflows/y35a-ci-package.yml` contract-test step.
+- 下一次触发：Any fixture for artifact bindings that now include an inner archive checksum sidecar.
+
 跟进 run `46130315528` 的证据：添加 `hdiutil -owners on` 后，UID/GID 改动从 159,082/171,044 条降到各 1 条，只剩 volume 根目录 UID/GID（来源 `0:0`、目标 `501:20`）；mtime 差异仍为 1,069 条，全部 bounded samples 落在目录/文件路径中，缺失项计数变为 0。修复须从原 source manifest 显式恢复 volume 根 UID/GID，并在复制完成后恢复记录的 nanosecond mtime（文件与目录，目录由深到浅、根目录最后）；最终仍以重扫全树 equality gate 作为验收。该 run 的 diagnostics artifact ID `15259816488`，digest `sha256:0be17f510b28adcc63f26c1aa1af6355f4a600a84fb43d15b8e540bcee39759c`。
 
 跟进 run `46135948784`：ownership/mTime restore 分支未进入树比较，失败为 `NameError: name 'sys' is not defined`，调用点在 mtime restore helper。没有产出 control 或 diagnostics artifact。修复加入生产模块 import 并新增 helper contract test，随后用同一个精确 System artifact 再跑；不能把该 run 计为 metadata gate 结果。
