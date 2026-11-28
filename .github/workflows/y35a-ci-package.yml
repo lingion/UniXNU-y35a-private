@@ -813,8 +813,7 @@ jobs:
           BUILDER_COMMIT: ${{ needs.validate.outputs.package_source_sha }}
         run: |
           set -euo pipefail
-          SOURCE="$RUNNER_TEMP/system-source"
-          (cd "$SOURCE" && shasum -a 256 -c SHA256SUMS)
+          SOURCE="$RUNNER_TEMP/system-source/y35a-ios12-system-root-$SOURCE_RUN_ID"
           python3 scripts/ci/build_y35a_system_apfs_control.py \
             --system-image "$SOURCE/system-root.dmg" \
             --system-source-report "$SOURCE/system-root-source.json" \

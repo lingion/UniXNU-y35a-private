@@ -54,6 +54,15 @@ def verify_source_checksums(image_path: Path, report_path: Path) -> None:
             raise ValueError(f"System-source checksum mismatch for {path.name}")
 
 
+def control_output_paths(output_path: Path) -> dict[str, Path]:
+    return {
+        "report": output_path.with_name(output_path.name + ".json"),
+        "binding": output_path.with_name(output_path.name + ".json.binding.json"),
+        "tree_metadata": output_path.with_name(output_path.name + ".tree-metadata.json"),
+        "checksums": output_path.parent / "SHA256SUMS",
+    }
+
+
 def find_volume_device(value, volume_name: str) -> str | None:
     if isinstance(value, dict):
         name = value.get("Name") or value.get("VolumeName")
@@ -256,7 +265,7 @@ def build_control_image(
     target_device = None
     source_mounted = False
     target_mounted = False
-    create_path = output_path.with_suffix(".dmg")
+    create_path = output_path.with_name(output_path.name + ".build.dmg")
     if create_path.exists():
         raise ValueError(f"refusing to overwrite intermediate image path: {create_path}")
     try:
@@ -335,12 +344,17 @@ def build_control_image(
         run_checked(["hdiutil", "detach", "-quiet", source_device])
         source_device = None
         os.replace(create_path, output_path)
-        tree_metadata_path = output_path.with_suffix(output_path.suffix + ".tree-metadata.json")
+        output_paths = control_output_paths(output_path)
+        tree_metadata_path = output_paths["tree_metadata"]
         tree_metadata = {
             "schema_version": 1,
             "tree_sha256": source_tree["tree_sha256"],
             "entries_sha256": hashlib.sha256(
                 json.dumps(source_tree["entries"], sort_keys=True, separators=(",", ":")).encode()
+            ).hexdigest(),
+            "target_tree_sha256": target_tree["tree_sha256"],
+            "target_entries_sha256": hashlib.sha256(
+                json.dumps(target_tree["entries"], sort_keys=True, separators=(",", ":")).encode()
             ).hexdigest(),
             "source_file_bytes": source_file_bytes,
             "entry_count": len(source_tree["entries"]),
@@ -407,13 +421,13 @@ def build_control_image(
                 "Path metadata does not prove that private/var is writable at runtime.",
             ],
         }
-        report_path = output_path.with_suffix(output_path.suffix + ".json")
+        report_path = output_paths["report"]
         report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
         binding = {"schema_version": 1, "report_path": report_path.name,
                    "report_sha256": sha256(report_path)}
-        binding_path = report_path.with_suffix(report_path.suffix + ".binding.json")
+        binding_path = output_paths["binding"]
         binding_path.write_text(json.dumps(binding, indent=2, sort_keys=True) + "\n")
-        (output_path.parent / "SHA256SUMS").write_text(
+        output_paths["checksums"].write_text(
             f"{sha256(output_path)}  {output_path.name}\n"
             f"{sha256(report_path)}  {report_path.name}\n"
             f"{tree_metadata_sha}  {tree_metadata_path.name}\n"

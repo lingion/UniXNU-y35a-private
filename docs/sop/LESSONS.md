@@ -431,3 +431,12 @@
 - 证据：Actions run `46100187403` on `4f9cc20ed8a6c61aede1906f59aa9bcedcebcb99`; run `46100345930` on `4e77093b42e2707349fee94c5e77ee72709577d9`, failing step `Test package contracts`, final error at `extract_qcdt_from_pd1502a_boot_image` due to missing `struct` import.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py`, `scripts/ci/extract_y35a_stock_qcdt.py`, `tests/test_y35a_tf_apfs_image.py`, and `.github/workflows/y35a-ci-package.yml`.
 - 下一次触发：Any change to stock boot parsing, source provenance, or its package workflow inputs.
+
+## L-2026-11-28-21 artifact downloads with artifact-ids retain the artifact-name directory
+
+- 现象：System APFS control run `46104858463` successfully resolved and downloaded the exact System source artifact, then failed before executing the builder with `shasum: SHA256SUMS: No such file or directory`.
+- 根因：`actions/download-artifact` created `$RUNNER_TEMP/system-source/y35a-ios12-system-root-46100598017/`, while the consumer looked for `SHA256SUMS` at the parent `$RUNNER_TEMP/system-source/`. The failure was input-path wiring; no image builder ran and no output artifact was produced.
+- 正确做法：Derive the extracted directory from the already verified artifact name/run ID, verify source SHA256SUMS inside that directory, then invoke the builder. Give generated output sidecars deterministic names that exactly match the upload path list.
+- 证据：Workflow run `46104858463`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`, stderr `shasum: SHA256SUMS: No such file or directory`, exit 2. The preceding exact run/artifact API verification and download succeeded.
+- 自动化入口：`.github/workflows/y35a-ci-package.yml`, `scripts/ci/build_y35a_system_apfs_control.py`, and `tests/test_y35a_system_apfs_control.py`.
+- 下一次触发：Any `actions/download-artifact` consumer using `artifact-ids` and an expected nested artifact directory.

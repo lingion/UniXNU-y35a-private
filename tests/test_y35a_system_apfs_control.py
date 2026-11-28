@@ -115,6 +115,14 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "invalid System-root APFS control contract"):
             MODULE.validate_control_contract(control)
 
+    def test_control_sidecar_paths_match_workflow_artifact_contract(self):
+        output = Path("/runner/temp/system-root-control.dmg")
+        paths = MODULE.control_output_paths(output)
+        self.assertEqual(paths["report"].name, "system-root-control.dmg.json")
+        self.assertEqual(paths["binding"].name, "system-root-control.dmg.json.binding.json")
+        self.assertEqual(paths["tree_metadata"].name, "system-root-control.dmg.tree-metadata.json")
+        self.assertEqual(paths["checksums"].name, "SHA256SUMS")
+
     def test_dispatch_workflow_binds_system_artifact_and_preserves_offline_scope(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
         self.assertIn("system_root_run_id:", workflow)
@@ -124,6 +132,7 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         self.assertIn("actions/download-artifact@v4", workflow)
         self.assertIn("--system-artifact-digest \"$SOURCE_ARTIFACT_DIGEST\"", workflow)
         self.assertIn("name: y35a-system-root-apfs-control-${{ github.run_id }}", workflow)
+        self.assertIn('SOURCE="$RUNNER_TEMP/system-source/y35a-ios12-system-root-$SOURCE_RUN_ID"', workflow)
         self.assertIn(".qualification.bootable == false", workflow)
         self.assertIn(".qualification.device_run_allowed == false", workflow)
         self.assertIn(".qualification.stock_pd1502a_qcdt_bound == false", workflow)
