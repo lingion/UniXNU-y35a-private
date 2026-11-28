@@ -251,6 +251,36 @@ class SystemApfsControlBindingTest(unittest.TestCase):
             "/tmp/control.dmg",
         ])
 
+    def test_target_root_owner_is_restored_from_the_source_manifest(self):
+        command = MODULE.target_root_chown_command(
+            Path("/tmp/control-volume"),
+            {"entries": [{"path": ".", "type": "directory", "uid": 0, "gid": 0}]},
+        )
+        self.assertEqual(command, [
+            "/usr/bin/sudo", "-n", "/usr/sbin/chown", "0:0", "/tmp/control-volume",
+        ])
+
+    def test_mtime_restore_records_set_files_before_deep_directories_and_root(self):
+        manifest = {"entries": [
+            {"path": ".", "type": "directory", "mtime_ns": 10},
+            {"path": "dir", "type": "directory", "mtime_ns": 20},
+            {"path": "dir/nested", "type": "directory", "mtime_ns": 30},
+            {"path": "dir/nested/file", "type": "file", "mtime_ns": 40},
+        ]}
+        records = MODULE.metadata_restore_records(manifest)
+        self.assertEqual([row["path"] for row in records], [
+            "dir/nested/file", "dir/nested", "dir", ".",
+        ])
+        self.assertEqual(records[-1]["mtime_ns"], 10)
+
+    def test_mtime_restore_rejects_parent_traversal_paths(self):
+        manifest = {"entries": [
+            {"path": ".", "type": "directory", "mtime_ns": 10},
+            {"path": "../outside", "type": "file", "mtime_ns": 20},
+        ]}
+        with self.assertRaisesRegex(ValueError, "unsafe relative path"):
+            MODULE.metadata_restore_records(manifest)
+
     def test_dispatch_workflow_binds_system_artifact_and_preserves_offline_scope(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
         self.assertIn("system_root_run_id:", workflow)

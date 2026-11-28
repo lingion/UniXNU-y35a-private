@@ -520,3 +520,5 @@
 - 证据：GitHub Actions run `46124084058`, commit `76304d84a0f8b8eaf10b7fa72b1b75a194444535`, job `system-root-apfs-control`; exact source run `46100598017`, artifact ID `15245028918`, digest `sha256:3a06bb3c3bc0364dd0ab83e921bda45c89390f1e9226db3118fabb1d5e08ae06`. Diagnostic artifact ID `15257072285`, digest `sha256:927655a39dc1984f5d2cc1737ed51c3af85e40e91371727d8e24d0dbc2bc8a34`.
 - 自动化入口：`scripts/ci/build_y35a_system_apfs_control.py::control_image_attach_command`, `diff_tree_manifests`, `tests/test_y35a_system_apfs_control.py`, and the `system-root-apfs-control` job.
 - 下一次触发：Any APFS image copy where the target's POSIX owner/group or directory timestamps differ from the sealed source tree.
+
+跟进 run `46130315528` 的证据：添加 `hdiutil -owners on` 后，UID/GID 改动从 159,082/171,044 条降到各 1 条，只剩 volume 根目录 UID/GID（来源 `0:0`、目标 `501:20`）；mtime 差异仍为 1,069 条，全部 bounded samples 落在目录/文件路径中，缺失项计数变为 0。修复须从原 source manifest 显式恢复 volume 根 UID/GID，并在复制完成后恢复记录的 nanosecond mtime（文件与目录，目录由深到浅、根目录最后）；最终仍以重扫全树 equality gate 作为验收。该 run 的 diagnostics artifact ID `15259816488`，digest `sha256:0be17f510b28adcc63f26c1aa1af6355f4a600a84fb43d15b8e540bcee39759c`。

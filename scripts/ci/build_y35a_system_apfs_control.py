@@ -105,6 +105,64 @@ def control_image_attach_command(image_path: Path) -> list[str]:
     return ["hdiutil", "attach", "-nobrowse", "-owners", "on", "-plist", str(image_path)]
 
 
+def metadata_restore_records(source_manifest: dict) -> list[dict]:
+    """Return safe, deterministic mtime restore records with directories last."""
+    records = []
+    for entry in source_manifest.get("entries", []):
+        relative = entry.get("path")
+        mtime_ns = entry.get("mtime_ns")
+        kind = entry.get("type")
+        if (not isinstance(relative, str) or not isinstance(mtime_ns, int)
+                or kind not in {"directory", "file", "symlink"}):
+            raise ValueError("source metadata manifest has an invalid path, type, or mtime")
+        if relative != ".":
+            path = Path(relative)
+            if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+                raise ValueError(f"source metadata manifest contains an unsafe relative path: {relative!r}")
+        records.append({"path": relative, "mtime_ns": mtime_ns, "type": kind})
+    if not any(record["path"] == "." and record["type"] == "directory" for record in records):
+        raise ValueError("source metadata manifest is missing its root directory entry")
+    records.sort(key=lambda item: (
+        item["path"] == ".",
+        item["type"] == "directory",
+        -item["path"].count("/"),
+        item["path"],
+    ))
+    return records
+
+
+def target_root_chown_command(target_root: Path, source_manifest: dict) -> list[str]:
+    root = next((entry for entry in source_manifest.get("entries", []) if entry.get("path") == "."), None)
+    if not root or not isinstance(root.get("uid"), int) or not isinstance(root.get("gid"), int):
+        raise ValueError("source metadata manifest has no root UID/GID")
+    return ["/usr/bin/sudo", "-n", "/usr/sbin/chown",
+            f"{root['uid']}:{root['gid']}", str(target_root)]
+
+
+def restore_target_directory_and_entry_mtimes(target_root: Path, source_manifest: dict) -> None:
+    """Restore recorded nanosecond mtimes after copy; preserve strict re-scan verification."""
+    records = metadata_restore_records(source_manifest)
+    script = r'''import json, os, sys
+root = sys.argv[1]
+records = json.load(sys.stdin)
+for record in records:
+    relative = record["path"]
+    path = root if relative == "." else os.path.join(root, *relative.split("/"))
+    info = os.lstat(path)
+    os.utime(path, ns=(info.st_atime_ns, record["mtime_ns"]),
+             follow_symlinks=(record["type"] != "symlink"))
+'''
+    command = ["/usr/bin/sudo", "-n", sys.executable, "-c", script, str(target_root)]
+    payload = json.dumps(records, sort_keys=True, separators=(",", ":"))
+    try:
+        result = subprocess.run(command, input=payload, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as error:
+        raise RuntimeError(
+            f"privileged APFS mtime restore failed with exit {error.returncode}: {command!r}\n"
+            f"stdout:\n{error.stdout or ''}\nstderr:\n{error.stderr or ''}"
+        ) from error
+
+
 def verify_source_checksums(image_path: Path, report_path: Path) -> None:
     manifest_path = image_path.parent / "SHA256SUMS"
     if not manifest_path.is_file():
@@ -500,6 +558,8 @@ def build_control_image(
         run_checked(["sudo", "ditto", "--rsrc", "--extattr", "--acl",
                      str(source_mount), str(target_mount)])
         run_checked(["sync"])
+        run_checked(target_root_chown_command(target_mount, source_tree))
+        restore_target_directory_and_entry_mtimes(target_mount, source_tree)
 
         target_inspection = inspect_critical_system(target_mount, source_report)
         target_tree = tree_metadata_manifest(target_mount)
