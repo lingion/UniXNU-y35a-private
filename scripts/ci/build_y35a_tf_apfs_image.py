@@ -68,7 +68,7 @@ def xattr_manifest(path: Path) -> list:
     if path.is_symlink():
         list_command.append("-s")
     list_command.append(str(path))
-    listed = subprocess.run(list_command, check=True, capture_output=True)
+    listed = run_checked(list_command, text=False)
     names = sorted(line.decode("utf-8", errors="strict") for line in listed.stdout.splitlines() if line)
     values = []
     for name in names:
@@ -76,7 +76,7 @@ def xattr_manifest(path: Path) -> list:
         if path.is_symlink():
             value_command.append("-s")
         value_command.extend(["-px", name, str(path)])
-        encoded_value = subprocess.run(value_command, check=True, capture_output=True).stdout
+        encoded_value = run_checked(value_command, text=False).stdout
         try:
             value = bytes.fromhex(encoded_value.decode("ascii"))
         except (UnicodeDecodeError, ValueError) as error:
