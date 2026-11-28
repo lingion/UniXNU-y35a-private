@@ -551,6 +551,16 @@
 - 自动化入口：`.github/workflows/y35a-ci-package.yml` `workflow_dispatch.inputs`; `tests/test_y35a_tf_root_boot_package.py::test_package_workflow_consumes_exact_tf_artifact_and_uploads_unqualified_bundle`.
 - 下一次触发：Any new `workflow_dispatch` parameter added to a workflow input block.
 
+## L-2026-11-29-02 CI contract fixtures must call the producer's actual API and compare recorded bytes
+
+- 现象：Package validation run `46163829353` reached `Test package contracts` and ran 179 tests; it failed with three assertion failures and two errors. Two new archive-binding tests called `validate_root_tree_artifact_binding` through `build_y35a_ci_package`, although that function is exported by `build_y35a_tf_apfs_image`. Two archive corruption cases were not rejected because the helper derived the claimed SHA and size from the same bytes it was meant to compare. An existing stock-boot test also still expected the removed `known_candidate_paths` field.
+- 根因：The fixture imported the wrong producer module; the archive helper treated the actual file as the expected provenance; and a prior contract test still encoded the old missing-file state after the tracked stock boot input was added.
+- 影响：The `validate` job failed and package, TF intermediate, and System control jobs were skipped. No package or TF/APFS artifact was emitted by run `46163829353`.
+- 正确做法：Call the function from the actual producer module; treat sidecar `archive_bytes`/`archive_sha256` as expected values and compare them against the separately downloaded tar bytes; update stock-input tests to assert the canonical tracked path, size and SHA rather than old candidate paths.
+- 证据：Actions run `46163829353`, job `validate`, step `Test package contracts`; 179 tests, failures in `test_tf_production_input_requires_tracked_original_stock_boot_bytes`, `test_root_tree_artifact_binding_rejects_changed_archive`, and `test_root_tree_artifact_binding_rejects_changed_archive_same_size`, plus errors in the two root-tree binding tests. Follow-up CI verification remains pending.
+- 自动化入口：`tests/test_ci_y35a_package.py`, `tests/test_y35a_tf_apfs_image.py`, `tests/test_y35a_tf_root_boot_package.py`, and `.github/workflows/y35a-ci-package.yml` contract-test step.
+- 下一次触发：Any artifact handoff whose consumer re-hashes an extracted file covered by an API digest or sidecar binding.
+
 跟进 run `46130315528` 的证据：添加 `hdiutil -owners on` 后，UID/GID 改动从 159,082/171,044 条降到各 1 条，只剩 volume 根目录 UID/GID（来源 `0:0`、目标 `501:20`）；mtime 差异仍为 1,069 条，全部 bounded samples 落在目录/文件路径中，缺失项计数变为 0。修复须从原 source manifest 显式恢复 volume 根 UID/GID，并在复制完成后恢复记录的 nanosecond mtime（文件与目录，目录由深到浅、根目录最后）；最终仍以重扫全树 equality gate 作为验收。该 run 的 diagnostics artifact ID `15259816488`，digest `sha256:0be17f510b28adcc63f26c1aa1af6355f4a600a84fb43d15b8e540bcee39759c`。
 
 跟进 run `46135948784`：ownership/mTime restore 分支未进入树比较，失败为 `NameError: name 'sys' is not defined`，调用点在 mtime restore helper。没有产出 control 或 diagnostics artifact。修复加入生产模块 import 并新增 helper contract test，随后用同一个精确 System artifact 再跑；不能把该 run 计为 metadata gate 结果。

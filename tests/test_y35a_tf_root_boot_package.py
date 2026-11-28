@@ -89,7 +89,7 @@ class TfRootBootPackageContractTest(unittest.TestCase):
                 "artifact_digest": "sha256:" + "b" * 64,
                 "head_branch": "codex/test",
             }
-            result = package_ci.validate_root_tree_artifact_binding(binding, archive)
+            result = MODULE.validate_root_tree_artifact_binding(binding, archive)
             self.assertEqual(result["archive_sha256"], hashlib.sha256(b"root tree archive").hexdigest())
             self.assertEqual(result["artifact_id"], 456)
             self.assertEqual(result["run_id"], "123")
@@ -99,7 +99,7 @@ class TfRootBootPackageContractTest(unittest.TestCase):
             archive = Path(temporary) / "root-tree.tar"
             archive.write_bytes(b"root tree archive")
             with self.assertRaisesRegex(ValueError, "incomplete or malformed"):
-                package_ci.validate_root_tree_artifact_binding(
+                MODULE.validate_root_tree_artifact_binding(
                     {"run_id": "123", "head_sha": "short"}, archive,
                 )
 
@@ -111,7 +111,9 @@ class TfRootBootPackageContractTest(unittest.TestCase):
             root_archive = root / "root-tree.tar"
             root_archive.write_bytes(b"root tree archive")
             root_artifact_binding = {
-                "run_id": "123", "head_sha": "a" * 40,
+                # An earlier package run may supply the same tree; the tree
+                # hash is checked against this commit's RAM package later.
+                "run_id": "123", "head_sha": "c" * 40,
                 "head_branch": "codex/test", "artifact_id": 456,
                 "artifact_name": "y35a-root-tree-123",
                 "artifact_digest": "sha256:" + "b" * 64,

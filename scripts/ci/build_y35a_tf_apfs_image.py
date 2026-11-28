@@ -644,9 +644,9 @@ def validate_root_tree_artifact_binding(binding: dict, archive_path: Path | None
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", artifact_digest)
             or not isinstance(head_branch, str) or not head_branch):
         raise ValueError("root-tree source artifact binding is incomplete or malformed")
-    archive_name = archive_path.name if archive_path is not None else binding.get("archive_path")
-    archive_bytes = archive_path.stat().st_size if archive_path is not None else binding.get("archive_bytes")
-    archive_sha = sha256(archive_path) if archive_path is not None else binding.get("archive_sha256")
+    archive_name = binding.get("archive_path")
+    archive_bytes = binding.get("archive_bytes")
+    archive_sha = binding.get("archive_sha256")
     if (archive_name != "root-tree.tar"
             or not isinstance(archive_bytes, int) or isinstance(archive_bytes, bool) or archive_bytes <= 0
             or not isinstance(archive_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", archive_sha)):

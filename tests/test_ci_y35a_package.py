@@ -66,7 +66,11 @@ class PackageToolchainContractTest(unittest.TestCase):
         self.assertIn("--stock-boot-image \"$STOCK_BOOT\" \\", workflow)
         self.assertIn('git ls-files --error-unmatch "$STOCK_BOOT_PATH"', workflow)
         self.assertIn("KNOWN_PD1502A_STOCK_BOOT_SHA256", (ROOT / "scripts/ci/build_y35a_tf_apfs_image.py").read_text())
-        self.assertIn("known_candidate_paths", (ROOT / "ci/manifests/r208-tf-apfs-package-contract.json").read_text())
+        contract = json.loads((ROOT / "ci/manifests/r208-tf-apfs-package-contract.json").read_text())
+        source_boot = contract["device_tree"]["stock_qcdt_input"]["required_source_boot"]
+        self.assertEqual(source_boot["status"], "tracked-and-pinned")
+        self.assertEqual(source_boot["user_input_path"], "evidence/y35a-20261102/stock-boot.img")
+        self.assertEqual(source_boot["sha256"], "92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012")
 
     def test_full_system_volume_source_is_uploaded_as_a_separate_unqualified_artifact(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()

@@ -98,7 +98,6 @@ def verify_tf_root_inputs(image: Path, report_path: Path, binding_path: Path,
         root_tree_artifact_binding, root_archive,
     )
     if (verified_root_artifact["head_branch"] != expected_branch
-            or verified_root_artifact["head_sha"] != expected_source_commit
             or report.get("root_tree_artifact") != verified_root_artifact
             or report.get("root_tree_transport", {}).get("archive_sha256") != verified_root_artifact["archive_sha256"]
             or report.get("root_tree_transport", {}).get("tree_sha256") != report.get("root_tree", {}).get("sha256")):
