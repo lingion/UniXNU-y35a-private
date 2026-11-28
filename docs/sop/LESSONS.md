@@ -441,17 +441,27 @@
 - 自动化入口：`.github/workflows/y35a-ci-package.yml`, `scripts/ci/build_y35a_system_apfs_control.py`, and `tests/test_y35a_system_apfs_control.py`.
 - 下一次触发：Any `actions/download-artifact` consumer using `artifact-ids` and an expected nested artifact directory.
 
-## L-2026-11-28-22 full-System APFS source xattr access can require elevated read-only permission
+## L-2026-11-28-22 APFS volume parent must be bound through the attached image's PhysicalStores
 
-- 现象：APFS control runs `46105909382` and `46107959796` failed during metadata enumeration at the root-owned source path `.ba`. The first run's exception omitted captured stderr; after routing xattr commands through the checked-command wrapper, the second reported `/usr/bin/xattr ... returned exit status 1` and `xattr: [Errno 13] Permission denied`.
+- 现象：System APFS control run `46105909382` passed the source-artifact binding and download, mounted a System volume shown by diskutil as `disk6s1`, then failed because the code compared its `ParentWholeDisk=disk6` directly with the hdiutil-attached image identifier `disk5`.
+- 根因：The APFS container disk identifier is synthetic and distinct from the attached GPT image's whole-disk identifier. Equality of those identifiers is not the containment relation; the APFS container's `PhysicalStores` list identifies the backing partition on the attached disk.
+- 影响：The source scan/image build did not proceed, and no APFS control artifact was emitted. The failure was in the relation verifier, not evidence that the System source artifact was invalid.
+- 正确做法：Resolve the attached whole disk, then bind the mounted volume and UUID to the APFS listing and prove that at least one container `PhysicalStores.DeviceIdentifier` is a partition of that attached whole disk. Normalize the container's whole-disk reference only after this relation passes; retain the separate hdiutil GPT scheme check for the target image.
+- 证据：Run `46105909382`, SHA `286f8c41af8f5c97fdf61363d097d1d581091803`, failed with `mounted APFS volume parent 'disk6' differs from attached image parent 'disk5'`. Commit `02cadac65d49ded98135e818d3ccbe4755b64234` adds the `PhysicalStores` relation and fixtures; host-validation run `46106937403` passed on that exact commit. Subsequent run `46107001080` progressed beyond this relation and failed later at the xattr permission check.
+- 自动化入口：`scripts/ci/build_y35a_system_apfs_control.py::validate_apfs_store_binding`, `tests/test_y35a_system_apfs_control.py`, and the System APFS control job.
+- 下一次触发：Any image attach where diskutil assigns a synthesized APFS container ID distinct from hdiutil's attached whole-disk ID.
+
+## L-2026-11-28-23 full-System APFS source xattr access can require elevated read-only permission
+
+- 现象：APFS control runs `46107001080` and `46107959796` failed during metadata enumeration at the root-owned source path `.ba`. The first run's exception omitted captured stderr; after routing xattr commands through the checked-command wrapper, the later run reported `/usr/bin/xattr ... returned exit status 1` and `xattr: [Errno 13] Permission denied`.
 - 根因：The macOS Actions Python runtime lacks `os.listxattr`, so the scanner fell back to `/usr/bin/xattr`; the unprivileged reader could enumerate/read file content but could not list xattrs on this protected source entry.
 - 影响：The APFS control job stopped before image creation/upload; there is no APFS control artifact and no statement about source contents beyond prior checks.
 - 正确做法：Keep metadata hashing fail-closed. Only for explicit `Permission denied` or `Operation not permitted`, retry the same read-only xattr list/value query with `/usr/bin/sudo -n`; propagate every other error and never substitute an empty xattr set. Add a test that confirms privilege escalation is used only after the permission error.
-- 证据：Runs `46105909382` and `46107959796`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`; run `46107001080` separately failed earlier on APFS synthesized container-vs-attached-store relation, which is not the xattr cause.
+- 证据：Runs `46107001080` and `46107959796`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`; run `46105909382` is the earlier, separate synthesized-container relation failure.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py::xattr_manifest`, `tests/test_y35a_tf_apfs_image.py`, and `.github/workflows/y35a-ci-package.yml`.
 - 下一次触发：Metadata-preserving scans of read-only macOS System volumes and root-owned entries when the runner Python lacks xattr APIs.
 
-## L-2026-11-28-23 full-System source content hashing can require a privileged read-only fallback
+## L-2026-11-28-24 full-System source content hashing can require a privileged read-only fallback
 
 - 现象：After the xattr permission fallback was added, System APFS control run `46108679205` passed artifact binding/download, then failed while hashing source `.file` in `tree_metadata_manifest` with `PermissionError: [Errno 13]` at `Path.open("rb")`.
 - 根因：The root-owned/sealed source entry is readable only with elevated privileges on the hosted macOS runner. Fixing xattr enumeration alone does not grant read access to the same file content.
@@ -461,7 +471,7 @@
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py::file_content_sha256`, `tree_metadata_manifest`, `tests/test_y35a_tf_apfs_image.py`, and the System APFS control job.
 - 下一次触发：Full content-plus-metadata hashing of read-only Apple System volumes on hosted macOS runners.
 
-## L-2026-11-28-24 APFS control capacity must be derived after measuring the expanded System tree
+## L-2026-11-28-25 APFS control capacity must be derived after measuring the expanded System tree
 
 - 现象：Full-System control run `46109564122` completed source artifact verification and the full tree metadata/content scan, then stopped before image creation because the configured 4 GiB target would leave less than the required 10% free space.
 - 根因：The input artifact is a compressed/packaged DMG; its 2.8 GB artifact size does not represent the expanded sum of the APFS tree's file sizes. A fixed 4 GiB control image is not necessarily large enough.
@@ -470,3 +480,13 @@
 - 证据：Actions run `46109564122`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`; the manifest's fixed `4g` capacity failed the 10% guard after tree inventory. The failed error did not emit the measured byte count, so do not invent one; the next report records it.
 - 自动化入口：`scripts/ci/build_y35a_system_apfs_control.py::select_control_capacity`, `ci/y35a-ci-package-manifest.json::system_root_apfs_control`, and `tests/test_y35a_system_apfs_control.py` capacity boundary tests.
 - 下一次触发：Any full-System APFS control build where expanded file bytes are close to the manifest's minimum image size.
+
+## L-2026-11-28-26 System-root control failure must preserve a per-path tree diff
+
+- 现象：Run `46113032644` passed the exact source artifact download, full source/target tree scans, APFS image creation, copy, unmount, detach, and GPT/APFS checks, then failed because the source and copied tree SHA-256 values differed. The run did not upload a control artifact and the exception only reported the two aggregate hashes.
+- 根因：The current evidence does not identify which path or metadata field changed. Do not infer a root-directory timestamp, ACL, or xattr cause from the aggregate mismatch.
+- 影响：The offline-control image was not accepted or uploaded; no production or bootability claim follows.
+- 正确做法：Before failing on tree mismatch, serialize a bounded diagnostic sidecar with source/target entry counts, missing paths, per-field difference counts, first differing paths/fields and both tree hashes; include the selected capacity plan and runner-free-space preflight. Upload that sidecar on failure through a conditional artifact step. Use the next exact Actions run's diff to fix only the observed metadata loss.
+- 证据：Actions run `46113032644`, commit `e3e7ed94dbdb3050721bab3b3d2be4ac1e4b1265`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`, final exception `full System-root metadata/content changed while copied into the control volume`; artifact API count was zero.
+- 自动化入口：`scripts/ci/build_y35a_system_apfs_control.py::diff_tree_manifests`, `tests/test_y35a_system_apfs_control.py`, and `.github/workflows/y35a-ci-package.yml` failure-diagnostics artifact step.
+- 下一次触发：Any future source-to-target tree digest mismatch in the System APFS control job.

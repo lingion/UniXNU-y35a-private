@@ -867,6 +867,14 @@ jobs:
             echo "Source tree file bytes: $(jq -r '.image_capacity_plan.source_file_bytes' "$OUT.json"); reserved APFS metadata bytes: $(jq -r '.image_capacity_plan.apfs_metadata_reserve_bytes' "$OUT.json")"
             echo "Qualification: non-bootable; no Y35A, stock-QCDT, root-selection, or card qualification"
           } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload System-root metadata diff diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: y35a-system-root-apfs-control-diagnostics-${{ github.run_id }}
+          path: ${{ runner.temp }}/y35a-system-root-apfs-control-diff.json
+          if-no-files-found: ignore
+          retention-days: 7
       - name: Upload full-System APFS offline control
         uses: actions/upload-artifact@v4
         with:

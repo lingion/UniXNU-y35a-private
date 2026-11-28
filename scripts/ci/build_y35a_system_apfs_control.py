@@ -34,6 +34,49 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def diff_tree_manifests(source_manifest: dict, target_manifest: dict, *, limit: int = 64) -> dict:
+    source_entries = {entry["path"]: entry for entry in source_manifest.get("entries", [])}
+    target_entries = {entry["path"]: entry for entry in target_manifest.get("entries", [])}
+    paths = sorted(set(source_entries) | set(target_entries))
+    changed = []
+    field_counts: dict[str, int] = {}
+    missing_source = missing_target = 0
+    for path in paths:
+        source = source_entries.get(path)
+        target = target_entries.get(path)
+        if source is None:
+            missing_source += 1
+            changed.append({"path": path, "difference": "source-entry-missing"})
+            continue
+        if target is None:
+            missing_target += 1
+            changed.append({"path": path, "difference": "target-entry-missing"})
+            continue
+        fields = sorted(key for key in (set(source) | set(target)) if source.get(key) != target.get(key))
+        if fields:
+            for field in fields:
+                field_counts[field] = field_counts.get(field, 0) + 1
+            changed.append({
+                "path": path,
+                "difference": "entry-metadata-or-content",
+                "fields": {field: {"source": source.get(field), "target": target.get(field)}
+                           for field in fields},
+            })
+    return {
+        "schema_version": 1,
+        "source_tree_sha256": source_manifest.get("tree_sha256"),
+        "target_tree_sha256": target_manifest.get("tree_sha256"),
+        "source_entry_count": len(source_entries),
+        "target_entry_count": len(target_entries),
+        "changed_entry_count": len(changed),
+        "missing_source_entry_count": missing_source,
+        "missing_target_entry_count": missing_target,
+        "changed_field_counts": dict(sorted(field_counts.items())),
+        "examples": changed[:limit],
+        "examples_truncated": max(0, len(changed) - limit),
+    }
+
+
 def verify_source_checksums(image_path: Path, report_path: Path) -> None:
     manifest_path = image_path.parent / "SHA256SUMS"
     if not manifest_path.is_file():
@@ -435,7 +478,18 @@ def build_control_image(
         target_inspection = inspect_critical_system(target_mount, source_report)
         target_tree = tree_metadata_manifest(target_mount)
         if target_tree["tree_sha256"] != source_tree["tree_sha256"]:
-            raise ValueError("full System-root metadata/content changed while copied into the control volume")
+            tree_diff = diff_tree_manifests(source_tree, target_tree)
+            tree_diff["image_capacity_plan"] = capacity_plan
+            tree_diff["runner_free_space_bytes_at_preflight"] = available_bytes
+            diagnostic_path = output_path.parent / "y35a-system-root-apfs-control-diff.json"
+            diagnostic_path.write_text(json.dumps(tree_diff, indent=2, sort_keys=True) + "\n")
+            raise ValueError(
+                "full System-root metadata/content changed while copied into the control volume; "
+                f"tree diff sidecar: {diagnostic_path.name}; "
+                f"changed_entries={tree_diff['changed_entry_count']}; "
+                f"field_counts={tree_diff['changed_field_counts']}; "
+                f"examples={tree_diff['examples'][:8]}"
+            )
 
         target_info = plistlib.loads(run_checked(
             ["diskutil", "info", "-plist", str(target_mount)], text=False,

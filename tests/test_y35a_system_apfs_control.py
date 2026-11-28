@@ -211,6 +211,33 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "parent does not match"):
             MODULE.validate_apfs_store_binding("disk5", volume, listing)
 
+    def test_tree_manifest_diff_reports_exact_paths_and_changed_fields(self):
+        source = {"tree_sha256": "a" * 64, "entries": [
+            {"path": ".", "type": "directory", "mode": 0o755},
+            {"path": "file", "type": "file", "content_sha256": "b" * 64, "mode": 0o644},
+        ]}
+        target = {"tree_sha256": "c" * 64, "entries": [
+            {"path": ".", "type": "directory", "mode": 0o755},
+            {"path": "file", "type": "file", "content_sha256": "b" * 64, "mode": 0o600},
+            {"path": "extra", "type": "file", "content_sha256": "d" * 64},
+        ]}
+        report = MODULE.diff_tree_manifests(source, target)
+        self.assertEqual(report["changed_entry_count"], 2)
+        self.assertEqual(report["changed_field_counts"], {"mode": 1})
+        self.assertEqual(report["missing_source_entry_count"], 1)
+        self.assertEqual(report["examples"][0]["path"], "extra")
+        self.assertIn("mode", report["examples"][1]["fields"])
+
+    def test_tree_manifest_diff_limits_example_payload(self):
+        source = {"entries": []}
+        target = {"entries": [
+            {"path": f"p{i}", "type": "file", "content_sha256": str(i)} for i in range(70)
+        ]}
+        report = MODULE.diff_tree_manifests(source, target, limit=10)
+        self.assertEqual(report["changed_entry_count"], 70)
+        self.assertEqual(len(report["examples"]), 10)
+        self.assertEqual(report["examples_truncated"], 60)
+
     def test_dispatch_workflow_binds_system_artifact_and_preserves_offline_scope(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
         self.assertIn("system_root_run_id:", workflow)
@@ -230,6 +257,8 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         self.assertIn(".entries_sha256 == .target_entries_sha256", workflow)
         self.assertIn(".target_image.configured_capacity == .image_capacity_plan.size", workflow)
         self.assertIn("Selected APFS capacity:", workflow)
+        self.assertIn("Upload System-root metadata diff diagnostics", workflow)
+        self.assertIn("if: failure()", workflow)
 
 
 if __name__ == "__main__":
