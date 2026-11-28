@@ -30,6 +30,8 @@
 9. 只有以上全部通过，才允许生成运行计划。运行计划只能把统一 gate 计算出的许可写成 true。
 10. runner 不得修改许可。candidate 结束后许可立即回落为 false。
 
+macOS metadata scans may encounter root-owned or sealed files whose xattrs are not readable by the hosted runner user. Preserve xattrs in the tree identity; only retry an explicit permission-denied xattr read with non-interactive privileged read-only access. Do not convert unreadable metadata to an empty attribute list.
+
 ## 判定
 
 - `CONFIRMED` 需要原始证据、完整镜像哈希、可复制命令和停止条件对照。

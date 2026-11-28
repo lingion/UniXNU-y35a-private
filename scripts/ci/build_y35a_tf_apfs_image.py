@@ -10,6 +10,7 @@ fallback still require linked and runtime proof.
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -58,9 +59,13 @@ def run_checked(command: list[str], *, text: bool = True) -> subprocess.Complete
 def xattr_manifest(path: Path) -> list:
     """Read xattrs through Python where supported, falling back to macOS xattr."""
     if hasattr(os, "listxattr") and hasattr(os, "getxattr"):
-        names = sorted(os.listxattr(path, follow_symlinks=False))
-        return [[name, hashlib.sha256(os.getxattr(path, name, follow_symlinks=False)).hexdigest()]
-                for name in names]
+        try:
+            names = sorted(os.listxattr(path, follow_symlinks=False))
+            return [[name, hashlib.sha256(os.getxattr(path, name, follow_symlinks=False)).hexdigest()]
+                    for name in names]
+        except OSError as error:
+            if error.errno not in {errno.EACCES, errno.EPERM}:
+                raise
     executable = shutil.which("xattr")
     if not executable:
         raise RuntimeError("Python xattr APIs and the macOS xattr utility are unavailable")
@@ -68,7 +73,12 @@ def xattr_manifest(path: Path) -> list:
     if path.is_symlink():
         list_command.append("-s")
     list_command.append(str(path))
-    listed = run_checked(list_command, text=False)
+    try:
+        listed = run_checked(list_command, text=False)
+    except RuntimeError as error:
+        if "Permission denied" not in str(error) and "Operation not permitted" not in str(error):
+            raise
+        listed = run_checked(["/usr/bin/sudo", "-n", *list_command], text=False)
     names = sorted(line.decode("utf-8", errors="strict") for line in listed.stdout.splitlines() if line)
     values = []
     for name in names:
@@ -76,7 +86,12 @@ def xattr_manifest(path: Path) -> list:
         if path.is_symlink():
             value_command.append("-s")
         value_command.extend(["-px", name, str(path)])
-        encoded_value = run_checked(value_command, text=False).stdout
+        try:
+            encoded_value = run_checked(value_command, text=False).stdout
+        except RuntimeError as error:
+            if "Permission denied" not in str(error) and "Operation not permitted" not in str(error):
+                raise
+            encoded_value = run_checked(["/usr/bin/sudo", "-n", *value_command], text=False).stdout
         try:
             value = bytes.fromhex(encoded_value.decode("ascii"))
         except (UnicodeDecodeError, ValueError) as error:

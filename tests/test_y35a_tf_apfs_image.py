@@ -695,6 +695,27 @@ class TfApfsImageInputTest(unittest.TestCase):
         self.assertEqual(calls[0], ["/usr/bin/xattr", str(path)])
         self.assertEqual(calls[1], ["/usr/bin/xattr", "-px", "com.example.test", str(path)])
 
+    def test_xattr_cli_permission_denied_retries_read_only_with_sudo(self):
+        path = Path("/image/.ba")
+        calls = []
+
+        def fake_run(command, **kwargs):
+            calls.append(command)
+            if command[0] == "/usr/bin/xattr":
+                raise subprocess.CalledProcessError(
+                    1, command, output=b"", stderr=b"xattr: [Errno 13] Permission denied",
+                )
+            return SimpleNamespace(stdout=b"")
+
+        with mock.patch.object(MODULE, "os", SimpleNamespace()), \
+                mock.patch.object(MODULE.shutil, "which", return_value="/usr/bin/xattr"), \
+                mock.patch.object(MODULE.subprocess, "run", side_effect=fake_run):
+            self.assertEqual(MODULE.xattr_manifest(path), [])
+        self.assertEqual(calls, [
+            ["/usr/bin/xattr", str(path)],
+            ["/usr/bin/sudo", "-n", "/usr/bin/xattr", str(path)],
+        ])
+
 
 if __name__ == "__main__":
     unittest.main()

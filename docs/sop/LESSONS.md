@@ -440,3 +440,13 @@
 - 证据：Workflow run `46104858463`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`, stderr `shasum: SHA256SUMS: No such file or directory`, exit 2. The preceding exact run/artifact API verification and download succeeded.
 - 自动化入口：`.github/workflows/y35a-ci-package.yml`, `scripts/ci/build_y35a_system_apfs_control.py`, and `tests/test_y35a_system_apfs_control.py`.
 - 下一次触发：Any `actions/download-artifact` consumer using `artifact-ids` and an expected nested artifact directory.
+
+## L-2026-11-28-22 full-System APFS source xattr access can require elevated read-only permission
+
+- 现象：APFS control runs `46105909382` and `46107959796` failed during metadata enumeration at the root-owned source path `.ba`. The first run's exception omitted captured stderr; after routing xattr commands through the checked-command wrapper, the second reported `/usr/bin/xattr ... returned exit status 1` and `xattr: [Errno 13] Permission denied`.
+- 根因：The macOS Actions Python runtime lacks `os.listxattr`, so the scanner fell back to `/usr/bin/xattr`; the unprivileged reader could enumerate/read file content but could not list xattrs on this protected source entry.
+- 影响：The APFS control job stopped before image creation/upload; there is no APFS control artifact and no statement about source contents beyond prior checks.
+- 正确做法：Keep metadata hashing fail-closed. Only for explicit `Permission denied` or `Operation not permitted`, retry the same read-only xattr list/value query with `/usr/bin/sudo -n`; propagate every other error and never substitute an empty xattr set. Add a test that confirms privilege escalation is used only after the permission error.
+- 证据：Runs `46105909382` and `46107959796`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`; run `46107001080` separately failed earlier on APFS synthesized container-vs-attached-store relation, which is not the xattr cause.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py::xattr_manifest`, `tests/test_y35a_tf_apfs_image.py`, and `.github/workflows/y35a-ci-package.yml`.
+- 下一次触发：Metadata-preserving scans of read-only macOS System volumes and root-owned entries when the runner Python lacks xattr APIs.
