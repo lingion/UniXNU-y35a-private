@@ -12,6 +12,7 @@ import plistlib
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 
 from build_y35a_tf_apfs_image import run_checked, tree_metadata_manifest, validate_gpt_apfs

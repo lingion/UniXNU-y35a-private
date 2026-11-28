@@ -5,6 +5,7 @@ from pathlib import Path
 import sys
 import tempfile
 import unittest
+from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -280,6 +281,21 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         ]}
         with self.assertRaisesRegex(ValueError, "unsafe relative path"):
             MODULE.metadata_restore_records(manifest)
+
+    def test_mtime_restore_runs_privileged_script_with_source_manifest_records(self):
+        manifest = {"entries": [
+            {"path": ".", "type": "directory", "mtime_ns": 10},
+            {"path": "file", "type": "file", "mtime_ns": 20},
+        ]}
+        with mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(stdout="")) as run:
+            MODULE.restore_target_directory_and_entry_mtimes(Path("/tmp/control-volume"), manifest)
+        command = run.call_args.args[0]
+        self.assertEqual(command[:3], ["/usr/bin/sudo", "-n", sys.executable])
+        self.assertIn("os.utime", command)
+        self.assertEqual(command[-1], "/tmp/control-volume")
+        self.assertTrue(run.call_args.kwargs["check"])
+        records = json.loads(run.call_args.kwargs["input"])
+        self.assertEqual([record["path"] for record in records], ["file", "."])
 
     def test_dispatch_workflow_binds_system_artifact_and_preserves_offline_scope(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
