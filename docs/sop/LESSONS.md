@@ -450,3 +450,13 @@
 - 证据：Runs `46105909382` and `46107959796`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`; run `46107001080` separately failed earlier on APFS synthesized container-vs-attached-store relation, which is not the xattr cause.
 - 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py::xattr_manifest`, `tests/test_y35a_tf_apfs_image.py`, and `.github/workflows/y35a-ci-package.yml`.
 - 下一次触发：Metadata-preserving scans of read-only macOS System volumes and root-owned entries when the runner Python lacks xattr APIs.
+
+## L-2026-11-28-23 full-System source content hashing can require a privileged read-only fallback
+
+- 现象：After the xattr permission fallback was added, System APFS control run `46108679205` passed artifact binding/download, then failed while hashing source `.file` in `tree_metadata_manifest` with `PermissionError: [Errno 13]` at `Path.open("rb")`.
+- 根因：The root-owned/sealed source entry is readable only with elevated privileges on the hosted macOS runner. Fixing xattr enumeration alone does not grant read access to the same file content.
+- 影响：The tree metadata/content manifest was incomplete; image creation and upload did not occur.
+- 正确做法：When reading a regular file for its content SHA, retry only an explicit `PermissionError` on macOS with `/usr/bin/sudo -n /usr/bin/shasum -a 256` for that exact file, and bind the returned digest plus stat size. Let I/O errors, malformed command output, and failed sudo propagate; never omit content hashes or turn unreadable files into empty content.
+- 证据：Run `46108679205`, job `system-root-apfs-control`, step `Build full-System GPT/APFS offline control`; traceback ends in `tree_metadata_manifest` at `path.open("rb")`, source path `.file`, `Errno 13 Permission denied`. The earlier xattr-only failure is separately recorded under run `46107959796`.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py::file_content_sha256`, `tree_metadata_manifest`, `tests/test_y35a_tf_apfs_image.py`, and the System APFS control job.
+- 下一次触发：Full content-plus-metadata hashing of read-only Apple System volumes on hosted macOS runners.

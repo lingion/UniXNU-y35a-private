@@ -716,6 +716,65 @@ class TfApfsImageInputTest(unittest.TestCase):
             ["/usr/bin/sudo", "-n", "/usr/bin/xattr", str(path)],
         ])
 
+    def test_file_content_hash_retries_only_permission_denied_with_sudo(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "protected-file"
+            path.write_bytes(b"protected contents")
+            expected = hashlib.sha256(b"protected contents").hexdigest()
+            original_open = Path.open
+
+            def permission_denied_open(candidate, *args, **kwargs):
+                if candidate == path:
+                    raise PermissionError(13, "Permission denied", str(path))
+                return original_open(candidate, *args, **kwargs)
+
+            with mock.patch.object(Path, "open", new=permission_denied_open), \
+                    mock.patch.object(MODULE.sys, "platform", "darwin"), \
+                    mock.patch.object(MODULE, "run_checked", return_value=SimpleNamespace(
+                        stdout=f"{expected}  {path}\n",
+                    )) as checked:
+                digest, size = MODULE.file_content_sha256(path)
+            self.assertEqual((digest, size), (expected, len(b"protected contents")))
+            checked.assert_called_once_with([
+                "/usr/bin/sudo", "-n", "/usr/bin/shasum", "-a", "256", str(path),
+            ])
+
+    def test_file_content_hash_does_not_retry_other_io_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "io-error-file"
+            path.write_bytes(b"contents")
+            original_open = Path.open
+
+            def io_error_open(candidate, *args, **kwargs):
+                if candidate == path:
+                    raise OSError(5, "Input/output error", str(path))
+                return original_open(candidate, *args, **kwargs)
+
+            with mock.patch.object(Path, "open", new=io_error_open), \
+                    mock.patch.object(MODULE.sys, "platform", "darwin"), \
+                    mock.patch.object(MODULE, "run_checked") as checked:
+                with self.assertRaisesRegex(OSError, "Input/output error"):
+                    MODULE.file_content_sha256(path)
+            checked.assert_not_called()
+
+    def test_file_content_hash_propagates_non_permission_io_errors(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "io-error-file"
+            path.write_bytes(b"contents")
+            original_open = Path.open
+
+            def io_error_open(candidate, *args, **kwargs):
+                if candidate == path:
+                    raise OSError(5, "Input/output error", str(path))
+                return original_open(candidate, *args, **kwargs)
+
+            with mock.patch.object(Path, "open", new=io_error_open), \
+                    mock.patch.object(MODULE.sys, "platform", "darwin"), \
+                    mock.patch.object(MODULE, "run_checked") as checked:
+                with self.assertRaisesRegex(OSError, "Input/output error"):
+                    MODULE.file_content_sha256(path)
+            checked.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()

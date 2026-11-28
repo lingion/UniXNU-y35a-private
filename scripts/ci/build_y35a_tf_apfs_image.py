@@ -100,6 +100,27 @@ def xattr_manifest(path: Path) -> list:
     return values
 
 
+def file_content_sha256(path: Path) -> tuple[str, int]:
+    digest = hashlib.sha256()
+    size = 0
+    try:
+        with path.open("rb") as source:
+            for block in iter(lambda: source.read(1 << 20), b""):
+                digest.update(block)
+                size += len(block)
+        return digest.hexdigest(), size
+    except PermissionError:
+        if sys.platform != "darwin":
+            raise
+        result = run_checked(
+            ["/usr/bin/sudo", "-n", "/usr/bin/shasum", "-a", "256", str(path)],
+        )
+        digest_text = result.stdout.split()[0] if result.stdout.split() else ""
+        if not re.fullmatch(r"[0-9a-f]{64}", digest_text):
+            raise RuntimeError(f"privileged shasum returned an invalid digest for {path}")
+        return digest_text, path.stat().st_size
+
+
 def tree_metadata_manifest(root: Path) -> dict:
     root = root.resolve(strict=True)
     entries = []
@@ -142,14 +163,9 @@ def tree_metadata_manifest(root: Path) -> dict:
             entries.append({"path": relative_text, "type": "symlink", **attributes,
                             "target": path.readlink().as_posix()})
         elif path.is_file():
-            content_digest = hashlib.sha256()
-            size = 0
-            with path.open("rb") as source:
-                for block in iter(lambda: source.read(1 << 20), b""):
-                    content_digest.update(block)
-                    size += len(block)
+            content_digest, size = file_content_sha256(path)
             entries.append({"path": relative_text, "type": "file", **attributes,
-                            "bytes": size, "content_sha256": content_digest.hexdigest()})
+                            "bytes": size, "content_sha256": content_digest})
         elif path.is_dir():
             entries.append({"path": relative_text, "type": "directory", **attributes})
         else:

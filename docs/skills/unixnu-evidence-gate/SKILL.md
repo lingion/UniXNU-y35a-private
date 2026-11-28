@@ -28,7 +28,7 @@ Produce or update one experiment contract containing:
 2. Verify every path, size and SHA-256.
 2a. UniXNU is CI-only: the local machine may edit files and passively read source, logs and status only. Do not invoke any local project validation command, including generic `git diff --check`, tests, builds, static verifiers, linters, or package/image validation. Use GitHub Actions for these checks; any accidental local command is excluded evidence and must be recorded in LESSONS.md.
 Before invoking a combined shell command, inspect every subcommand for validation flags. In particular, never append `git diff --check` to an otherwise read-only status/diff command; use the Actions `Check tracked text` step instead.
-For macOS root-tree xattr scans, retain attribute digests. If the runner gets an explicit permission-denied result on a read-only source, retry the same read using a non-interactive privileged command; do not silently treat an unreadable xattr set as empty.
+For macOS root-tree metadata/content scans, retain xattr digests and file-content hashes. If a read-only root-owned source returns explicit permission denied, retry that exact xattr query or file hash using a non-interactive privileged command; do not silently treat unreadable xattrs as empty or omit content.
 3. Verify source commit, clean status, tree hash and ordered patch closure. Run `git apply --check` against the exact source tree.
 4. Verify build provenance, linked Mach-O and local disassembly. Check the actual instruction window, caller contract, marker codeword, owner, slot, offset, width and alignment.
 5. Verify package closure. Mark DT as `stock`, `derived` or `unknown`. A derived DT must include original source, extraction range, derived output and both hashes.
