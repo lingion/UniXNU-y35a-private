@@ -360,7 +360,7 @@ class FullSystemRootSourceTest(unittest.TestCase):
         self.assertIn('(.resolved_target_exists | type) == "boolean"', verification)
         self.assertIn('.resolution_status == "symlink-loop" or .resolution_status == "escapes-volume"',
                       verification)
-        self.assertIn('.entry_type == "symlink" or .symlink_target == null', verification)
+        self.assertIn('((.entry_type == "symlink") == ((.symlink_target | type) == "string"))', verification)
         self.assertIn('.present == (.entry_type != "missing")', verification)
         self.assertIn('.resolved_target_is_directory == false or .resolved_target_exists == true', verification)
         self.assertIn('.schema_version == 2', verification)
@@ -408,7 +408,7 @@ class FullSystemRootSourceTest(unittest.TestCase):
 
             unexpected_link = json.loads(json.dumps(inventory))
             unexpected_link["private/var"]["symlink_target"] = "/var"
-            with self.assertRaisesRegex(ValueError, "symlink target disagrees"):
+            with self.assertRaisesRegex(ValueError, "non-symlink writable-state path has a link target"):
                 package_ci.validate_writable_state_inventory(unexpected_link, WRITABLE_STATE_CONTRACT)
 
             missing_parent = json.loads(json.dumps(inventory))

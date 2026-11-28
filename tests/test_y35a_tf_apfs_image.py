@@ -5,6 +5,7 @@ import io
 import os
 from pathlib import Path
 import subprocess
+import struct
 import tarfile
 import tempfile
 import sys
