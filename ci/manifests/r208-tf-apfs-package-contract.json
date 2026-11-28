@@ -20,6 +20,16 @@
     "stock_qcdt_input": {
       "status": "unavailable",
       "sha256": null,
+      "required_source_boot": {
+        "status": "historically-pinned-file-missing",
+        "bytes": 67108864,
+        "sha256": "92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012",
+        "user_input_path": "evidence/y35a-20261102/stock-boot.img",
+        "transport": "tracked-file-in-exact-dispatch-commit",
+        "ci_generated_outputs": ["y35a.qcdt", "y35a.qcdt.json"],
+        "qcdt_must_be_extracted_from_android_header_dt_range": true,
+        "board_tuple": [206, 8, 23]
+      },
       "known_candidate_paths": [
         "/Volumes/Mobile/unixnu-research/UniXNU-y35a/evidence/y35a-20261102/lk2nd-runtime.dtb",
         "/Volumes/Mobile/unixnu-research/UniXNU-y35a/evidence/y35a-20261102/boot3-20261106/boot3.img",
@@ -30,6 +40,14 @@
     },
     "status": "unverified",
     "sha256": null
+  },
+  "root_layout": {
+    "target_product_version": "12.4.1",
+    "target_build": "16G102",
+    "apfs_system_data_volume_group_required": false,
+    "version_boundary_source": "https://developer.apple.com/videos/play/wwdc2019/710/",
+    "legacy_root_and_private_var_initialization": "unverified",
+    "status": "target-specific-root-layout-pending-ci-source-review"
   },
   "tf_image": {
     "partition_scheme": "GPT",

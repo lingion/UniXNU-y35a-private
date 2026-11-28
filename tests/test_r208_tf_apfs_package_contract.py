@@ -34,6 +34,28 @@ class R208TfApfsPackageContractTest(unittest.TestCase):
     def test_unavailable_stock_qcdt_is_explicitly_non_ready(self):
         contract = self.contract()
         self.assertEqual(contract["device_tree"]["stock_qcdt_input"]["status"], "unavailable")
+        boot = contract["device_tree"]["stock_qcdt_input"]["required_source_boot"]
+        self.assertEqual(boot["bytes"], 67108864)
+        self.assertEqual(boot["sha256"],
+                         "92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012")
+        self.assertEqual(boot["user_input_path"], "evidence/y35a-20261102/stock-boot.img")
+        self.assertTrue(boot["qcdt_must_be_extracted_from_android_header_dt_range"])
+        self.assertEqual(MODULE.validate_contract(contract), [])
+
+    def test_unpinned_stock_boot_source_is_rejected(self):
+        contract = self.contract()
+        contract["device_tree"]["stock_qcdt_input"]["required_source_boot"]["sha256"] = "0" * 64
+        failures = MODULE.validate_contract(contract)
+        self.assertTrue(any("historical full-partition SHA-256" in failure for failure in failures))
+
+    def test_ios12_root_contract_does_not_assume_ios13_volume_groups(self):
+        contract = self.contract()
+        root_layout = contract["root_layout"]
+        self.assertEqual(root_layout["target_product_version"], "12.4.1")
+        self.assertFalse(root_layout["apfs_system_data_volume_group_required"])
+        self.assertEqual(root_layout["version_boundary_source"],
+                         "https://developer.apple.com/videos/play/wwdc2019/710/")
+        self.assertEqual(root_layout["legacy_root_and_private_var_initialization"], "unverified")
         self.assertEqual(MODULE.validate_contract(contract), [])
 
     def test_device_permission_cannot_be_enabled_by_contract(self):

@@ -27,6 +27,8 @@ import tempfile
 
 REQUIRED_ROOT_FILES = ("sbin/launchd", "usr/lib/dyld")
 Y35A_BOARD_TUPLE = (206, 8, 23)
+KNOWN_PD1502A_STOCK_BOOT_BYTES = 67_108_864
+KNOWN_PD1502A_STOCK_BOOT_SHA256 = "92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012"
 
 
 def sha256(path: Path) -> str:
@@ -145,7 +147,45 @@ def tree_sha256(root: Path) -> str:
     return tree_metadata_manifest(root)["tree_sha256"]
 
 
-def parse_qcdt(path: Path, provenance_path: Path, *, offline_control_derived: bool = False) -> dict:
+def extract_qcdt_from_pd1502a_boot_image(boot_path: Path) -> dict:
+    boot_path = boot_path.resolve(strict=True)
+    boot_bytes = boot_path.read_bytes()
+    boot_sha = hashlib.sha256(boot_bytes).hexdigest()
+    if len(boot_bytes) != KNOWN_PD1502A_STOCK_BOOT_BYTES:
+        raise ValueError("stock PD1502A boot image size does not match the historical full-partition input")
+    if boot_sha != KNOWN_PD1502A_STOCK_BOOT_SHA256:
+        raise ValueError("stock PD1502A boot image SHA-256 does not match the historical full-partition input")
+    if boot_bytes[:8] != b"ANDROID!":
+        raise ValueError("stock PD1502A boot image has no Android boot header")
+    if len(boot_bytes) < 2048:
+        raise ValueError("stock PD1502A boot image is shorter than its header page")
+    kernel_size, _, ramdisk_size, _, second_size, _, _, page_size, dt_size, _ = struct.unpack_from(
+        "<10I", boot_bytes, 8,
+    )
+    if page_size != 2048 or dt_size <= 0:
+        raise ValueError("stock PD1502A boot image has unexpected page size or no QCDT payload")
+    qcdt_offset = page_size
+    for component_size in (kernel_size, ramdisk_size, second_size):
+        qcdt_offset += ((component_size + page_size - 1) // page_size) * page_size
+    qcdt_end = qcdt_offset + dt_size
+    if qcdt_end > len(boot_bytes):
+        raise ValueError("stock PD1502A boot header QCDT range exceeds the full boot image")
+    qcdt_bytes = boot_bytes[qcdt_offset:qcdt_end]
+    if qcdt_bytes[:4] != b"QCDT":
+        raise ValueError("stock PD1502A boot image dt payload is not a QCDT table")
+    return {
+        "boot_path": boot_path.name,
+        "boot_bytes": len(boot_bytes),
+        "boot_sha256": boot_sha,
+        "qcdt_offset": qcdt_offset,
+        "qcdt_bytes": dt_size,
+        "qcdt_sha256": hashlib.sha256(qcdt_bytes).hexdigest(),
+        "qcdt_bytes_data": qcdt_bytes,
+    }
+
+
+def parse_qcdt(path: Path, provenance_path: Path, *, offline_control_derived: bool = False,
+               stock_boot_image: Path | None = None) -> dict:
     path = path.resolve(strict=True)
     provenance_path = provenance_path.resolve(strict=True)
     data = path.read_bytes()
@@ -158,6 +198,31 @@ def parse_qcdt(path: Path, provenance_path: Path, *, offline_control_derived: bo
             raise ValueError("stock QCDT provenance is not bound to PD1502A")
         if provenance.get("origin") not in {"device-staged-stock-boot", "stock-boot-image"}:
             raise ValueError("QCDT provenance is not a stock firmware source")
+        if stock_boot_image is None:
+            raise ValueError("stock QCDT validation requires the original full stock boot image")
+        boot = extract_qcdt_from_pd1502a_boot_image(stock_boot_image)
+        expected_source = {
+            "source_boot_sha256": boot["boot_sha256"],
+            "source_boot_bytes": boot["boot_bytes"],
+            "source_boot_version": "PD1502A_A_1.18.0",
+            "qcdt_offset": boot["qcdt_offset"],
+            "qcdt_bytes": boot["qcdt_bytes"],
+            "sha256": boot["qcdt_sha256"],
+        }
+        for key, value in expected_source.items():
+            if provenance.get(key) != value:
+                raise ValueError(f"stock QCDT provenance does not match the original boot image: {key}")
+        source_boot_path = provenance.get("source_boot_path")
+        normalized_source_path = PurePosixPath(source_boot_path) if isinstance(source_boot_path, str) else None
+        if (normalized_source_path is None or normalized_source_path.is_absolute()
+                or any(part in ("", ".", "..") for part in normalized_source_path.parts)
+                or normalized_source_path.name != boot["boot_path"]):
+            raise ValueError("stock QCDT provenance must bind a safe tracked repository source path")
+        if data != boot["qcdt_bytes_data"]:
+            raise ValueError("stock QCDT bytes differ from the QCDT extracted from the original boot image")
+        source_commit = provenance.get("source_repository_commit")
+        if not isinstance(source_commit, str) or not re.fullmatch(r"[0-9a-f]{40}", source_commit):
+            raise ValueError("stock QCDT provenance must bind the full repository source commit")
     elif source_type == "derived" and offline_control_derived:
         for key in ("dts_sha256", "dtc_sha256", "dtc_revision"):
             if not provenance.get(key):
@@ -223,11 +288,23 @@ def parse_qcdt(path: Path, provenance_path: Path, *, offline_control_derived: bo
         "bytes": len(data),
         "version": version,
         "entries": entries,
+        "stock_boot_source": (
+            {
+                "bytes": boot["boot_bytes"],
+                "sha256": boot["boot_sha256"],
+                "qcdt_offset": boot["qcdt_offset"],
+                "qcdt_bytes": boot["qcdt_bytes"],
+                "source_repository_commit": provenance["source_repository_commit"],
+                "source_repository_path": provenance["source_boot_path"],
+            }
+            if source_type == "stock-qcdt" else None
+        ),
     }
 
 
-def parse_stock_qcdt(path: Path, provenance_path: Path) -> dict:
-    return parse_qcdt(path, provenance_path, offline_control_derived=False)
+def parse_stock_qcdt(path: Path, provenance_path: Path, stock_boot_image: Path | None = None) -> dict:
+    return parse_qcdt(path, provenance_path, offline_control_derived=False,
+                      stock_boot_image=stock_boot_image)
 
 
 def validate_package_artifact_api(run_record: dict, artifact_record: dict, *,
@@ -619,6 +696,7 @@ def write_report_binding(report_path: Path) -> dict:
 
 def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output: Path,
                 size: str, volume_name: str, *, offline_control_derived: bool = False,
+                stock_boot_image: Path | None = None,
                 control_package_binding: dict | None = None,
                 root_tree_transport: dict | None = None) -> dict:
     root_tree = root_tree.resolve(strict=True)
@@ -628,7 +706,8 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
     if missing:
         raise ValueError(f"root tree is missing required boot files: {missing}")
     qcdt = parse_qcdt(qcdt_path, qcdt_provenance,
-                      offline_control_derived=offline_control_derived)
+                      offline_control_derived=offline_control_derived,
+                      stock_boot_image=stock_boot_image)
     output = output.resolve()
     if output.exists():
         raise SystemExit(f"refusing to overwrite existing TF image: {output}")
@@ -693,7 +772,7 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
             "ios_system_image": False,
             "springboard_included": False,
             "touch_runtime_validated": False,
-            "stock_provenance_status": "unverified-input-assertion" if qcdt["source_type"] == "stock-qcdt" else "not-applicable-derived-input",
+            "stock_provenance_status": "verified-against-pinned-full-boot-image" if qcdt["source_type"] == "stock-qcdt" else "not-applicable-derived-input",
             "control_package_binding": control_package_binding,
             "image": {"path": output.name, "bytes": output.stat().st_size},
             "root_tree": {
@@ -736,6 +815,7 @@ def main() -> int:
     parser.add_argument("--root-tree-metadata", type=Path)
     parser.add_argument("--qcdt", "--stock-qcdt", dest="qcdt_path", type=Path, required=True)
     parser.add_argument("--qcdt-provenance", "--stock-qcdt-provenance", dest="qcdt_provenance", type=Path, required=True)
+    parser.add_argument("--stock-boot-image", type=Path)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--size", default="4g")
     parser.add_argument("--volume-name", default="Y35A-TF-ROOT")
@@ -760,6 +840,8 @@ def main() -> int:
     if args.root_tree and args.root_tree_metadata:
         raise SystemExit("--root-tree-metadata must accompany --root-tree-archive")
     if args.offline_control_derived_qcdt:
+        if args.stock_boot_image:
+            raise SystemExit("offline derived-QCDT control does not accept a stock boot image")
         required = (args.control_package_provenance, args.control_package_root,
                     args.control_package_run_json, args.control_package_artifact_json,
                     args.control_root_tree_artifact_json,
@@ -777,6 +859,8 @@ def main() -> int:
                   args.control_package_artifact_id, args.control_package_artifact_digest,
                   args.control_root_tree_artifact_id, args.control_root_tree_artifact_digest)):
         raise SystemExit("package artifact binding options are only valid in offline-control mode")
+    elif args.stock_boot_image is None:
+        raise SystemExit("stock-QCDT image construction requires --stock-boot-image")
 
     output = args.output.resolve()
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -825,6 +909,7 @@ def main() -> int:
             root_tree, qcdt_path, qcdt_provenance, output,
             args.size, args.volume_name,
             offline_control_derived=args.offline_control_derived_qcdt,
+            stock_boot_image=args.stock_boot_image,
             control_package_binding=control_binding,
             root_tree_transport=restored_tree_binding,
         )

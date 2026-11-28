@@ -16,8 +16,10 @@ on:
       - 'ci/manifests/r208-tf-emmc-root-fallback-v3-candidate.json'
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
+      - 'evidence/y35a-20261102/stock-boot.img'
       - 'scripts/ci/build_y35a_ci_package.py'
       - 'scripts/ci/build_y35a_tf_apfs_image.py'
+      - 'scripts/ci/extract_y35a_stock_qcdt.py'
       - 'scripts/ci/verify_r208_fallback_v2_source.py'
       - 'scripts/ci/verify_r208_fallback_v3_source.py'
       - 'scripts/ci/build_y35a_qcdt.py'
@@ -65,8 +67,10 @@ on:
       - 'ci/manifests/r208-tf-emmc-root-fallback-v3-candidate.json'
       - 'ci/y35a-ci-package-manifest.json'
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
+      - 'evidence/y35a-20261102/stock-boot.img'
       - 'scripts/ci/build_y35a_ci_package.py'
       - 'scripts/ci/build_y35a_tf_apfs_image.py'
+      - 'scripts/ci/extract_y35a_stock_qcdt.py'
       - 'scripts/ci/verify_r208_fallback_v2_source.py'
       - 'scripts/ci/verify_r208_fallback_v3_source.py'
       - 'scripts/ci/build_y35a_qcdt.py'
@@ -146,23 +150,8 @@ on:
         required: false
         default: ''
         type: string
-      stock_qcdt_run_id:
-        description: Actions run containing the stock PD1502A QCDT artifact
-        required: false
-        default: ''
-        type: string
-      stock_qcdt_artifact:
-        description: Stock QCDT artifact name
-        required: false
-        default: ''
-        type: string
-      stock_qcdt_path:
-        description: QCDT path inside the stock artifact
-        required: false
-        default: ''
-        type: string
-      stock_qcdt_provenance_path:
-        description: Stock QCDT provenance path inside the stock artifact
+      stock_boot_path:
+        description: Tracked repository-relative path to the original full PD1502A stock boot image (64 MiB, pinned SHA-256); leave empty until supplied
         required: false
         default: ''
         type: string
@@ -497,7 +486,8 @@ jobs:
           test -s "$ROOT/system-root-source.json"
           (cd "$ROOT" && shasum -a 256 -c SHA256SUMS)
           jq -e '
-            .status == "full-system-volume-source-verified"
+            .schema_version == 2
+            and .status == "full-system-volume-source-verified"
             and .candidate_kind == "pinned-ios12-system-volume-source"
             and .source_component.byte_identical_to_pinned_component == true
             and .gpt_apfs.partition_map_source == "hdiutil-pmap:SCHEME"
@@ -511,10 +501,15 @@ jobs:
             and (.writable_state_paths | keys == ["private/var", "private/var/db", "private/var/mobile"])
             and ([.writable_state_paths[] |
               ((.present | type) == "boolean"
-               and (.entry_type | type) == "string"
+               and (.entry_type == "missing" or .entry_type == "directory" or .entry_type == "symlink" or .entry_type == "file" or .entry_type == "other")
                and (.resolved_target_exists | type) == "boolean"
                and (.resolved_target_is_directory | type) == "boolean"
-               and ((.symlink_target == null) or (.symlink_target | type) == "string"))
+               and (.resolution_status == "missing" or .resolution_status == "resolved" or .resolution_status == "link" or .resolution_status == "not-a-directory" or .resolution_status == "symlink-loop" or .resolution_status == "escapes-volume")
+               and (.symlink_chain | type) == "array"
+               and ((.entry_type == "symlink") == ((.symlink_target | type) == "string"))
+               and (.present == (.entry_type != "missing"))
+               and (.resolved_target_is_directory == false or .resolved_target_exists == true)
+               and (.present == true or (.resolution_status == "missing" and .resolved_target_exists == false and .resolved_target_is_directory == false)))
             ] | all)
           ' "$ROOT/system-root-source.json" > /dev/null
           {
@@ -556,7 +551,7 @@ jobs:
           retention-days: 30
 
   tf-apfs-intermediate:
-    if: github.event_name == 'workflow_dispatch' && inputs.root_tree_run_id != ''
+    if: github.event_name == 'workflow_dispatch' && inputs.root_tree_run_id != '' && inputs.stock_boot_path != ''
     runs-on: macos-15
     timeout-minutes: 90
     steps:
@@ -570,30 +565,35 @@ jobs:
           run-id: ${{ inputs.root_tree_run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/root-tree
-      - uses: actions/download-artifact@v4
-        with:
-          name: ${{ inputs.stock_qcdt_artifact }}
-          run-id: ${{ inputs.stock_qcdt_run_id }}
-          github-token: ${{ github.token }}
-          path: ${{ runner.temp }}/stock-qcdt
       - name: Build and verify TF/APFS intermediate
         env:
           ROOT_TREE_RUN_ID: ${{ inputs.root_tree_run_id }}
           ROOT_TREE_ARTIFACT: ${{ inputs.root_tree_artifact }}
           ROOT_TREE_PATH: ${{ inputs.root_tree_path }}
-          STOCK_QCDT_PATH: ${{ inputs.stock_qcdt_path }}
-          STOCK_QCDT_PROVENANCE_PATH: ${{ inputs.stock_qcdt_provenance_path }}
+          STOCK_BOOT_PATH: ${{ inputs.stock_boot_path }}
+          SOURCE_COMMIT: ${{ github.sha }}
         run: |
           set -euo pipefail
           [[ "$ROOT_TREE_RUN_ID" =~ ^[0-9]+$ ]]
           test "$ROOT_TREE_ARTIFACT" = "y35a-root-tree-$ROOT_TREE_RUN_ID"
           test "$ROOT_TREE_PATH" = "root-tree.tar"
           ROOT_TREE_ARCHIVE="$RUNNER_TEMP/root-tree/$ROOT_TREE_PATH"
-          STOCK_QCDT="$RUNNER_TEMP/stock-qcdt/$STOCK_QCDT_PATH"
-          STOCK_PROVENANCE="$RUNNER_TEMP/stock-qcdt/$STOCK_QCDT_PROVENANCE_PATH"
+          case "$STOCK_BOOT_PATH" in
+            /*|*..*) echo "stock boot path must be a safe repository-relative path" >&2; exit 1 ;;
+          esac
+          STOCK_BOOT="$GITHUB_WORKSPACE/$STOCK_BOOT_PATH"
+          git ls-files --error-unmatch "$STOCK_BOOT_PATH" > /dev/null
+          test ! -L "$STOCK_BOOT"
           test -f "$ROOT_TREE_ARCHIVE"
-          test -f "$STOCK_QCDT"
-          test -f "$STOCK_PROVENANCE"
+          test -f "$STOCK_BOOT"
+          STOCK_QCDT_DIR="$RUNNER_TEMP/stock-qcdt"
+          python3 scripts/ci/extract_y35a_stock_qcdt.py \
+            --stock-boot-image "$STOCK_BOOT" \
+            --source-commit "$SOURCE_COMMIT" \
+            --source-boot-repo-path "$STOCK_BOOT_PATH" \
+            --output-dir "$STOCK_QCDT_DIR"
+          STOCK_QCDT="$STOCK_QCDT_DIR/y35a.qcdt"
+          STOCK_PROVENANCE="$STOCK_QCDT_DIR/y35a.qcdt.json"
           jq -e --arg run "$ROOT_TREE_RUN_ID" \
             '.package_source.workflow_run_id == $run and .rootfs.tree_archive.path == "root-tree.tar" and .rootfs.tree_sha256 == .rootfs.tree_archive.tree_sha256' \
             "$RUNNER_TEMP/root-tree/package-provenance.json" > /dev/null
@@ -602,6 +602,7 @@ jobs:
             --root-tree-metadata "$RUNNER_TEMP/root-tree/root-tree.metadata.json" \
             --stock-qcdt "$STOCK_QCDT" \
             --stock-qcdt-provenance "$STOCK_PROVENANCE" \
+            --stock-boot-image "$STOCK_BOOT" \
             --output "$RUNNER_TEMP/y35a-tf-root.apfs.img"
       - name: Upload TF/APFS intermediate
         uses: actions/upload-artifact@v4

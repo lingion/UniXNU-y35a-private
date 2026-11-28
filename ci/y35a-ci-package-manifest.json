@@ -62,6 +62,12 @@
     "kind": "pinned-ios12-system-volume-source",
     "artifact_name_pattern": "y35a-ios12-system-root-<package-run-id>",
     "artifact_retention_days": 7,
+    "writable_state_path_observation": "path metadata only; does not establish writability or a mounted Data volume",
+    "writable_state_paths": {
+      "paths": ["private/var", "private/var/db", "private/var/mobile"],
+      "allowed_entry_types": ["missing", "directory", "symlink", "file", "other"],
+      "allowed_resolution_status": ["missing", "resolved", "link", "not-a-directory", "symlink-loop", "escapes-volume"]
+    },
     "system_volume_complete": true,
     "paired_data_volume_present": false,
     "complete_ios_installation": false,

@@ -21,6 +21,15 @@ from verify_y35a_trustcache import combine_v1, parse_v1, verify_coverage
 import package_native
 
 
+WRITABLE_STATE_CONTRACT = {
+    "paths": ["private/var", "private/var/db", "private/var/mobile"],
+    "allowed_entry_types": ["missing", "directory", "symlink", "file", "other"],
+    "allowed_resolution_status": [
+        "missing", "resolved", "link", "not-a-directory", "symlink-loop", "escapes-volume",
+    ],
+}
+
+
 class PackageToolchainContractTest(unittest.TestCase):
     def test_package_workflow_only_downgrades_gcc_specific_dtc_warning(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
@@ -44,6 +53,20 @@ class PackageToolchainContractTest(unittest.TestCase):
         self.assertIn(".bootable == false", workflow)
         upload_step = workflow.split("- name: Upload metadata-preserving root-tree tar without outer ZIP", 1)[1].split("  tf-apfs-intermediate:", 1)[0]
         self.assertEqual(upload_step.count("name: root-tree.tar"), 1)
+
+    def test_tf_production_input_requires_tracked_original_stock_boot_bytes(self):
+        workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
+        self.assertIn("stock_boot_path:", workflow)
+        self.assertIn("evidence/y35a-20261102/stock-boot.img", workflow)
+        self.assertIn("inputs.root_tree_run_id != '' && inputs.stock_boot_path != ''", workflow)
+        self.assertIn("scripts/ci/extract_y35a_stock_qcdt.py", workflow)
+        self.assertIn("--stock-boot-image \"$STOCK_BOOT\"", workflow)
+        self.assertIn("--source-commit \"$SOURCE_COMMIT\"", workflow)
+        self.assertIn("--source-boot-repo-path \"$STOCK_BOOT_PATH\"", workflow)
+        self.assertIn("--stock-boot-image \"$STOCK_BOOT\" \\", workflow)
+        self.assertIn('git ls-files --error-unmatch "$STOCK_BOOT_PATH"', workflow)
+        self.assertIn("KNOWN_PD1502A_STOCK_BOOT_SHA256", (ROOT / "scripts/ci/build_y35a_tf_apfs_image.py").read_text())
+        self.assertIn("known_candidate_paths", (ROOT / "ci/manifests/r208-tf-apfs-package-contract.json").read_text())
 
     def test_full_system_volume_source_is_uploaded_as_a_separate_unqualified_artifact(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
@@ -197,6 +220,7 @@ class FullSystemRootSourceTest(unittest.TestCase):
             report = package_ci.build_full_system_root_source(
                 image, firmware, version, critical, writable_state_paths, whole, volume,
                 'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n', output,
+                WRITABLE_STATE_CONTRACT,
                 native_binding={"run_id": "native-1", "head_sha": "b" * 40,
                                 "kernel_sha256": "c" * 64},
                 package_source_sha="d" * 40, package_run_id="package-1",
@@ -205,6 +229,7 @@ class FullSystemRootSourceTest(unittest.TestCase):
             self.assertEqual(copied.read_bytes(), image.read_bytes())
             self.assertEqual(report["system_root_image"]["sha256"],
                              hashlib.sha256(image.read_bytes()).hexdigest())
+            self.assertEqual(report["schema_version"], 2)
             self.assertEqual(report["source_component"]["member"], "048-78033-095.dmg")
             self.assertIn("System/Library/CoreServices/SpringBoard.app/SpringBoard",
                           report["critical_system_files"])
@@ -221,8 +246,10 @@ class FullSystemRootSourceTest(unittest.TestCase):
                     "present": False,
                     "entry_type": "missing",
                     "symlink_target": None,
+                    "symlink_chain": [],
                     "resolved_target_exists": False,
                     "resolved_target_is_directory": False,
+                    "resolution_status": "missing",
                 }
                 for item in report["writable_state_paths"].values()
             ))
@@ -244,15 +271,21 @@ class FullSystemRootSourceTest(unittest.TestCase):
             self.assertEqual(writable_state_paths, {
                 "private/var": {
                     "present": True, "entry_type": "directory", "symlink_target": None,
+                    "symlink_chain": [],
                     "resolved_target_exists": True, "resolved_target_is_directory": True,
+                    "resolution_status": "resolved",
                 },
                 "private/var/db": {
                     "present": True, "entry_type": "directory", "symlink_target": None,
+                    "symlink_chain": [],
                     "resolved_target_exists": True, "resolved_target_is_directory": True,
+                    "resolution_status": "resolved",
                 },
                 "private/var/mobile": {
                     "present": True, "entry_type": "directory", "symlink_target": None,
+                    "symlink_chain": [],
                     "resolved_target_exists": True, "resolved_target_is_directory": True,
+                    "resolution_status": "resolved",
                 },
             })
 
@@ -272,6 +305,49 @@ class FullSystemRootSourceTest(unittest.TestCase):
             self.assertTrue(writable_state_paths["private/var"]["resolved_target_is_directory"])
             self.assertTrue(writable_state_paths["private/var/db"]["resolved_target_is_directory"])
 
+    def test_full_system_source_resolves_absolute_symlink_inside_image_root(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, system_root, firmware, _, _ = self.make_inputs(root)
+            (system_root / "private").mkdir()
+            (system_root / "private/var").symlink_to("/var")
+            _, _, writable_state_paths = package_ci.inspect_full_system_volume(
+                system_root, firmware["identity"],
+            )
+            var = writable_state_paths["private/var"]
+            self.assertEqual(var["entry_type"], "symlink")
+            self.assertEqual(var["symlink_target"], "/var")
+            self.assertEqual(var["resolution_status"], "missing")
+            self.assertEqual(var["symlink_chain"], [{"path": "private/var", "target": "/var"}])
+            self.assertFalse(var["resolved_target_exists"])
+            self.assertEqual(writable_state_paths["private/var/db"]["resolution_status"], "missing")
+
+            (system_root / "var/db").mkdir(parents=True)
+            (system_root / "var/mobile").mkdir(parents=True)
+            _, _, writable_state_paths = package_ci.inspect_full_system_volume(
+                system_root, firmware["identity"],
+            )
+            var = writable_state_paths["private/var"]
+            self.assertEqual(var["resolution_status"], "resolved")
+            self.assertTrue(var["resolved_target_is_directory"])
+            self.assertEqual(writable_state_paths["private/var/db"]["symlink_chain"],
+                             [{"path": "private/var", "target": "/var"}])
+
+    def test_full_system_source_marks_dangling_image_symlink(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, system_root, firmware, _, _ = self.make_inputs(root)
+            (system_root / "private").mkdir()
+            (system_root / "private/var").symlink_to("/missing-data-volume")
+            _, _, writable_state_paths = package_ci.inspect_full_system_volume(
+                system_root, firmware["identity"],
+            )
+            var = writable_state_paths["private/var"]
+            self.assertTrue(var["present"])
+            self.assertEqual(var["entry_type"], "symlink")
+            self.assertFalse(var["resolved_target_exists"])
+            self.assertEqual(var["resolution_status"], "missing")
+
     def test_workflow_rejects_missing_writable_state_path_inventory(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
         verification = workflow.split(
@@ -279,9 +355,23 @@ class FullSystemRootSourceTest(unittest.TestCase):
         )[1].split("- name: Upload pinned iOS System-volume source", 1)[0]
         self.assertIn('(.writable_state_paths | keys == ["private/var", "private/var/db", "private/var/mobile"])',
                       verification)
-        self.assertIn('(.entry_type | type) == "string"', verification)
+        self.assertIn('.entry_type == "missing" or .entry_type == "directory" or .entry_type == "symlink" or .entry_type == "file" or .entry_type == "other"',
+                      verification)
         self.assertIn('(.resolved_target_exists | type) == "boolean"', verification)
+        self.assertIn('.resolution_status == "symlink-loop" or .resolution_status == "escapes-volume"',
+                      verification)
+        self.assertIn('.entry_type == "symlink" or .symlink_target == null', verification)
+        self.assertIn('.present == (.entry_type != "missing")', verification)
+        self.assertIn('.resolved_target_is_directory == false or .resolved_target_exists == true', verification)
+        self.assertIn('.schema_version == 2', verification)
         self.assertIn("does not establish writability or a mounted Data volume", verification)
+
+    def test_package_manifest_declares_writable_state_observation_contract(self):
+        manifest = json.loads((ROOT / "ci/y35a-ci-package-manifest.json").read_text())
+        system = manifest["system_root_source"]
+        self.assertEqual(system["writable_state_path_observation"],
+                         "path metadata only; does not establish writability or a mounted Data volume")
+        self.assertEqual(system["writable_state_paths"], WRITABLE_STATE_CONTRACT)
 
     def test_full_system_source_rejects_component_hash_mismatch(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -295,10 +385,36 @@ class FullSystemRootSourceTest(unittest.TestCase):
                 package_ci.build_full_system_root_source(
                     image, firmware, version, critical, writable_state_paths, whole, volume,
                     'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n', root / "artifact",
+                    WRITABLE_STATE_CONTRACT,
                     native_binding={"run_id": "native-1", "head_sha": "b" * 40,
                                     "kernel_sha256": "c" * 64},
                     package_source_sha="d" * 40, package_run_id="package-1",
                 )
+
+    def test_writable_state_inventory_rejects_unknown_and_inconsistent_entries(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, system_root, firmware, _, _ = self.make_inputs(root)
+            _, _, inventory = package_ci.inspect_full_system_volume(system_root, firmware["identity"])
+            invalid_type = json.loads(json.dumps(inventory))
+            invalid_type["private/var"]["entry_type"] = "bogus"
+            with self.assertRaisesRegex(ValueError, "invalid writable-state observation"):
+                package_ci.validate_writable_state_inventory(invalid_type, WRITABLE_STATE_CONTRACT)
+
+            inconsistent = json.loads(json.dumps(inventory))
+            inconsistent["private/var"]["present"] = True
+            with self.assertRaisesRegex(ValueError, "presence disagrees"):
+                package_ci.validate_writable_state_inventory(inconsistent, WRITABLE_STATE_CONTRACT)
+
+            unexpected_link = json.loads(json.dumps(inventory))
+            unexpected_link["private/var"]["symlink_target"] = "/var"
+            with self.assertRaisesRegex(ValueError, "symlink target disagrees"):
+                package_ci.validate_writable_state_inventory(unexpected_link, WRITABLE_STATE_CONTRACT)
+
+            missing_parent = json.loads(json.dumps(inventory))
+            missing_parent["private/var"]["present"] = True
+            with self.assertRaisesRegex(ValueError, "presence disagrees"):
+                package_ci.validate_writable_state_inventory(missing_parent, WRITABLE_STATE_CONTRACT)
 
 def synthetic_fdt(size=128):
     data = bytearray(size)

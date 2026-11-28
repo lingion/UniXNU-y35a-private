@@ -49,6 +49,34 @@ def validate_contract(contract: dict) -> list[str]:
         failures.append("available stock-qcdt input must have a SHA-256")
     if stock.get("status") == "unavailable" and stock.get("sha256") is not None:
         failures.append("unavailable stock-qcdt input cannot have a SHA-256")
+    required_boot = stock.get("required_source_boot", {})
+    if required_boot.get("status") != "historically-pinned-file-missing":
+        failures.append("stock-QCDT source-boot availability status must be explicit")
+    if required_boot.get("bytes") != 67108864:
+        failures.append("stock PD1502A boot source must bind the historical full-partition size")
+    if required_boot.get("sha256") != "92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012":
+        failures.append("stock PD1502A boot source must bind the historical full-partition SHA-256")
+    if required_boot.get("user_input_path") != "evidence/y35a-20261102/stock-boot.img":
+        failures.append("stock PD1502A full-boot user input path must be fixed")
+    if required_boot.get("transport") != "tracked-file-in-exact-dispatch-commit":
+        failures.append("stock PD1502A boot input must be bound to the exact workflow commit")
+    if required_boot.get("ci_generated_outputs") != ["y35a.qcdt", "y35a.qcdt.json"]:
+        failures.append("stock-QCDT intake must generate the QCDT bytes and provenance in CI")
+    if required_boot.get("qcdt_must_be_extracted_from_android_header_dt_range") is not True:
+        failures.append("stock QCDT must be byte-matched to the Android header dt range")
+    if required_boot.get("board_tuple") != [206, 8, 23]:
+        failures.append("stock QCDT intake must bind the PD1502A board tuple")
+
+    root_layout = contract.get("root_layout", {})
+    if (root_layout.get("target_product_version") != "12.4.1"
+            or root_layout.get("target_build") != "16G102"):
+        failures.append("root-layout contract must remain bound to iOS 12.4.1 / 16G102")
+    if root_layout.get("apfs_system_data_volume_group_required") is not False:
+        failures.append("do not require iOS 13+ System/Data volume groups for the iOS 12.4.1 target")
+    if root_layout.get("legacy_root_and_private_var_initialization") != "unverified":
+        failures.append("legacy iOS 12 root and private/var initialization must remain unverified")
+    if root_layout.get("status") != "target-specific-root-layout-pending-ci-source-review":
+        failures.append("target-specific root-layout status must remain explicit")
 
     image = contract.get("tf_image", {})
     if image.get("partition_scheme") != "GPT":

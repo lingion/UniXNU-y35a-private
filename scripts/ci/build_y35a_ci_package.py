@@ -8,7 +8,7 @@ from contextlib import contextmanager
 import hashlib
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import plistlib
 import platform
 import re
@@ -71,6 +71,7 @@ PACKAGE_SOURCE_FILES = (
     "ci/manifests/r208-tf-apfs-package-contract.json",
     "scripts/ci/build_y35a_ci_package.py",
     "scripts/ci/build_y35a_tf_apfs_image.py",
+    "scripts/ci/extract_y35a_stock_qcdt.py",
     "scripts/ci/build_y35a_qcdt.py",
     "scripts/ci/extract_ios12_package_inputs.py",
     "scripts/ci/patch_xnu_host_tools.py",
@@ -529,8 +530,78 @@ def build_metadata_preserving_root_tree_archive(root_tree: Path, archive_path: P
     }
 
 
+def inspect_image_path(root: Path, relative: str, *, follow_final: bool) -> dict:
+    """Inspect a path in a mounted image namespace without following links on the host."""
+    parts = list(PurePosixPath(relative).parts)
+    if not parts or PurePosixPath(relative).is_absolute() or any(part in ("", ".", "..") for part in parts):
+        raise ValueError(f"invalid image-relative path: {relative!r}")
+    pending = list(parts)
+    resolved: list[str] = []
+    chain = []
+    symlinks_seen = 0
+    leaf_target = None
+    while pending:
+        part = pending.pop(0)
+        if part == "..":
+            if not resolved:
+                return {"exists": False, "is_directory": False, "entry_type": "missing",
+                        "symlink_target": leaf_target, "symlink_chain": chain,
+                        "resolution_status": "escapes-volume"}
+            resolved.pop()
+            continue
+        if part in ("", ".", "/"):
+            continue
+        candidate = root.joinpath(*resolved, part)
+        try:
+            mode = candidate.lstat().st_mode
+        except FileNotFoundError:
+            return {"exists": False, "is_directory": False, "entry_type": "missing",
+                    "symlink_target": leaf_target, "symlink_chain": chain,
+                    "resolution_status": "missing"}
+        except PermissionError as error:
+            raise ValueError(f"cannot inspect System image path without permission: {relative}") from error
+        if not stat.S_ISLNK(mode):
+            resolved.append(part)
+            if not pending:
+                return {"exists": True, "is_directory": stat.S_ISDIR(mode),
+                        "entry_type": "directory" if stat.S_ISDIR(mode) else
+                        "file" if stat.S_ISREG(mode) else "other",
+                        "symlink_target": leaf_target, "symlink_chain": chain,
+                        "resolution_status": "resolved"}
+            if not stat.S_ISDIR(mode):
+                return {"exists": False, "is_directory": False, "entry_type": "missing",
+                        "symlink_target": leaf_target, "symlink_chain": chain,
+                        "resolution_status": "not-a-directory"}
+            continue
+
+        try:
+            target = os.readlink(candidate)
+        except PermissionError as error:
+            raise ValueError(f"cannot read System image symlink without permission: {relative}") from error
+        is_leaf = not pending
+        if is_leaf and not follow_final:
+            return {"exists": True, "is_directory": False, "entry_type": "symlink",
+                    "symlink_target": target, "symlink_chain": chain,
+                    "resolution_status": "link"}
+        if is_leaf:
+            leaf_target = target
+        symlinks_seen += 1
+        if symlinks_seen > 40:
+            return {"exists": False, "is_directory": False, "entry_type": "missing",
+                    "symlink_target": leaf_target, "symlink_chain": chain,
+                    "resolution_status": "symlink-loop"}
+        chain.append({"path": "/".join(resolved + [part]), "target": target})
+        target_parts = list(PurePosixPath(target).parts)
+        if PurePosixPath(target).is_absolute():
+            resolved = []
+        pending = target_parts + pending
+    return {"exists": True, "is_directory": True, "entry_type": "directory",
+            "symlink_target": leaf_target, "symlink_chain": chain,
+            "resolution_status": "resolved"}
+
+
 def inspect_full_system_volume(system_root: Path, expected_identity: dict) -> tuple[dict, dict, dict]:
-    """Capture version and critical-file hashes while the source APFS volume is mounted."""
+    """Capture version, critical-file hashes and image-root path metadata while mounted."""
     system_root = system_root.resolve(strict=True)
     version_path = system_root / "System/Library/CoreServices/SystemVersion.plist"
     version = plistlib.loads(version_path.read_bytes())
@@ -551,29 +622,60 @@ def inspect_full_system_volume(system_root: Path, expected_identity: dict) -> tu
         critical_files[relative] = {"bytes": path.stat().st_size, "sha256": sha256(path)}
     writable_state_paths = {}
     for relative in ("private/var", "private/var/db", "private/var/mobile"):
-        path = system_root / relative
-        try:
-            entry_mode = path.lstat().st_mode
-        except FileNotFoundError:
-            writable_state_paths[relative] = {
-                "present": False,
-                "entry_type": "missing",
-                "symlink_target": None,
-                "resolved_target_exists": False,
-                "resolved_target_is_directory": False,
-            }
-            continue
-        is_symlink = stat.S_ISLNK(entry_mode)
+        entry = inspect_image_path(system_root, relative, follow_final=False)
+        target = (inspect_image_path(system_root, relative, follow_final=True)
+                  if entry["entry_type"] == "symlink" else entry)
         writable_state_paths[relative] = {
-            "present": True,
-            "entry_type": "symlink" if is_symlink else "directory" if stat.S_ISDIR(entry_mode)
-            else "file" if stat.S_ISREG(entry_mode) else "other",
-            "symlink_target": os.readlink(path) if is_symlink else None,
-            "resolved_target_exists": path.exists(),
-            "resolved_target_is_directory": path.is_dir(),
+            "present": entry["exists"],
+            "entry_type": entry["entry_type"],
+            "symlink_target": entry["symlink_target"],
+            "symlink_chain": target["symlink_chain"],
+            "resolved_target_exists": target["exists"],
+            "resolved_target_is_directory": target["is_directory"],
+            "resolution_status": target["resolution_status"],
         }
     return ({"product_version": version["ProductVersion"],
              "build": version["ProductBuildVersion"]}, critical_files, writable_state_paths)
+
+
+def validate_writable_state_inventory(inventory: dict, contract: dict) -> None:
+    expected = contract.get("paths")
+    allowed_types = set(contract.get("allowed_entry_types", []))
+    allowed_resolution = set(contract.get("allowed_resolution_status", []))
+    if not isinstance(expected, list) or not expected or len(expected) != len(set(expected)):
+        raise ValueError("System source manifest has an invalid writable-state path inventory")
+    if set(inventory) != set(expected):
+        raise ValueError("writable-state path inventory keys differ from the package manifest")
+    if not allowed_types or not allowed_resolution:
+        raise ValueError("System source manifest has incomplete writable-state enums")
+    for path, item in inventory.items():
+        if (not isinstance(item, dict)
+                or not isinstance(item.get("present"), bool)
+                or item.get("entry_type") not in allowed_types
+                or item.get("resolution_status") not in allowed_resolution
+                or not isinstance(item.get("resolved_target_exists"), bool)
+                or not isinstance(item.get("resolved_target_is_directory"), bool)
+                or not isinstance(item.get("symlink_chain"), list)):
+            raise ValueError(f"invalid writable-state observation for {path}")
+        target = item.get("symlink_target")
+        if item["entry_type"] == "symlink":
+            if not isinstance(target, str):
+                raise ValueError(f"symlink target is missing for writable-state path {path}")
+        elif target is not None:
+            raise ValueError(f"non-symlink writable-state path has a link target: {path}")
+        if item["present"] != (item["entry_type"] != "missing"):
+            raise ValueError(f"writable-state entry presence disagrees with its type: {path}")
+        if not item["present"] and (item["entry_type"] != "missing"
+                                     or item["resolved_target_exists"]
+                                     or item["resolved_target_is_directory"]):
+            raise ValueError(f"missing writable-state path has inconsistent resolution: {path}")
+        if (item["entry_type"] == "symlink") != isinstance(target, str):
+            raise ValueError(f"writable-state symlink target disagrees with entry type: {path}")
+        if item["resolved_target_is_directory"] and not item["resolved_target_exists"]:
+            raise ValueError(f"writable-state path is directory but target is absent: {path}")
+        if item["resolution_status"] in ("escapes-volume", "symlink-loop", "missing", "not-a-directory") \
+                and item["resolved_target_exists"]:
+            raise ValueError(f"unresolved writable-state path is marked present: {path}")
 
 
 def build_full_system_root_source(
@@ -586,6 +688,7 @@ def build_full_system_root_source(
     volume_info: dict,
     partition_map_output: str,
     output_dir: Path,
+    writable_state_contract: dict,
     *,
     native_binding: dict,
     package_source_sha: str,
@@ -625,6 +728,7 @@ def build_full_system_root_source(
     }
     if set(critical_files) != required_critical:
         raise ValueError("full System volume critical-file inventory is incomplete")
+    validate_writable_state_inventory(writable_state_paths, writable_state_contract)
 
     parent = volume_info.get("ParentWholeDisk") or volume_info.get("ParentWholeDiskDevice")
     if not parent:
@@ -642,7 +746,7 @@ def build_full_system_root_source(
         raise ValueError("full-system root source artifact differs from the pinned System DMG")
 
     report = {
-        "schema_version": 1,
+        "schema_version": 2,
         "status": "full-system-volume-source-verified",
         "candidate_kind": "pinned-ios12-system-volume-source",
         "package_source": {
@@ -743,6 +847,7 @@ def build_package(args) -> dict:
         firmware_dir = work / "firmware"
         firmware_report = extract_inputs(args.ipsw.resolve(strict=True), firmware_dir, config_path)
         full_system_root_source_report = None
+        system_root_contract = config.get("system_root_source", {})
 
         qcdt_path = work / "y35a.qcdt"
         dts = ROOT / config["board"]["dts_path"]
@@ -781,6 +886,7 @@ def build_package(args) -> dict:
                 system_volume_info,
                 pmap,
                 Path(system_root_output_dir),
+                system_root_contract.get("writable_state_paths", {}),
                 native_binding=native_binding,
                 package_source_sha=args.package_source_sha,
                 package_run_id=args.package_run_id,
@@ -930,6 +1036,10 @@ def build_package(args) -> dict:
                     "image_sha256": full_system_root_source_report["system_root_image"]["sha256"],
                     "image_bytes": full_system_root_source_report["system_root_image"]["bytes"],
                     "report_sha256": sha256(Path(system_root_output_dir) / "system-root-source.json"),
+                    "writable_state_path_observation": full_system_root_source_report[
+                        "writable_state_path_observation"
+                    ],
+                    "writable_state_paths": full_system_root_source_report["writable_state_paths"],
                     "scope": full_system_root_source_report["scope"],
                     "qualification": full_system_root_source_report["qualification"],
                 }

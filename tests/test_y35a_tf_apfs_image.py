@@ -14,6 +14,7 @@ from unittest import mock
 
 
 ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "scripts/ci"))
 SPEC = importlib.util.spec_from_file_location(
     "build_y35a_tf_apfs_image",
     ROOT / "scripts/ci/build_y35a_tf_apfs_image.py",
@@ -21,6 +22,8 @@ SPEC = importlib.util.spec_from_file_location(
 MODULE = importlib.util.module_from_spec(SPEC)
 assert SPEC.loader is not None
 SPEC.loader.exec_module(MODULE)
+import extract_y35a_stock_qcdt as stock_qcdt_intake
+import extract_y35a_stock_qcdt as stock_qcdt_intake
 
 
 class TfApfsImageInputTest(unittest.TestCase):
@@ -141,6 +144,35 @@ class TfApfsImageInputTest(unittest.TestCase):
             "qcdt_entry": {"platform_id": 206, "variant_id": 8, "subtype_id": 23},
         }))
 
+    def parse_stock_fixture(self, qcdt_path: Path, provenance_path: Path):
+        qcdt_bytes = qcdt_path.read_bytes()
+        boot_path = qcdt_path.with_name("stock-boot.img")
+        boot_path.write_bytes(b"fixture placeholder; extraction helper is mocked")
+        provenance = json.loads(provenance_path.read_text())
+        provenance.update({
+            "source_boot_path": boot_path.name,
+            "source_boot_sha256": MODULE.KNOWN_PD1502A_STOCK_BOOT_SHA256,
+            "source_boot_bytes": MODULE.KNOWN_PD1502A_STOCK_BOOT_BYTES,
+            "source_boot_version": "PD1502A_A_1.18.0",
+            "source_repository_commit": "a" * 40,
+            "source_boot_path": "evidence/y35a-20261102/stock-boot.img",
+            "qcdt_offset": 2048,
+            "qcdt_bytes": len(qcdt_bytes),
+            "sha256": hashlib.sha256(qcdt_bytes).hexdigest(),
+        })
+        provenance_path.write_text(json.dumps(provenance))
+        extracted = {
+            "boot_path": boot_path.name,
+            "boot_bytes": MODULE.KNOWN_PD1502A_STOCK_BOOT_BYTES,
+            "boot_sha256": MODULE.KNOWN_PD1502A_STOCK_BOOT_SHA256,
+            "qcdt_offset": 2048,
+            "qcdt_bytes": len(qcdt_bytes),
+            "qcdt_sha256": hashlib.sha256(qcdt_bytes).hexdigest(),
+            "qcdt_bytes_data": qcdt_bytes,
+        }
+        with mock.patch.object(MODULE, "extract_qcdt_from_pd1502a_boot_image", return_value=extracted):
+            return MODULE.parse_stock_qcdt(qcdt_path, provenance_path, boot_path)
+
     def test_derived_qcdt_is_accepted_only_for_offline_control(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "y35a.qcdt"
@@ -176,7 +208,7 @@ class TfApfsImageInputTest(unittest.TestCase):
                 "sha256": MODULE.hashlib.sha256(path.read_bytes()).hexdigest(),
             }))
             with self.assertRaisesRegex(ValueError, "QCDT magic"):
-                MODULE.parse_stock_qcdt(path, provenance)
+                self.parse_stock_fixture(path, provenance)
 
     def test_qcdt_table_range_is_validated(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -194,7 +226,7 @@ class TfApfsImageInputTest(unittest.TestCase):
                     "origin": "stock-boot-image", "sha256_scope": "qcdt-bytes",
                     "sha256": MODULE.hashlib.sha256(path.read_bytes()).hexdigest(),
                 }))
-                MODULE.parse_stock_qcdt(path, provenance)
+                self.parse_stock_fixture(path, provenance)
 
     def test_non_y35a_tuple_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -212,7 +244,7 @@ class TfApfsImageInputTest(unittest.TestCase):
                 "sha256": MODULE.hashlib.sha256(path.read_bytes()).hexdigest(),
             }))
             with self.assertRaisesRegex(ValueError, "Y35A board tuple"):
-                MODULE.parse_stock_qcdt(path, provenance)
+                self.parse_stock_fixture(path, provenance)
 
     def test_derived_qcdt_provenance_is_rejected(self):
         with tempfile.TemporaryDirectory() as directory:
@@ -226,6 +258,90 @@ class TfApfsImageInputTest(unittest.TestCase):
             }))
             with self.assertRaisesRegex(ValueError, "stock-qcdt"):
                 MODULE.parse_stock_qcdt(path, provenance)
+
+    def test_stock_qcdt_is_extracted_from_the_pinned_full_boot_image(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            qcdt_path = root / "stock.qcdt"
+            provenance_path = root / "stock.qcdt.json"
+            self.derived_qcdt(qcdt_path, provenance_path)
+            qcdt_bytes = qcdt_path.read_bytes()
+            page_size = 2048
+            boot_path = root / "stock-boot.img"
+            qcdt_offset = page_size * 2
+            with boot_path.open("wb") as stream:
+                stream.truncate(MODULE.KNOWN_PD1502A_STOCK_BOOT_BYTES)
+                stream.write(b"ANDROID!")
+                stream.seek(8)
+                stream.write(struct.pack("<10I", 1, 0, 0, 0, 0, 0, 0,
+                                         page_size, len(qcdt_bytes), 0))
+                stream.seek(qcdt_offset)
+                stream.write(qcdt_bytes)
+            boot_sha = MODULE.sha256(boot_path)
+            provenance = json.loads(provenance_path.read_text())
+            provenance.update({
+                "source_type": "stock-qcdt",
+                "board": "PD1502A",
+                "origin": "stock-boot-image",
+                "sha256_scope": "qcdt-bytes",
+                "sha256": hashlib.sha256(qcdt_bytes).hexdigest(),
+                "source_boot_path": boot_path.name,
+                "source_boot_sha256": boot_sha,
+                "source_boot_bytes": MODULE.KNOWN_PD1502A_STOCK_BOOT_BYTES,
+                "source_boot_version": "PD1502A_A_1.18.0",
+                "source_repository_commit": "b" * 40,
+                "source_boot_path": "evidence/y35a-20261102/stock-boot.img",
+                "qcdt_offset": qcdt_offset,
+                "qcdt_bytes": len(qcdt_bytes),
+            })
+            provenance_path.write_text(json.dumps(provenance))
+            with mock.patch.object(MODULE, "KNOWN_PD1502A_STOCK_BOOT_SHA256", boot_sha):
+                parsed = MODULE.parse_stock_qcdt(qcdt_path, provenance_path, boot_path)
+            self.assertEqual(parsed["stock_boot_source"]["sha256"], boot_sha)
+            self.assertEqual(parsed["stock_boot_source"]["qcdt_offset"], qcdt_offset)
+
+    def test_stock_provenance_without_original_boot_image_is_rejected(self):
+        with tempfile.TemporaryDirectory() as directory:
+            qcdt_path = Path(directory) / "stock.qcdt"
+            provenance_path = Path(directory) / "stock.json"
+            self.derived_qcdt(qcdt_path, provenance_path)
+            provenance = json.loads(provenance_path.read_text())
+            provenance.update({"source_type": "stock-qcdt", "board": "PD1502A",
+                               "origin": "stock-boot-image", "sha256_scope": "qcdt-bytes",
+                               "sha256": provenance["qcdt_sha256"]})
+            provenance_path.write_text(json.dumps(provenance))
+            with self.assertRaisesRegex(ValueError, "original full stock boot image"):
+                MODULE.parse_stock_qcdt(qcdt_path, provenance_path)
+
+    def test_stock_qcdt_intake_writes_hash_bound_qcdt_and_provenance(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            boot_path = root / "stock-boot.img"
+            boot_path.write_bytes(b"user-provided pinned boot source")
+            output = root / "intake"
+            qcdt_bytes = b"QCDT extracted bytes"
+            source = {
+                "boot_path": boot_path.name,
+                "boot_bytes": MODULE.KNOWN_PD1502A_STOCK_BOOT_BYTES,
+                "boot_sha256": MODULE.KNOWN_PD1502A_STOCK_BOOT_SHA256,
+                "qcdt_offset": 4096,
+                "qcdt_bytes": len(qcdt_bytes),
+                "qcdt_sha256": hashlib.sha256(qcdt_bytes).hexdigest(),
+                "qcdt_bytes_data": qcdt_bytes,
+            }
+            with mock.patch.object(stock_qcdt_intake,
+                                   "extract_qcdt_from_pd1502a_boot_image", return_value=source):
+                result = stock_qcdt_intake.extract(
+                    boot_path, output, "c" * 40, "evidence/y35a-20261102/stock-boot.img",
+                )
+            self.assertEqual(result["qcdt_path"].read_bytes(), qcdt_bytes)
+            provenance = json.loads(result["provenance_path"].read_text())
+            self.assertEqual(provenance["source_boot_sha256"], source["boot_sha256"])
+            self.assertEqual(provenance["source_boot_bytes"], source["boot_bytes"])
+            self.assertEqual(provenance["source_boot_version"], "PD1502A_A_1.18.0")
+            self.assertEqual(provenance["source_repository_commit"], "c" * 40)
+            self.assertEqual(provenance["source_boot_path"], "evidence/y35a-20261102/stock-boot.img")
+            self.assertEqual(provenance["qcdt_offset"], source["qcdt_offset"])
 
     def test_gpt_apfs_relation_is_required(self):
         with self.assertRaisesRegex(ValueError, "GPT partition map"):
