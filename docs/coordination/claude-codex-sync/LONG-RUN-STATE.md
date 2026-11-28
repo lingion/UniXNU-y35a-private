@@ -1152,3 +1152,15 @@ Fallback v2 source candidate is now tracked at `patches/xnu/native-y35a-tf-emmc-
 
 
 ## R205b queue (historical)
+
+## 2026-11-28 current R208 CI state: full System source, diagnostic package only
+
+Final Y35A iOS 12.4.1 goal remains unfulfilled. D1/D2/D3 are `IN_PROGRESS / NOT_MET`; no current Y35A iOS boot or interactive SpringBoard witness exists. `device_run_allowed=false`; no device/TF/USB/fastboot/adb/serial or persistent write occurred.
+
+Native run `46086948983` on commit `332843f94ee4eb5cb541a5b956f1c75ba3172eb8` succeeded through build, static verifier and schema-2 kernel artifact contract. Pinned XNU is `494ffe1c29d37ca720c37328feb83069c9641b67`; fallback-v3 manifest SHA `f967a2fe75a10c83ac8ec24d55284b1391d9c27bfb58514d42e5dcb30fbc1651`. Kernel SHA `ca948860a1e99542d2e4d8e45498a45ecbf1b454d64d672f124415504fdc0137`, 12,828,688 bytes. Kernel artifact ID `15239965878`, digest `sha256:f388776022526f45628e1d7593adc247a97198eabfbc4a1dece5782402ab5578`.
+
+Package run `46091804871`, exact native artifact input above, succeeded. RAM diagnostic artifact ID `15241627599`, digest `sha256:715d81cf98d6bb040f75d52ac0486fbd7a5ebceb2683f8fa1f6e88dc6fca9612`; archive SHA256SUMS 28/28 matched. Root tree remains a launchd diagnostic closure with 58 Mach-O files. TrustCache covers the staged closure; SpringBoard is not included, touch not runtime validated, and `runtime_qualified=false`.
+
+The package run also uploaded a byte-identical full IPSW System component source as artifact `y35a-ios12-system-root-46091804871`, ID `15241677649`, digest `sha256:c74e86b815e3a44b618235cad7e856b882d4ccaae2fe37e77b3bae0de67bf66d`, size 2,826,120,533 bytes. Its CI report binds IPSW 16G102/j96ap, OS component hash, APFS volume/GPT relation and measured critical-file hashes including SpringBoard. Scope explicitly excludes a paired Data volume and Y35A/runtime qualification. A local large artifact download was stopped at 1.7 GiB; the partial ZIP was removed, so rely on the successful CI-side SHA256SUMS/report gate and artifact API digest, not a local ZIP digest.
+
+Remaining: implement/package a paired writable Data-volume source/image and `/private/var` mount contract; replace the diagnostic RAM root with a complete boot layout; obtain stock PD1502A QCDT/boot bytes with board/source/hash provenance; link and validate Y35A root selection/eMMC fallback; bind real TF card/image and run the authorized device gates. Historical stock boot record is 67,108,864 bytes and SHA `92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012`; current file is unavailable. Do not access `/Volumes/Mobile` after its prior I/O errors. All build/test/package validation stays on GitHub Actions; no local UniXNU build.
