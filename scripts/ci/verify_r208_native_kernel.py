@@ -36,6 +36,38 @@ def tree_sha256(root: Path) -> str:
     return digest.hexdigest()
 
 
+def fallback_v3_is_applied(provenance: dict) -> bool:
+    """Require the candidate patch to be both declared and staged by digest."""
+    relative_path = "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch"
+    suffix = "/" + relative_path
+    source_patches = provenance.get("inputs", {}).get("source_diff", [])
+    declared = [
+        item for item in source_patches
+        if isinstance(item, dict)
+        and str(item.get("path", "")).replace("\\", "/").endswith((relative_path, suffix))
+    ]
+    if len(declared) > 1:
+        raise ValueError("fallback-v3 source patch is declared more than once")
+    if not declared:
+        return False
+    patch_sha = declared[0].get("sha256")
+    if (not isinstance(patch_sha, str) or len(patch_sha) != 64
+            or any(ch not in "0123456789abcdef" for ch in patch_sha)):
+        raise ValueError("fallback-v3 source patch has no valid SHA-256")
+
+    basename = relative_path.rsplit("/", 1)[1]
+    staged_patches = provenance.get("staging", {}).get("applied_patches", [])
+    applied = [
+        item for item in staged_patches
+        if isinstance(item, dict)
+        and str(item.get("path", "")).replace("\\", "/").rsplit("/", 1)[-1].endswith(basename)
+        and item.get("sha256") == patch_sha
+    ]
+    if len(applied) != 1:
+        raise ValueError("fallback-v3 source patch is not uniquely bound to staged applied patches")
+    return True
+
+
 def verify(kernel: Path, provenance_path: Path, driver_manifest_path: Path,
            staged_source_path: Path, *, nm_symbols: set[str] | None = None) -> dict:
     kernel = kernel.resolve(strict=True)
@@ -58,11 +90,7 @@ def verify(kernel: Path, provenance_path: Path, driver_manifest_path: Path,
     if "-DXNU_Y35A_PHASE_A_AMFI=1" not in provenance.get("build_profile", {}).get("other_cflags", []):
         raise ValueError("Phase-A AMFI macro is absent from recorded build flags")
     build_profile = provenance.get("build_profile", {})
-    source_patches = provenance.get("inputs", {}).get("source_diff", [])
-    fallback_v3_present = any(
-        item.get("path") == "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch"
-        for item in source_patches if isinstance(item, dict)
-    )
+    fallback_v3_present = fallback_v3_is_applied(provenance)
     fallback_macro = "-DXNU_Y35A_STORAGE_FALLBACK=1"
     if fallback_v3_present and (
             build_profile.get("y35a_storage_fallback") is not True

@@ -392,3 +392,22 @@
 - 证据：Run `46081848963`, commit `e132c36014ab75090883deceff223ddacd38b0d0`, package validate job `140782400731`; failure occurred before TF/APFS and package jobs, with no package artifact.
 - 自动化入口：`patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch`, `scripts/ci/verify_r208_fallback_v3_source.py` and the package validation workflow.
 - 下一次触发：Any patch that moves a declaration or inserts lines before later hunks in a pinned external source tree.
+
+## L-2026-11-28-17 native static verifier must use the emitted provenance shape
+
+- 现象：Native run `46084535928` completed XNU `installhdrs` and `build`, produced a 12,828,688-byte ARM64 kernel, then failed only at `kernel-static-verification` with `fallback build macro is enabled without the fallback-v3 source patch`.
+- 根因：The verifier searched `provenance.inputs.source_diff` for an exact repository-relative path. The native builder records absolute repository paths in that list and records copied/applied patch identities separately under `provenance.staging.applied_patches`; the verifier therefore missed a patch that was both declared and applied.
+- 影响：The kernel candidate exists but has no passing static-verification or authenticated kernel-artifact contract. Package consumption and device qualification remain blocked.
+- 正确做法：Normalize repository-relative versus absolute source paths, require exactly one candidate entry with a valid SHA, and match that SHA to exactly one staged applied-patch record. Keep macro/patched-source presence checks fail-closed, and test both absolute and repository-relative records plus mismatched staged digests.
+- 证据：Run `46084535928`, commit `edcaa37a9f2dc90b6e2c3998c0b7332f0bb5780b`; candidate artifact ID `15238194552`, digest `sha256:9a31f8fe0f4cd588f3dbcc27bacec34f878a3fb13d0d6cb076733d55b701928c`; build artifact ID `15238029833`, digest `sha256:8e463b250a2415be36f1a08cf0d65515f28baaa99aaa75736123c192d07ca07f`; diagnostics artifact ID `15238309418`, digest `sha256:6bdeadc6629ffe21a18c0bfc66d245939b9a751f1391f266f9fe480e8a8df9ff`.
+- 自动化入口：`scripts/ci/verify_r208_native_kernel.py`, `tests/test_r208_native_kernel_gate.py`, the candidate native manifest/provenance, and GitHub Actions validation/native workflows.
+- 下一次触发：Any static gate that infers applied source changes from provenance fields emitted by a separate build stage.
+
+## L-2026-11-28-18 a linked candidate is not authenticated until its post-link gate passes
+
+- 现象：Run `46084535928` passed both native `installhdrs` and `build`, preserved an ARM64 kernel candidate, then ended failed because the post-link verifier rejected the fallback macro/patch relationship. The kernel artifact-contract step was skipped.
+- 根因：The verifier compared a repository-relative patch path against an absolute path in `inputs.source_diff`, and did not cross-check the emitted `staging.applied_patches` digest. The kernel bytes and build stages exist, but the run has no passing static gate.
+- 正确做法：Preserve the failed-run kernel and build artifacts. Fix the verifier to bind the normalized declared patch path and SHA to exactly one staged applied-patch record, validate it with CI, and rerun native only when the saved candidate cannot be authenticated under the existing provenance contract. Never relabel the original failed provenance as complete.
+- 证据：Run `46084535928`, commit `edcaa37a9f2dc90b6e2c3998c0b7332f0bb5780b`; candidate artifact ID `15238194552`, digest `sha256:9a31f8fe0f4cd588f3dbcc27bacec34f878a3fb13d0d6cb076733d55b701928c`; build artifact ID `15238029833`, digest `sha256:8e463b250a2415be36f1a08cf0d65515f28baaa99aaa75736123c192d07ca07f`; static verifier log reports `fallback build macro is enabled without the fallback-v3 source patch`.
+- 自动化入口：`scripts/ci/verify_r208_native_kernel.py`, `tests/test_r208_native_kernel_gate.py`, and `.github/workflows/y35a-ci-package.yml` / `.github/workflows/unixnu-native-build.yml`.
+- 下一次触发：Any native build where link completes but a later static or artifact-contract gate fails.

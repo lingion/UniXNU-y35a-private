@@ -65,11 +65,16 @@ class R208NativeKernelGateTests(unittest.TestCase):
                 },
                 "inputs": {
                     "source_diff": [{
-                        "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
+                        "path": "/repo/patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
+                        "sha256": "d" * 64,
                     }],
                     "driver_archives": [{"sha256": "a" * 64}],
                     "driver_manifest": {"sha256": driver_manifest_sha},
                 },
+                "staging": {"applied_patches": [{
+                    "path": str(root / "inputs/04-native-y35a-tf-emmc-root-fallback-v3.patch"),
+                    "sha256": "d" * 64,
+                }]},
             }))
             with mock.patch.object(MODULE, "parse_macho", return_value={
                 "base": 0xfffffff007004000, "entry": 0xfffffff007004100,
@@ -102,6 +107,34 @@ class R208NativeKernelGateTests(unittest.TestCase):
                     MODULE.verify(
                         kernel, provenance, driver_manifest, staged_source,
                         nm_symbols={"_native_sdcard_started", "_native_sdcard_ready"})
+
+    def test_fallback_patch_must_match_the_staged_applied_patch_digest(self):
+        with tempfile.TemporaryDirectory() as temp:
+            provenance = {
+                "inputs": {"source_diff": [{
+                    "path": "/repo/patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
+                    "sha256": "d" * 64,
+                }]},
+                "staging": {"applied_patches": [{
+                    "path": "/run/inputs/04-native-y35a-tf-emmc-root-fallback-v3.patch",
+                    "sha256": "e" * 64,
+                }]},
+            }
+            with self.assertRaisesRegex(ValueError, "not uniquely bound"):
+                MODULE.fallback_v3_is_applied(provenance)
+
+    def test_fallback_patch_binding_accepts_repo_relative_declaration(self):
+        provenance = {
+            "inputs": {"source_diff": [{
+                "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
+                "sha256": "d" * 64,
+            }]},
+            "staging": {"applied_patches": [{
+                "path": "/run/inputs/04-native-y35a-tf-emmc-root-fallback-v3.patch",
+                "sha256": "d" * 64,
+            }]},
+        }
+        self.assertTrue(MODULE.fallback_v3_is_applied(provenance))
 
     def test_rejects_wrong_kernel_bytes_or_missing_force_loaded_symbol(self):
         with tempfile.TemporaryDirectory() as temp:

@@ -26,6 +26,7 @@ on:
       - 'scripts/ci/prepare_native_inputs.py'
       - 'scripts/ci/patch_xnu_host_tools.py'
       - 'scripts/ci/run_native_build.py'
+      - 'scripts/ci/verify_r208_native_kernel.py'
       - 'scripts/ci/compile_r208_sdcard.py'
       - 'ci/native-source-provenance.r208.json'
       - 'scripts/build-xnu-4903-native.py'
@@ -48,6 +49,7 @@ on:
       - 'tests/test_y35a_tf_apfs_image.py'
       - 'tests/test_y35a_tf_emmc_root_fallback_v2_patch.py'
       - 'tests/test_y35a_tf_emmc_root_fallback_v3_patch.py'
+      - 'tests/test_r208_native_kernel_gate.py'
   pull_request:
     paths:
       - '.github/workflows/y35a-ci-package.yml'
@@ -73,6 +75,7 @@ on:
       - 'scripts/ci/prepare_native_inputs.py'
       - 'scripts/ci/patch_xnu_host_tools.py'
       - 'scripts/ci/run_native_build.py'
+      - 'scripts/ci/verify_r208_native_kernel.py'
       - 'scripts/ci/compile_r208_sdcard.py'
       - 'ci/native-source-provenance.r208.json'
       - 'scripts/build-xnu-4903-native.py'
@@ -95,6 +98,7 @@ on:
       - 'tests/test_y35a_tf_apfs_image.py'
       - 'tests/test_y35a_tf_emmc_root_fallback_v2_patch.py'
       - 'tests/test_y35a_tf_emmc_root_fallback_v3_patch.py'
+      - 'tests/test_r208_native_kernel_gate.py'
   workflow_dispatch:
     inputs:
       native_run_id:
@@ -222,7 +226,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test package contracts
-        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_storage_abi_contract.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py tests/test_y35a_tf_emmc_root_fallback_v2_patch.py tests/test_y35a_tf_emmc_root_fallback_v3_patch.py
+        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_storage_abi_contract.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py tests/test_y35a_tf_emmc_root_fallback_v2_patch.py tests/test_y35a_tf_emmc_root_fallback_v3_patch.py tests/test_r208_native_kernel_gate.py
       - name: Verify fallback v3 patch chain applies to exact XNU source
         run: python scripts/ci/verify_r208_fallback_v3_source.py --manifest ci/native-build-manifest.r208-fallback-v3.json --repo-root .
       - name: Validate R208 TF/APFS device-package design contract

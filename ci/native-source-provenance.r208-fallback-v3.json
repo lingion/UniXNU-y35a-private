@@ -78,6 +78,6 @@
   "source_diff": null,
   "static_verification": {
     "script": "scripts/ci/verify_r208_native_kernel.py",
-    "sha256": "20fab7cff8ce0565a16c7e63db7362ceeb9989e3adbe4f09feb6aa46407fb5d3"
+    "sha256": "35bc3fdb6e8d400ce9bcfb060b0f607f11a8ca1d9115a7a2cc30c5070155a0f5"
   }
 }
