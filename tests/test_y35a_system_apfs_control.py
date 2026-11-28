@@ -290,8 +290,9 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         with mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(stdout="")) as run:
             MODULE.restore_target_directory_and_entry_mtimes(Path("/tmp/control-volume"), manifest)
         command = run.call_args.args[0]
-        self.assertEqual(command[:3], ["/usr/bin/sudo", "-n", sys.executable])
-        self.assertIn("os.utime", command)
+        self.assertEqual(command[:3], ["/usr/bin/sudo", "-n", MODULE.sys.executable])
+        self.assertEqual(command[3], "-c")
+        self.assertIn("os.utime", command[4])
         self.assertEqual(command[-1], "/tmp/control-volume")
         self.assertTrue(run.call_args.kwargs["check"])
         records = json.loads(run.call_args.kwargs["input"])
