@@ -66,6 +66,41 @@ def validate_tf_artifact_binding(run: dict, artifact: dict, *, run_id: str,
     }
 
 
+def validate_source_ram_package_binding(run: dict, artifact: dict, *, run_id: str,
+                                        artifact_id: int, artifact_digest: str,
+                                        expected_branch: str, expected_sha: str) -> dict:
+    expected_name = f"y35a-ramboot-{run_id}"
+    jobs = run.get("jobs", [])
+    if (str(run.get("databaseId")) != run_id
+            or run.get("workflowName") != "Y35A CI RAM-boot package"
+            or run.get("conclusion") != "success"
+            or run.get("headBranch") != expected_branch
+            or run.get("headSha") != expected_sha
+            or not re.fullmatch(r"[0-9a-f]{40}", expected_sha)):
+        raise ValueError("source RAM package run is not the expected successful branch/SHA run")
+    if not any(job.get("name") == "package" and job.get("conclusion") == "success"
+               for job in jobs):
+        raise ValueError("source package run has no successful package job")
+    workflow_run = artifact.get("workflow_run", {})
+    if (artifact.get("id") != artifact_id
+            or artifact.get("name") != expected_name
+            or artifact.get("digest") != artifact_digest
+            or artifact.get("expired") is not False
+            or workflow_run.get("id") != int(run_id)
+            or workflow_run.get("head_sha") != expected_sha
+            or workflow_run.get("head_branch") != expected_branch
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", artifact_digest)):
+        raise ValueError("source RAM package artifact API record does not match run, branch, SHA and digest")
+    return {
+        "run_id": run_id,
+        "head_sha": expected_sha,
+        "head_branch": expected_branch,
+        "artifact_id": artifact_id,
+        "artifact_name": expected_name,
+        "artifact_digest": artifact_digest,
+    }
+
+
 def verify_tf_root_inputs(image: Path, report_path: Path, binding_path: Path,
                           report: dict, binding: dict, stock_boot: Path,
                           root_tree_artifact_binding: dict,
@@ -160,7 +195,12 @@ def validate_package_root_tree(root_binding: dict, package_provenance: dict) -> 
 def build_bundle(*, package_dir: Path, tf_artifact_dir: Path, run_json: Path,
                  artifact_json: Path, run_id: str, artifact_id: int,
                  artifact_digest: str, expected_branch: str, expected_sha: str,
-                 package_source_sha: str, stock_boot: Path, output: Path,
+                 package_source_sha: str, source_package_run_json: Path,
+                 source_package_artifact_json: Path, source_package_run_id: str,
+                 source_package_artifact_id: int, source_package_artifact_digest: str,
+                 expected_native_run_id: str, expected_native_head_sha: str,
+                 expected_native_artifact_id: int, expected_native_artifact_digest: str,
+                 stock_boot: Path, output: Path,
                  compiler: Path, objcopy: Path) -> dict:
     package_dir = package_dir.resolve(strict=True)
     tf_artifact_dir = tf_artifact_dir.resolve(strict=True)
@@ -193,6 +233,21 @@ def build_bundle(*, package_dir: Path, tf_artifact_dir: Path, run_json: Path,
     if report.get("device_tree_input", {}).get("stock_boot_source", {}).get(
             "source_repository_commit") != artifact_binding["head_sha"]:
         raise ValueError("TF intermediate stock-boot provenance commit differs from its artifact run SHA")
+    source_package_run = json.loads(source_package_run_json.read_text())
+    source_package_artifact = json.loads(source_package_artifact_json.read_text())
+    source_package_binding = validate_source_ram_package_binding(
+        source_package_run, source_package_artifact,
+        run_id=source_package_run_id,
+        artifact_id=source_package_artifact_id,
+        artifact_digest=source_package_artifact_digest,
+        expected_branch=expected_branch,
+        expected_sha=package_source_sha,
+    )
+    root_tree_binding = tf_binding.get("root_tree_artifact", {})
+    if (root_tree_binding.get("run_id") != source_package_run_id
+            or root_tree_binding.get("head_sha") != source_package_binding["head_sha"]
+            or root_tree_binding.get("artifact_name") != f"y35a-root-tree-{source_package_run_id}"):
+        raise ValueError("TF intermediate root tree and RAM package do not share one exact producer run")
     native_artifact = json.loads((package_dir / "native-kernel-artifact.json").read_text())
     package_provenance = json.loads((package_dir / "package-provenance.json").read_text())
     package_manifest = json.loads((package_dir / "package-manifest.json").read_text())
@@ -204,11 +259,19 @@ def build_bundle(*, package_dir: Path, tf_artifact_dir: Path, run_json: Path,
     if not kernel.is_file() or sha256(kernel) != native_artifact.get("kernel_sha256"):
         raise ValueError("RAM package kernel differs from its native artifact manifest")
     native_run_id = str(package_provenance.get("native_build", {}).get("run_id", ""))
+    source_package_provenance = package_provenance.get("package_source", {})
+    if (source_package_provenance.get("workflow_run_id") != source_package_run_id
+            or source_package_provenance.get("commit") != source_package_binding["head_sha"]):
+        raise ValueError("RAM package provenance does not match the selected source package run")
     if (native_binding.get("head_sha") != native_artifact.get("head_sha")
             or str(native_artifact.get("run_id")) != native_run_id
+            or native_run_id != expected_native_run_id
+            or native_binding.get("head_sha") != expected_native_head_sha
             or native_api_binding.get("run_id") != native_run_id
             or native_api_binding.get("head_sha") != native_artifact.get("head_sha")
             or not isinstance(native_api_binding.get("id"), int)
+            or native_api_binding.get("id") != expected_native_artifact_id
+            or native_api_binding.get("digest") != expected_native_artifact_digest
             or not re.fullmatch(r"sha256:[0-9a-f]{64}", str(native_api_binding.get("digest", "")))
             or not native_run_id.isdecimal()):
         raise ValueError("RAM package does not carry a valid exact native build binding")
@@ -326,6 +389,7 @@ def build_bundle(*, package_dir: Path, tf_artifact_dir: Path, run_json: Path,
         "native": {"run_id": native_run_id, "head_sha": native_artifact["head_sha"],
                    "kernel_sha256": sha256(kernel)},
         "tf_apfs_artifact": artifact_binding,
+        "source_ram_package_artifact": source_package_binding,
         "tf_root": tf_binding,
         "tf_apfs_image_delivery": {
             "artifact_name": artifact_binding["artifact_name"],
@@ -379,6 +443,15 @@ def main() -> int:
     parser.add_argument("--tf-branch", required=True)
     parser.add_argument("--tf-head-sha", required=True)
     parser.add_argument("--package-source-sha", required=True)
+    parser.add_argument("--source-package-run-json", type=Path, required=True)
+    parser.add_argument("--source-package-artifact-json", type=Path, required=True)
+    parser.add_argument("--source-package-run-id", required=True)
+    parser.add_argument("--source-package-artifact-id", type=int, required=True)
+    parser.add_argument("--source-package-artifact-digest", required=True)
+    parser.add_argument("--native-run-id", required=True)
+    parser.add_argument("--native-head-sha", required=True)
+    parser.add_argument("--native-artifact-id", type=int, required=True)
+    parser.add_argument("--native-artifact-digest", required=True)
     parser.add_argument("--stock-boot", type=Path, required=True)
     parser.add_argument("--compiler", type=Path, required=True)
     parser.add_argument("--objcopy", type=Path, required=True)
@@ -395,6 +468,15 @@ def main() -> int:
         expected_branch=args.tf_branch,
         expected_sha=args.tf_head_sha,
         package_source_sha=args.package_source_sha,
+        source_package_run_json=args.source_package_run_json,
+        source_package_artifact_json=args.source_package_artifact_json,
+        source_package_run_id=args.source_package_run_id,
+        source_package_artifact_id=args.source_package_artifact_id,
+        source_package_artifact_digest=args.source_package_artifact_digest,
+        expected_native_run_id=args.native_run_id,
+        expected_native_head_sha=args.native_head_sha,
+        expected_native_artifact_id=args.native_artifact_id,
+        expected_native_artifact_digest=args.native_artifact_digest,
         stock_boot=args.stock_boot,
         compiler=args.compiler,
         objcopy=args.objcopy,

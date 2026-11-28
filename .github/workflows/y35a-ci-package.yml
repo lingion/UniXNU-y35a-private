@@ -462,12 +462,14 @@ jobs:
         with:
           packages: 'ndk;27.0.12077973'
       - uses: actions/checkout@v4
+        if: needs.validate.outputs.tf_apfs_run_id == ''
         with:
           repository: dgibson/dtc
           ref: 2d10aa2afe35527728db30b35ec491ecb6959e5c
           path: .ci-tools/dtc
           persist-credentials: false
       - name: Download hash-bound native kernel
+        if: needs.validate.outputs.tf_apfs_run_id == ''
         uses: actions/download-artifact@v4
         with:
           name: unixnu-kernel-${{ needs.validate.outputs.native_run_id }}
@@ -496,6 +498,222 @@ jobs:
           run-id: ${{ needs.validate.outputs.tf_apfs_run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/tf-apfs-root/input
+      - name: Resolve source RAM package bound to the TF root tree
+        id: source_ram_package
+        if: needs.validate.outputs.tf_apfs_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TF_ARTIFACT_DIR: ${{ runner.temp }}/tf-apfs-root/input
+          EXPECTED_BRANCH: ${{ github.ref_name }}
+          EXPECTED_PACKAGE_SHA: ${{ needs.validate.outputs.package_source_sha }}
+        run: |
+          set -euo pipefail
+          ROOT_BINDING="$TF_ARTIFACT_DIR/root-tree-artifact-binding.json"
+          test -s "$ROOT_BINDING"
+          SOURCE_PACKAGE_RUN_ID="$(jq -r '.run_id' "$ROOT_BINDING")"
+          SOURCE_PACKAGE_SHA="$(jq -r '.head_sha' "$ROOT_BINDING")"
+          SOURCE_PACKAGE_BRANCH="$(jq -r '.head_branch' "$ROOT_BINDING")"
+          ROOT_TREE_ARTIFACT_ID="$(jq -r '.artifact_id' "$ROOT_BINDING")"
+          ROOT_TREE_ARTIFACT_DIGEST="$(jq -r '.artifact_digest' "$ROOT_BINDING")"
+          [[ "$SOURCE_PACKAGE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_PACKAGE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_PACKAGE_BRANCH" = "$EXPECTED_BRANCH"
+          test "$SOURCE_PACKAGE_SHA" = "$EXPECTED_PACKAGE_SHA"
+          [[ "$ROOT_TREE_ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          [[ "$ROOT_TREE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          gh run view "$SOURCE_PACKAGE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,conclusion,headBranch,headSha,jobs \
+            > "$RUNNER_TEMP/source-package-run.json"
+          jq -e --arg id "$SOURCE_PACKAGE_RUN_ID" --arg branch "$SOURCE_PACKAGE_BRANCH" \
+            --arg sha "$SOURCE_PACKAGE_SHA" '
+            .databaseId == ($id | tonumber)
+            and .workflowName == "Y35A CI RAM-boot package"
+            and .conclusion == "success"
+            and .headBranch == $branch and .headSha == $sha
+            and ([.jobs[] | select(.name == "package" and .conclusion == "success")] | length == 1)
+          ' "$RUNNER_TEMP/source-package-run.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_PACKAGE_RUN_ID/artifacts" \
+            > "$RUNNER_TEMP/source-package-artifacts.json"
+          ROOT_TREE_NAME="y35a-root-tree-$SOURCE_PACKAGE_RUN_ID"
+          RAM_PACKAGE_NAME="y35a-ramboot-$SOURCE_PACKAGE_RUN_ID"
+          ROOT_TREE_MATCHES=$(jq -c --arg name "$ROOT_TREE_NAME" \
+            --arg id "$ROOT_TREE_ARTIFACT_ID" --arg digest "$ROOT_TREE_ARTIFACT_DIGEST" \
+            --arg run "$SOURCE_PACKAGE_RUN_ID" --arg sha "$SOURCE_PACKAGE_SHA" \
+            --arg branch "$SOURCE_PACKAGE_BRANCH" '
+            [.artifacts[] | select(.name == $name and (.id|tostring) == $id
+              and .digest == $digest and .expired == false
+              and .workflow_run.id == ($run|tonumber)
+              and .workflow_run.head_sha == $sha
+              and .workflow_run.head_branch == $branch)]' \
+            "$RUNNER_TEMP/source-package-artifacts.json")
+          test "$(jq 'length' <<< "$ROOT_TREE_MATCHES")" = 1
+          RAM_PACKAGE_MATCHES=$(jq -c --arg name "$RAM_PACKAGE_NAME" \
+            --arg run "$SOURCE_PACKAGE_RUN_ID" --arg sha "$SOURCE_PACKAGE_SHA" \
+            --arg branch "$SOURCE_PACKAGE_BRANCH" '
+            [.artifacts[] | select(.name == $name and .expired == false
+              and .workflow_run.id == ($run|tonumber)
+              and .workflow_run.head_sha == $sha
+              and .workflow_run.head_branch == $branch)]' \
+            "$RUNNER_TEMP/source-package-artifacts.json")
+          test "$(jq 'length' <<< "$RAM_PACKAGE_MATCHES")" = 1
+          jq -c '.[0]' <<< "$RAM_PACKAGE_MATCHES" > "$RUNNER_TEMP/source-package-artifact.json"
+          echo "run_id=$SOURCE_PACKAGE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$SOURCE_PACKAGE_SHA" >> "$GITHUB_OUTPUT"
+          echo "head_branch=$SOURCE_PACKAGE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$(jq -r '.[0].id' <<< "$RAM_PACKAGE_MATCHES")" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$(jq -r '.[0].digest' <<< "$RAM_PACKAGE_MATCHES")" >> "$GITHUB_OUTPUT"
+      - name: Download exact source RAM package
+        if: needs.validate.outputs.tf_apfs_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.source_ram_package.outputs.artifact_id }}
+          run-id: ${{ steps.source_ram_package.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/source-ram-package
+      - name: Resolve exact source RAM package for TF root
+        id: source_ram_package
+        if: needs.validate.outputs.tf_apfs_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TF_ARTIFACT_DIR: ${{ runner.temp }}/tf-apfs-root/input
+          EXPECTED_BRANCH: ${{ github.ref_name }}
+          EXPECTED_PACKAGE_SHA: ${{ needs.validate.outputs.package_source_sha }}
+        run: |
+          set -euo pipefail
+          ROOT_BINDING="$TF_ARTIFACT_DIR/root-tree-artifact-binding.json"
+          test -s "$ROOT_BINDING"
+          SOURCE_PACKAGE_RUN_ID="$(jq -r '.run_id' "$ROOT_BINDING")"
+          SOURCE_PACKAGE_SHA="$(jq -r '.head_sha' "$ROOT_BINDING")"
+          SOURCE_PACKAGE_BRANCH="$(jq -r '.head_branch' "$ROOT_BINDING")"
+          ROOT_TREE_ARTIFACT_ID="$(jq -r '.artifact_id' "$ROOT_BINDING")"
+          ROOT_TREE_ARTIFACT_DIGEST="$(jq -r '.artifact_digest' "$ROOT_BINDING")"
+          [[ "$SOURCE_PACKAGE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_PACKAGE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_PACKAGE_BRANCH" = "$EXPECTED_BRANCH"
+          test "$SOURCE_PACKAGE_SHA" = "$EXPECTED_PACKAGE_SHA"
+          [[ "$ROOT_TREE_ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          [[ "$ROOT_TREE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          gh run view "$SOURCE_PACKAGE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,conclusion,headBranch,headSha,jobs \
+            > "$RUNNER_TEMP/source-package-run.json"
+          jq -e --arg id "$SOURCE_PACKAGE_RUN_ID" --arg branch "$SOURCE_PACKAGE_BRANCH" \
+            --arg sha "$SOURCE_PACKAGE_SHA" '
+            .databaseId == ($id | tonumber)
+            and .workflowName == "Y35A CI RAM-boot package"
+            and .conclusion == "success"
+            and .headBranch == $branch and .headSha == $sha
+            and ([.jobs[] | select(.name == "package" and .conclusion == "success")] | length == 1)
+          ' "$RUNNER_TEMP/source-package-run.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_PACKAGE_RUN_ID/artifacts" \
+            > "$RUNNER_TEMP/source-package-artifacts.json"
+          ROOT_TREE_NAME="y35a-root-tree-$SOURCE_PACKAGE_RUN_ID"
+          RAM_PACKAGE_NAME="y35a-ramboot-$SOURCE_PACKAGE_RUN_ID"
+          ROOT_TREE_MATCHES=$(jq -c --arg name "$ROOT_TREE_NAME" \
+            --arg id "$ROOT_TREE_ARTIFACT_ID" --arg digest "$ROOT_TREE_ARTIFACT_DIGEST" \
+            --arg run "$SOURCE_PACKAGE_RUN_ID" --arg sha "$SOURCE_PACKAGE_SHA" \
+            --arg branch "$SOURCE_PACKAGE_BRANCH" '
+            [.artifacts[] | select(.name == $name and (.id|tostring) == $id
+              and .digest == $digest and .expired == false
+              and .workflow_run.id == ($run|tonumber)
+              and .workflow_run.head_sha == $sha
+              and .workflow_run.head_branch == $branch)]' \
+            "$RUNNER_TEMP/source-package-artifacts.json")
+          test "$(jq 'length' <<< "$ROOT_TREE_MATCHES")" = 1
+          RAM_PACKAGE_MATCHES=$(jq -c --arg name "$RAM_PACKAGE_NAME" \
+            --arg run "$SOURCE_PACKAGE_RUN_ID" --arg sha "$SOURCE_PACKAGE_SHA" \
+            --arg branch "$SOURCE_PACKAGE_BRANCH" '
+            [.artifacts[] | select(.name == $name and .expired == false
+              and .workflow_run.id == ($run|tonumber)
+              and .workflow_run.head_sha == $sha
+              and .workflow_run.head_branch == $branch)]' \
+            "$RUNNER_TEMP/source-package-artifacts.json")
+          test "$(jq 'length' <<< "$RAM_PACKAGE_MATCHES")" = 1
+          jq -c '.[0]' <<< "$RAM_PACKAGE_MATCHES" > "$RUNNER_TEMP/source-package-artifact.json"
+          echo "run_id=$SOURCE_PACKAGE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$SOURCE_PACKAGE_SHA" >> "$GITHUB_OUTPUT"
+          echo "head_branch=$SOURCE_PACKAGE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$(jq -r '.[0].id' <<< "$RAM_PACKAGE_MATCHES")" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$(jq -r '.[0].digest' <<< "$RAM_PACKAGE_MATCHES")" >> "$GITHUB_OUTPUT"
+      - name: Download exact source RAM package
+        if: needs.validate.outputs.tf_apfs_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.source_ram_package.outputs.artifact_id }}
+          run-id: ${{ steps.source_ram_package.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/source-ram-package
+      - name: Resolve source RAM package bound to the TF root tree
+        id: source_ram_package
+        if: needs.validate.outputs.tf_apfs_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TF_ARTIFACT_DIR: ${{ runner.temp }}/tf-apfs-root/input
+          EXPECTED_BRANCH: ${{ github.ref_name }}
+          EXPECTED_PACKAGE_SHA: ${{ needs.validate.outputs.package_source_sha }}
+        run: |
+          set -euo pipefail
+          ROOT_BINDING="$TF_ARTIFACT_DIR/root-tree-artifact-binding.json"
+          test -s "$ROOT_BINDING"
+          SOURCE_PACKAGE_RUN_ID="$(jq -r '.run_id' "$ROOT_BINDING")"
+          SOURCE_PACKAGE_SHA="$(jq -r '.head_sha' "$ROOT_BINDING")"
+          SOURCE_PACKAGE_BRANCH="$(jq -r '.head_branch' "$ROOT_BINDING")"
+          ROOT_TREE_ARTIFACT_ID="$(jq -r '.artifact_id' "$ROOT_BINDING")"
+          ROOT_TREE_ARTIFACT_DIGEST="$(jq -r '.artifact_digest' "$ROOT_BINDING")"
+          [[ "$SOURCE_PACKAGE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_PACKAGE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$SOURCE_PACKAGE_BRANCH" = "$EXPECTED_BRANCH"
+          test "$SOURCE_PACKAGE_SHA" = "$EXPECTED_PACKAGE_SHA"
+          [[ "$ROOT_TREE_ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          [[ "$ROOT_TREE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          gh run view "$SOURCE_PACKAGE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,conclusion,headBranch,headSha,jobs \
+            > "$RUNNER_TEMP/source-package-run.json"
+          jq -e --arg id "$SOURCE_PACKAGE_RUN_ID" --arg branch "$SOURCE_PACKAGE_BRANCH" \
+            --arg sha "$SOURCE_PACKAGE_SHA" '
+            .databaseId == ($id | tonumber)
+            and .workflowName == "Y35A CI RAM-boot package"
+            and .conclusion == "success"
+            and .headBranch == $branch and .headSha == $sha
+            and ([.jobs[] | select(.name == "package" and .conclusion == "success")] | length == 1)
+          ' "$RUNNER_TEMP/source-package-run.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_PACKAGE_RUN_ID/artifacts" \
+            > "$RUNNER_TEMP/source-package-artifacts.json"
+          ROOT_TREE_NAME="y35a-root-tree-$SOURCE_PACKAGE_RUN_ID"
+          RAM_PACKAGE_NAME="y35a-ramboot-$SOURCE_PACKAGE_RUN_ID"
+          ROOT_TREE_MATCHES=$(jq -c --arg name "$ROOT_TREE_NAME" \
+            --arg id "$ROOT_TREE_ARTIFACT_ID" --arg digest "$ROOT_TREE_ARTIFACT_DIGEST" \
+            --arg run "$SOURCE_PACKAGE_RUN_ID" --arg sha "$SOURCE_PACKAGE_SHA" \
+            --arg branch "$SOURCE_PACKAGE_BRANCH" '
+            [.artifacts[] | select(.name == $name and (.id|tostring) == $id
+              and .digest == $digest and .expired == false
+              and .workflow_run.id == ($run|tonumber)
+              and .workflow_run.head_sha == $sha
+              and .workflow_run.head_branch == $branch)]' \
+            "$RUNNER_TEMP/source-package-artifacts.json")
+          test "$(jq 'length' <<< "$ROOT_TREE_MATCHES")" = 1
+          RAM_PACKAGE_MATCHES=$(jq -c --arg name "$RAM_PACKAGE_NAME" \
+            --arg run "$SOURCE_PACKAGE_RUN_ID" --arg sha "$SOURCE_PACKAGE_SHA" \
+            --arg branch "$SOURCE_PACKAGE_BRANCH" '
+            [.artifacts[] | select(.name == $name and .expired == false
+              and .workflow_run.id == ($run|tonumber)
+              and .workflow_run.head_sha == $sha
+              and .workflow_run.head_branch == $branch)]' \
+            "$RUNNER_TEMP/source-package-artifacts.json")
+          test "$(jq 'length' <<< "$RAM_PACKAGE_MATCHES")" = 1
+          jq -c '.[0]' <<< "$RAM_PACKAGE_MATCHES" > "$RUNNER_TEMP/source-package-artifact.json"
+          echo "run_id=$SOURCE_PACKAGE_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$SOURCE_PACKAGE_SHA" >> "$GITHUB_OUTPUT"
+          echo "head_branch=$SOURCE_PACKAGE_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$(jq -r '.[0].id' <<< "$RAM_PACKAGE_MATCHES")" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$(jq -r '.[0].digest' <<< "$RAM_PACKAGE_MATCHES")" >> "$GITHUB_OUTPUT"
+      - name: Download exact source RAM package
+        if: needs.validate.outputs.tf_apfs_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ steps.source_ram_package.outputs.artifact_id }}
+          run-id: ${{ steps.source_ram_package.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/source-ram-package
       - name: Select and record cross tools
         run: |
           set -euo pipefail
@@ -565,6 +783,7 @@ jobs:
           PY
           echo "PACKAGE_TOOLCHAIN_MANIFEST=$PACKAGE_TOOLCHAIN_MANIFEST" >> "$GITHUB_ENV"
       - name: Build pinned device-tree compiler
+        if: needs.validate.outputs.tf_apfs_run_id == ''
         env:
           DTC_REVISION: 2d10aa2afe35527728db30b35ec491ecb6959e5c
         run: |
@@ -577,6 +796,7 @@ jobs:
           make -C .ci-tools/dtc dtc \
             EXTRA_CFLAGS='-Wno-error=unknown-warning-option -Wno-error=sign-compare'
       - name: Download pinned iOS 12.4.1 firmware
+        if: needs.validate.outputs.tf_apfs_run_id == ''
         run: |
           set -euo pipefail
           IPSW_URL="$(python3 -c 'import json; print(json.load(open("ci/y35a-ci-package-manifest.json"))["firmware"]["url"])')"
@@ -602,63 +822,85 @@ jobs:
           TF_APFS_ARTIFACT_JSON: ${{ runner.temp }}/tf-apfs-root/artifact.json
           TF_APFS_ARTIFACT_DIR: ${{ runner.temp }}/tf-apfs-root/input
           TF_BOOT_BUNDLE: ${{ runner.temp }}/y35a-tf-root-boot-bundle
+          SOURCE_PACKAGE_RUN_ID: ${{ steps.source_ram_package.outputs.run_id }}
+          SOURCE_PACKAGE_SHA: ${{ steps.source_ram_package.outputs.head_sha }}
+          SOURCE_PACKAGE_ARTIFACT_ID: ${{ steps.source_ram_package.outputs.artifact_id }}
+          SOURCE_PACKAGE_ARTIFACT_DIGEST: ${{ steps.source_ram_package.outputs.artifact_digest }}
+          SOURCE_PACKAGE_BRANCH: ${{ steps.source_ram_package.outputs.head_branch }}
+          SOURCE_PACKAGE_RUN_JSON: ${{ runner.temp }}/source-package-run.json
+          SOURCE_PACKAGE_ARTIFACT_JSON: ${{ runner.temp }}/source-package-artifact.json
         run: |
           set -euo pipefail
-          PACKAGE_ARGS=(
-            --native-run-id "$NATIVE_RUN_ID" \
-            --native-head-sha "$NATIVE_HEAD_SHA" \
-            --native-artifact-id "$NATIVE_ARTIFACT_ID" \
-            --native-artifact-digest "$NATIVE_ARTIFACT_DIGEST" \
-            --native-artifact-dir "$RUNNER_TEMP/native-kernel" \
-            --native-manifest "$NATIVE_BUILD_MANIFEST_PATH" \
-            --package-source-sha "$PACKAGE_SOURCE_SHA" \
-            --package-run-id "$PACKAGE_RUN_ID" \
-            --ipsw "$RUNNER_TEMP/ios-12.4.1-16G102.ipsw" \
-            --system-root-output-dir "$RUNNER_TEMP/y35a-ios12-system-root" \
-            --dtc .ci-tools/dtc/dtc \
-            --dtc-revision "$DTC_REVISION" \
-            --compiler "$CLANG" \
-            --linker "$LLVM_LLD" \
-            --objcopy "$LLVM_OBJCOPY" \
-            --toolchain-manifest "$PACKAGE_TOOLCHAIN_MANIFEST" \
-            --output "$RUNNER_TEMP/y35a-ramboot-package"
-          )
           if [[ -n "$TF_APFS_RUN_ID" ]]; then
             [[ -f "$TF_APFS_RUN_JSON" && -f "$TF_APFS_ARTIFACT_JSON" ]]
             test -s "$TF_APFS_ARTIFACT_DIR/y35a-tf-root.apfs.img"
-            PACKAGE_ARGS+=(
-              --tf-apfs-artifact-dir "$TF_APFS_ARTIFACT_DIR"
-              --tf-apfs-run-json "$TF_APFS_RUN_JSON"
-              --tf-apfs-artifact-json "$TF_APFS_ARTIFACT_JSON"
-              --tf-apfs-run-id "$TF_APFS_RUN_ID"
-              --tf-apfs-artifact-id "$TF_APFS_ARTIFACT_ID"
-              --tf-apfs-artifact-digest "$TF_APFS_ARTIFACT_DIGEST"
-              --tf-apfs-head-branch "$TF_APFS_HEAD_BRANCH"
-              --tf-apfs-head-sha "$TF_APFS_HEAD_SHA"
-              --tf-apfs-stock-boot "$GITHUB_WORKSPACE/evidence/y35a-20261102/stock-boot.img"
-              --tf-bundle-output "$TF_BOOT_BUNDLE"
-            )
-          fi
-          python3 scripts/ci/build_y35a_ci_package.py "${PACKAGE_ARGS[@]}"
-          if [[ -n "$TF_APFS_RUN_ID" ]]; then
+            SOURCE_PACKAGE_DIR="$RUNNER_TEMP/source-ram-package/y35a-ramboot-$SOURCE_PACKAGE_RUN_ID"
+            test -d "$SOURCE_PACKAGE_DIR"
+            (cd "$SOURCE_PACKAGE_DIR" && shasum -a 256 -c SHA256SUMS)
+            python3 scripts/ci/build_y35a_tf_root_boot_package.py \
+              --ram-package "$SOURCE_PACKAGE_DIR" \
+              --tf-artifact-dir "$TF_APFS_ARTIFACT_DIR" \
+              --tf-run-json "$TF_APFS_RUN_JSON" \
+              --tf-artifact-json "$TF_APFS_ARTIFACT_JSON" \
+              --tf-run-id "$TF_APFS_RUN_ID" \
+              --tf-artifact-id "$TF_APFS_ARTIFACT_ID" \
+              --tf-artifact-digest "$TF_APFS_ARTIFACT_DIGEST" \
+              --tf-branch "$TF_APFS_HEAD_BRANCH" \
+              --tf-head-sha "$TF_APFS_HEAD_SHA" \
+              --package-source-sha "$PACKAGE_SOURCE_SHA" \
+              --source-package-run-json "$SOURCE_PACKAGE_RUN_JSON" \
+              --source-package-artifact-json "$SOURCE_PACKAGE_ARTIFACT_JSON" \
+              --source-package-run-id "$SOURCE_PACKAGE_RUN_ID" \
+              --source-package-artifact-id "$SOURCE_PACKAGE_ARTIFACT_ID" \
+              --source-package-artifact-digest "$SOURCE_PACKAGE_ARTIFACT_DIGEST" \
+              --native-run-id "$NATIVE_RUN_ID" \
+              --native-head-sha "$NATIVE_HEAD_SHA" \
+              --native-artifact-id "$NATIVE_ARTIFACT_ID" \
+              --native-artifact-digest "$NATIVE_ARTIFACT_DIGEST" \
+              --stock-boot "$GITHUB_WORKSPACE/evidence/y35a-20261102/stock-boot.img" \
+              --compiler "$CLANG" \
+              --objcopy "$LLVM_OBJCOPY" \
+              --output "$TF_BOOT_BUNDLE"
             (cd "$TF_BOOT_BUNDLE" && shasum -a 256 -c SHA256SUMS)
             jq -e '.status == "offline-external-root-diagnostic-bundle-built" and .qualification.bootable == false and .qualification.device_run_allowed == false and .qualification.runtime_qualified == false and .fallback.status == "unavailable-no-eMMC-APFS-root-UUID"' "$TF_BOOT_BUNDLE/bundle-provenance.json" > /dev/null
             echo "TF external-root diagnostic bundle SHA256SUMS passed; eMMC root UUID remains unavailable" >> "$GITHUB_STEP_SUMMARY"
+          else
+            PACKAGE_ARGS=(
+              --native-run-id "$NATIVE_RUN_ID" \
+              --native-head-sha "$NATIVE_HEAD_SHA" \
+              --native-artifact-id "$NATIVE_ARTIFACT_ID" \
+              --native-artifact-digest "$NATIVE_ARTIFACT_DIGEST" \
+              --native-artifact-dir "$RUNNER_TEMP/native-kernel" \
+              --native-manifest "$NATIVE_BUILD_MANIFEST_PATH" \
+              --package-source-sha "$PACKAGE_SOURCE_SHA" \
+              --package-run-id "$PACKAGE_RUN_ID" \
+              --ipsw "$RUNNER_TEMP/ios-12.4.1-16G102.ipsw" \
+              --system-root-output-dir "$RUNNER_TEMP/y35a-ios12-system-root" \
+              --dtc .ci-tools/dtc/dtc \
+              --dtc-revision "$DTC_REVISION" \
+              --compiler "$CLANG" \
+              --linker "$LLVM_LLD" \
+              --objcopy "$LLVM_OBJCOPY" \
+              --toolchain-manifest "$PACKAGE_TOOLCHAIN_MANIFEST" \
+              --output "$RUNNER_TEMP/y35a-ramboot-package"
+            )
+            python3 scripts/ci/build_y35a_ci_package.py "${PACKAGE_ARGS[@]}"
+            cd "$RUNNER_TEMP/y35a-ramboot-package"
+            shasum -a 256 -c SHA256SUMS
+            jq -e '.status == "offline-package-complete" and .package.static_container_checks == "passed" and .native_build_status == "complete" and .trust_cache.combined.coverage.coverage == "complete" and .trust_cache.combined.coverage.staged_macho_count == 58' package-provenance.json > /dev/null
+            {
+              echo "## Y35A RAM-boot package"
+              echo
+              echo "Native Actions run: $NATIVE_RUN_ID"
+              echo "Native commit: $NATIVE_HEAD_SHA"
+              echo "Package commit: $PACKAGE_SOURCE_SHA"
+              echo "boot3.img SHA-256: $(shasum -a 256 boot3.img | awk '{print $1}')"
+              echo "Package scope: launchd diagnostic RAM boot"
+              echo "Device qualification: not run"
+            } >> "$GITHUB_STEP_SUMMARY"
           fi
-          cd "$RUNNER_TEMP/y35a-ramboot-package"
-          shasum -a 256 -c SHA256SUMS
-          jq -e '.status == "offline-package-complete" and .package.static_container_checks == "passed" and .native_build_status == "complete" and .trust_cache.combined.coverage.coverage == "complete" and .trust_cache.combined.coverage.staged_macho_count == 58' package-provenance.json > /dev/null
-          {
-            echo "## Y35A RAM-boot package"
-            echo
-            echo "Native Actions run: $NATIVE_RUN_ID"
-            echo "Native commit: $NATIVE_HEAD_SHA"
-            echo "Package commit: $PACKAGE_SOURCE_SHA"
-            echo "boot3.img SHA-256: $(shasum -a 256 boot3.img | awk '{print $1}')"
-            echo "Package scope: launchd diagnostic RAM boot"
-            echo "Device qualification: not run"
-          } >> "$GITHUB_STEP_SUMMARY"
       - name: Upload verified package
+        if: needs.validate.outputs.tf_apfs_run_id == ''
         uses: actions/upload-artifact@v4
         with:
           name: y35a-ramboot-${{ github.run_id }}
@@ -674,6 +916,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Verify complete iOS System-volume source handoff
+        if: needs.validate.outputs.tf_apfs_run_id == ''
         run: |
           set -euo pipefail
           ROOT="$RUNNER_TEMP/y35a-ios12-system-root"
@@ -717,6 +960,7 @@ jobs:
         env:
           PACKAGE_RUN_ID: ${{ github.run_id }}
       - name: Upload pinned iOS System-volume source
+        if: needs.validate.outputs.tf_apfs_run_id == ''
         uses: actions/upload-artifact@v4
         with:
           name: y35a-ios12-system-root-${{ github.run_id }}
@@ -725,6 +969,7 @@ jobs:
           retention-days: 7
           compression-level: 0
       - name: Upload root-tree producer artifact
+        if: needs.validate.outputs.tf_apfs_run_id == ''
         uses: actions/upload-artifact@v4
         with:
           name: y35a-root-tree-${{ github.run_id }}
@@ -737,6 +982,7 @@ jobs:
           if-no-files-found: error
           retention-days: 30
       - name: Upload metadata-preserving root-tree tar without outer ZIP
+        if: needs.validate.outputs.tf_apfs_run_id == ''
         uses: actions/upload-artifact@v7
         with:
           name: root-tree.tar

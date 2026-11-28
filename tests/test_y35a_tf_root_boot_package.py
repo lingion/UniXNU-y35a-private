@@ -58,6 +58,38 @@ class TfRootBootPackageContractTest(unittest.TestCase):
         self.assertNotIn("emmc_root_uuid=args.emmc_root_uuid", package_source)
         self.assertNotIn('parser.add_argument("--emmc-root-uuid")', package_source)
 
+    def test_source_ram_package_binding_requires_exact_successful_artifact(self):
+        run = {
+            "databaseId": 900,
+            "workflowName": "Y35A CI RAM-boot package",
+            "conclusion": "success",
+            "headBranch": "codex/test",
+            "headSha": "a" * 40,
+            "jobs": [{"name": "package", "conclusion": "success"}],
+        }
+        artifact = {
+            "id": 901,
+            "name": "y35a-ramboot-900",
+            "digest": "sha256:" + "c" * 64,
+            "expired": False,
+            "workflow_run": {"id": 900, "head_sha": "a" * 40,
+                              "head_branch": "codex/test"},
+        }
+        binding = MODULE.validate_source_ram_package_binding(
+            run, artifact, run_id="900", artifact_id=901,
+            artifact_digest="sha256:" + "c" * 64,
+            expected_branch="codex/test", expected_sha="a" * 40,
+        )
+        self.assertEqual(binding["artifact_id"], 901)
+        self.assertEqual(binding["run_id"], "900")
+        run["jobs"][0]["conclusion"] = "skipped"
+        with self.assertRaisesRegex(ValueError, "no successful package job"):
+            MODULE.validate_source_ram_package_binding(
+                run, artifact, run_id="900", artifact_id=901,
+                artifact_digest="sha256:" + "c" * 64,
+                expected_branch="codex/test", expected_sha="a" * 40,
+            )
+
     def test_tf_artifact_api_binding_rejects_skipped_intermediate_job(self):
         run, artifact = self.api_facts()
         run["jobs"][0]["conclusion"] = "skipped"
@@ -304,6 +336,10 @@ class TfRootBootPackageContractTest(unittest.TestCase):
         self.assertIn(".workflow_run.head_branch == $branch", workflow)
         self.assertIn(".package_source.commit == $sha", workflow)
         self.assertIn("--root-tree-artifact-binding", workflow)
+        self.assertIn("Resolve source RAM package bound to the TF root tree", workflow)
+        self.assertIn("Download exact source RAM package", workflow)
+        self.assertIn("--source-package-artifact-digest", workflow)
+        self.assertIn("--native-artifact-digest", workflow)
         self.assertIn('"root_tree_artifact": root_tree_artifact_binding',
                       (ROOT / "scripts/ci/build_y35a_tf_apfs_image.py").read_text())
         self.assertIn('test "$STOCK_BOOT_PATH" = "evidence/y35a-20261102/stock-boot.img"', workflow)

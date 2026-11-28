@@ -581,6 +581,16 @@
 - 自动化入口：`scripts/ci/build_y35a_ci_package.py::main`, `scripts/ci/build_y35a_tf_root_boot_package.py::build_bundle`, and `.github/workflows/y35a-ci-package.yml` package step.
 - 下一次触发：Any change to the external-root bundle builder signature or optional root UUID inputs.
 
+## L-2026-11-29-05 TF/APFS and its TrustCache root must use one exact RAM package tree
+
+- 现象：Package run `46167492183` consumed successful TF intermediate `46167281725`, then built a fresh RAM package and failed in `validate_package_root_tree` because its staged tree SHA differed from the tree SHA sealed into the TF/APFS image. The failure occurred before artifact upload; no TF diagnostic package artifact was produced.
+- 根因：The TF intermediate was built from the exact `root-tree.tar` produced by package run `46166792568`, while the final package workflow reran root staging and used that newly generated tree for its TrustCache. The evidence shows a byte/metadata tree identity mismatch but does not establish which individual path or metadata field caused it.
+- 影响：The intermediate APFS root and its bound root-tree artifact are valid as separate offline outputs, but the attempted combined bundle is unverified. A regenerated tree cannot be assumed identical just because it came from the same IPSW and commit.
+- 正确做法：Resolve and download the successful RAM diagnostic package artifact named `y35a-ramboot-<root-tree-run-id>` from the same producer run that the TF intermediate's root-tree binding names. Verify its run, branch, commit, artifact ID/digest and internal SHA256SUMS, then compare the embedded root-tree SHA and TrustCache coverage before building the external-root boot bundle. Do not rebuild the tree and waive the equality check.
+- 证据：GitHub Actions run `46167492183`, package job `141048240313`, step `Build and verify RAM-boot package`, traceback at `build_y35a_tf_root_boot_package.py::validate_package_root_tree`; selected TF run `46167281725` records root-tree `entries_sha256=tree_sha256=a518fedd3c9e2c2307229ccc336e52534821c9ca2ab0555ab23e7ba693e5ede0`. The rebuilt package's differing tree hash was not emitted before the exception, so the underlying path-level difference remains unclassified.
+- 自动化入口：`.github/workflows/y35a-ci-package.yml` source RAM-package resolve/download steps; `scripts/ci/build_y35a_tf_root_boot_package.py::validate_source_ram_package_binding` and `validate_package_root_tree`; `tests/test_y35a_tf_root_boot_package.py`.
+- 下一次触发：Any cross-job image consumer that binds a filesystem tree to the TrustCache or other tree-derived metadata.
+
 跟进 run `46130315528` 的证据：添加 `hdiutil -owners on` 后，UID/GID 改动从 159,082/171,044 条降到各 1 条，只剩 volume 根目录 UID/GID（来源 `0:0`、目标 `501:20`）；mtime 差异仍为 1,069 条，全部 bounded samples 落在目录/文件路径中，缺失项计数变为 0。修复须从原 source manifest 显式恢复 volume 根 UID/GID，并在复制完成后恢复记录的 nanosecond mtime（文件与目录，目录由深到浅、根目录最后）；最终仍以重扫全树 equality gate 作为验收。该 run 的 diagnostics artifact ID `15259816488`，digest `sha256:0be17f510b28adcc63f26c1aa1af6355f4a600a84fb43d15b8e540bcee39759c`。
 
 跟进 run `46135948784`：ownership/mTime restore 分支未进入树比较，失败为 `NameError: name 'sys' is not defined`，调用点在 mtime restore helper。没有产出 control 或 diagnostics artifact。修复加入生产模块 import 并新增 helper contract test，随后用同一个精确 System artifact 再跑；不能把该 run 计为 metadata gate 结果。
