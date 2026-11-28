@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import plistlib
 import struct
 import sys
 import tempfile
@@ -43,6 +44,21 @@ class PackageToolchainContractTest(unittest.TestCase):
         self.assertIn(".bootable == false", workflow)
         upload_step = workflow.split("- name: Upload metadata-preserving root-tree tar without outer ZIP", 1)[1].split("  tf-apfs-intermediate:", 1)[0]
         self.assertEqual(upload_step.count("name: root-tree.tar"), 1)
+
+    def test_full_system_volume_source_is_uploaded_as_a_separate_unqualified_artifact(self):
+        workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
+        package_command = workflow.split("- name: Build and verify RAM-boot package", 1)[1].split(
+            "- name: Upload verified package", 1,
+        )[0]
+        self.assertIn('--system-root-output-dir "$RUNNER_TEMP/y35a-ios12-system-root"', package_command)
+        step = workflow.split("- name: Upload pinned iOS System-volume source", 1)[1].split(
+            "- name: Upload root-tree producer artifact", 1,
+        )[0]
+        self.assertIn("name: y35a-ios12-system-root-${{ github.run_id }}", step)
+        self.assertIn("retention-days: 7", step)
+        self.assertIn("compression-level: 0", step)
+        self.assertIn("scope.paired_data_volume_present == false", workflow)
+
 
     def test_toolchain_manifest_binds_pinned_ndk_paths_versions_and_hashes(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -131,6 +147,89 @@ class PackageToolchainContractTest(unittest.TestCase):
                     manifest_path, {"toolchain": {"android_ndk_revision": "27.0.12077973"}},
                     compiler=root / "clang", linker=root / "ld.lld", objcopy=root / "llvm-objcopy")
 
+
+
+class FullSystemRootSourceTest(unittest.TestCase):
+    def make_inputs(self, root):
+        image = root / "system.dmg"
+        image.write_bytes(b"pinned system volume bytes")
+        source_root = root / "mounted-system"
+        (source_root / "sbin").mkdir(parents=True)
+        (source_root / "usr/lib").mkdir(parents=True)
+        springboard = source_root / "System/Library/CoreServices/SpringBoard.app/SpringBoard"
+        springboard.parent.mkdir(parents=True)
+        (source_root / "sbin/launchd").write_bytes(b"launchd")
+        (source_root / "usr/lib/dyld").write_bytes(b"dyld")
+        springboard.write_bytes(b"SpringBoard")
+        version_path = source_root / "System/Library/CoreServices/SystemVersion.plist"
+        version_path.parent.mkdir(parents=True, exist_ok=True)
+        version_path.write_bytes(plistlib.dumps({
+            "ProductVersion": "12.4.1", "ProductBuildVersion": "16G102",
+        }))
+        firmware = {
+            "ipsw": {"size": 3053369741, "sha256": "a" * 64},
+            "identity": {
+                "device_class": "j96ap", "product_version": "12.4.1",
+                "build": "16G102", "product": "iPad5,1",
+            },
+            "components": {"OS": {
+                "member": "048-78033-095.dmg", "size": image.stat().st_size,
+                "sha256": hashlib.sha256(image.read_bytes()).hexdigest(),
+            }},
+        }
+        volume = {
+            "DeviceIdentifier": "disk5s1", "ParentWholeDisk": "disk5",
+            "Content": "Apple_APFS", "FilesystemType": "apfs",
+            "VolumeUUID": "A1B2C3D4-E5F6-4711-8111-123456789ABC",
+            "VolumeName": package_ci.FIRMWARE_VOLUME,
+        }
+        whole = {"DeviceIdentifier": "disk5", "Content": "GUID_partition_scheme"}
+        return image, source_root, firmware, whole, volume
+
+    def test_full_system_source_artifact_preserves_exact_image_and_stays_unqualified(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image, system_root, firmware, whole, volume = self.make_inputs(root)
+            output = root / "full-system-artifact"
+            version, critical = package_ci.inspect_full_system_volume(
+                system_root, firmware["identity"],
+            )
+            report = package_ci.build_full_system_root_source(
+                image, firmware, version, critical, whole, volume,
+                'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n', output,
+                native_binding={"run_id": "native-1", "head_sha": "b" * 40,
+                                "kernel_sha256": "c" * 64},
+                package_source_sha="d" * 40, package_run_id="package-1",
+            )
+            copied = output / "system-root.dmg"
+            self.assertEqual(copied.read_bytes(), image.read_bytes())
+            self.assertEqual(report["system_root_image"]["sha256"],
+                             hashlib.sha256(image.read_bytes()).hexdigest())
+            self.assertEqual(report["source_component"]["member"], "048-78033-095.dmg")
+            self.assertIn("System/Library/CoreServices/SpringBoard.app/SpringBoard",
+                          report["critical_system_files"])
+            self.assertFalse(report["scope"]["paired_data_volume_present"])
+            self.assertFalse(report["qualification"]["device_ready"])
+            self.assertFalse(report["qualification"]["runtime_qualified"])
+            self.assertFalse(report["qualification"]["device_run_allowed"])
+            self.assertTrue((output / "SHA256SUMS").is_file())
+
+    def test_full_system_source_rejects_component_hash_mismatch(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image, system_root, firmware, whole, volume = self.make_inputs(root)
+            firmware["components"]["OS"]["sha256"] = "0" * 64
+            with self.assertRaisesRegex(ValueError, "does not match the pinned IPSW component"):
+                version, critical = package_ci.inspect_full_system_volume(
+                    system_root, firmware["identity"],
+                )
+                package_ci.build_full_system_root_source(
+                    image, firmware, version, critical, whole, volume,
+                    'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n', root / "artifact",
+                    native_binding={"run_id": "native-1", "head_sha": "b" * 40,
+                                    "kernel_sha256": "c" * 64},
+                    package_source_sha="d" * 40, package_run_id="package-1",
+                )
 
 def synthetic_fdt(size=128):
     data = bytearray(size)

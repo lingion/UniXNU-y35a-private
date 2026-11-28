@@ -461,6 +461,7 @@ jobs:
             --package-source-sha "$PACKAGE_SOURCE_SHA" \
             --package-run-id "$PACKAGE_RUN_ID" \
             --ipsw "$RUNNER_TEMP/ios-12.4.1-16G102.ipsw" \
+            --system-root-output-dir "$RUNNER_TEMP/y35a-ios12-system-root" \
             --dtc .ci-tools/dtc/dtc \
             --dtc-revision "$DTC_REVISION" \
             --compiler "$CLANG" \
@@ -488,6 +489,42 @@ jobs:
           path: ${{ runner.temp }}/y35a-ramboot-package
           if-no-files-found: error
           retention-days: 30
+      - name: Verify complete iOS System-volume source handoff
+        run: |
+          set -euo pipefail
+          ROOT="$RUNNER_TEMP/y35a-ios12-system-root"
+          test -s "$ROOT/system-root.dmg"
+          test -s "$ROOT/system-root-source.json"
+          (cd "$ROOT" && shasum -a 256 -c SHA256SUMS)
+          jq -e '
+            .status == "full-system-volume-source-verified"
+            and .candidate_kind == "pinned-ios12-system-volume-source"
+            and .source_component.byte_identical_to_pinned_component == true
+            and .gpt_apfs.partition_map_source == "hdiutil-pmap:SCHEME"
+            and .scope.system_volume_complete == true
+            and .scope.paired_data_volume_present == false
+            and .scope.complete_ios_installation == false
+            and .qualification.device_ready == false
+            and .qualification.runtime_qualified == false
+            and .qualification.device_run_allowed == false
+          ' "$ROOT/system-root-source.json" > /dev/null
+          {
+            echo "## Pinned iOS System-volume source"
+            echo
+            echo "Artifact: y35a-ios12-system-root-${PACKAGE_RUN_ID}"
+            echo "System image SHA-256: $(shasum -a 256 "$ROOT/system-root.dmg" | awk '{print $1}')"
+            echo "Scope: complete pinned iOS 12.4.1 System volume source; no paired Data volume or Y35A runtime qualification"
+          } >> "$GITHUB_STEP_SUMMARY"
+        env:
+          PACKAGE_RUN_ID: ${{ github.run_id }}
+      - name: Upload pinned iOS System-volume source
+        uses: actions/upload-artifact@v4
+        with:
+          name: y35a-ios12-system-root-${{ github.run_id }}
+          path: ${{ runner.temp }}/y35a-ios12-system-root
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
       - name: Upload root-tree producer artifact
         uses: actions/upload-artifact@v4
         with:

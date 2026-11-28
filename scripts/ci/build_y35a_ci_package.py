@@ -25,7 +25,12 @@ import package_native
 
 sys.path.insert(0, str(ROOT / "scripts/ci"))
 from build_y35a_qcdt import build_qcdt
-from build_y35a_tf_apfs_image import extract_root_tree_archive, tree_metadata_manifest, tree_sha256
+from build_y35a_tf_apfs_image import (
+    extract_root_tree_archive,
+    tree_metadata_manifest,
+    tree_sha256,
+    validate_gpt_apfs,
+)
 from extract_ios12_package_inputs import extract_inputs
 from verify_y35a_trustcache import verify_staged_root
 
@@ -361,7 +366,18 @@ def mounted_firmware(system_dmg: Path, ramdisk_image: Path, work: Path):
             check=True,
         )
         ramdisk_mounted = True
-        yield system_mount, ramdisk_mount
+        system_info = plistlib.loads(subprocess.run(
+            ["diskutil", "info", "-plist", str(system_mount)],
+            check=True, capture_output=True,
+        ).stdout)
+        parent = system_info.get("ParentWholeDisk") or system_info.get("ParentWholeDiskDevice")
+        if not parent:
+            raise RuntimeError("pinned IPSW System volume did not report its parent whole disk")
+        whole_info = plistlib.loads(subprocess.run(
+            ["diskutil", "info", "-plist", f"/dev/{parent}"],
+            check=True, capture_output=True,
+        ).stdout)
+        yield system_mount, ramdisk_mount, system_info, whole_info
     finally:
         if ramdisk_mounted:
             subprocess.run(["umount", str(ramdisk_mount)], check=False)
@@ -512,6 +528,162 @@ def build_metadata_preserving_root_tree_archive(root_tree: Path, archive_path: P
     }
 
 
+def inspect_full_system_volume(system_root: Path, expected_identity: dict) -> tuple[dict, dict]:
+    """Capture version and critical-file hashes while the source APFS volume is mounted."""
+    system_root = system_root.resolve(strict=True)
+    version_path = system_root / "System/Library/CoreServices/SystemVersion.plist"
+    version = plistlib.loads(version_path.read_bytes())
+    if (version.get("ProductVersion") != expected_identity.get("product_version")
+            or version.get("ProductBuildVersion") != expected_identity.get("build")):
+        raise ValueError("mounted System volume version/build differs from the pinned IPSW")
+
+    critical_paths = (
+        "sbin/launchd",
+        "usr/lib/dyld",
+        "System/Library/CoreServices/SpringBoard.app/SpringBoard",
+    )
+    critical_files = {}
+    for relative in critical_paths:
+        path = system_root / relative
+        if not path.is_file():
+            raise ValueError(f"complete System volume is missing required system binary: {relative}")
+        critical_files[relative] = {"bytes": path.stat().st_size, "sha256": sha256(path)}
+    return ({"product_version": version["ProductVersion"],
+             "build": version["ProductBuildVersion"]}, critical_files)
+
+
+def build_full_system_root_source(
+    system_dmg: Path,
+    firmware_report: dict,
+    system_version: dict,
+    critical_files: dict,
+    whole_info: dict,
+    volume_info: dict,
+    partition_map_output: str,
+    output_dir: Path,
+    *,
+    native_binding: dict,
+    package_source_sha: str,
+    package_run_id: str,
+) -> dict:
+    """Export the exact pinned iOS System volume image as a separate source artifact.
+
+    The DMG is hard-linked into the artifact directory so its APFS contents and
+    metadata stay byte-identical without allocating a second multi-gigabyte copy.
+    """
+    system_dmg = system_dmg.resolve(strict=True)
+    output_dir = output_dir.resolve()
+    if output_dir.exists():
+        raise ValueError(f"refusing to overwrite full-system-root artifact directory: {output_dir}")
+
+    identity = firmware_report.get("identity", {})
+    expected_identity = {
+        "device_class": "j96ap",
+        "product_version": "12.4.1",
+        "build": "16G102",
+        "product": "iPad5,1",
+    }
+    if any(identity.get(key) != value for key, value in expected_identity.items()):
+        raise ValueError("full-system source is not bound to the pinned iOS 12.4.1 16G102 identity")
+    component = firmware_report.get("components", {}).get("OS", {})
+    source_hash = sha256(system_dmg)
+    source_bytes = system_dmg.stat().st_size
+    if (source_hash != component.get("sha256") or source_bytes != component.get("size")):
+        raise ValueError("System DMG bytes do not match the pinned IPSW component")
+
+    if (system_version.get("product_version") != identity["product_version"]
+            or system_version.get("build") != identity["build"]):
+        raise ValueError("mounted System volume version/build differs from the pinned IPSW")
+    required_critical = {
+        "sbin/launchd", "usr/lib/dyld",
+        "System/Library/CoreServices/SpringBoard.app/SpringBoard",
+    }
+    if set(critical_files) != required_critical:
+        raise ValueError("full System volume critical-file inventory is incomplete")
+
+    parent = volume_info.get("ParentWholeDisk") or volume_info.get("ParentWholeDiskDevice")
+    if not parent:
+        raise ValueError("mounted System volume has no parent whole-disk identifier")
+    gpt_apfs = validate_gpt_apfs(
+        whole_info, volume_info, partition_map_output, expected_whole_disk=parent,
+    )
+
+    output_dir.mkdir(parents=True)
+    image_path = output_dir / "system-root.dmg"
+    if system_dmg.stat().st_dev != output_dir.stat().st_dev:
+        raise ValueError("System DMG and artifact staging directory must share a filesystem for a lossless hard link")
+    os.link(system_dmg, image_path)
+    if sha256(image_path) != source_hash or image_path.stat().st_size != source_bytes:
+        raise ValueError("full-system root source artifact differs from the pinned System DMG")
+
+    report = {
+        "schema_version": 1,
+        "status": "full-system-volume-source-verified",
+        "candidate_kind": "pinned-ios12-system-volume-source",
+        "package_source": {
+            "commit": package_source_sha,
+            "workflow_run_id": str(package_run_id),
+        },
+        "artifact_name": f"y35a-ios12-system-root-{package_run_id}",
+        "native_build": {
+            "run_id": str(native_binding.get("run_id")),
+            "head_sha": native_binding.get("head_sha"),
+            "kernel_sha256": native_binding.get("kernel_sha256"),
+        },
+        "firmware_identity": identity,
+        "source_ipsw": firmware_report.get("ipsw"),
+        "source_component": {
+            **component,
+            "output_path": image_path.name,
+            "output_sha256": source_hash,
+            "output_bytes": source_bytes,
+            "byte_identical_to_pinned_component": True,
+        },
+        "system_root_image": {
+            "path": image_path.name,
+            "bytes": source_bytes,
+            "sha256": source_hash,
+            "format": "byte-identical IPSW OS component containing the pinned APFS System volume",
+        },
+        "system_version": system_version,
+        "critical_system_files": critical_files,
+        "gpt_apfs": gpt_apfs,
+        "apfs_volume": {
+            "name": volume_info.get("VolumeName"),
+            "uuid": volume_info.get("VolumeUUID"),
+            "filesystem_type": volume_info.get("FilesystemType"),
+        },
+        "scope": {
+            "system_volume_complete": True,
+            "paired_data_volume_present": False,
+            "complete_ios_installation": False,
+            "springboard_binary_present": True,
+            "springboard_runtime_validated": False,
+            "device_ready": False,
+            "runtime_qualified": False,
+            "device_run_allowed": False,
+        },
+        "qualification": {
+            "device_ready": False,
+            "runtime_qualified": False,
+            "springboard_runtime_validated": False,
+            "device_run_allowed": False,
+        },
+        "limitations": [
+            "The IPSW System volume is for j96ap / iPad5,1; Y35A compatibility is unverified.",
+            "The IPSW does not provide a paired writable Data volume in this artifact.",
+            "This is a source System-volume image, not a Y35A TF card image or boot result.",
+        ],
+    }
+    report_path = output_dir / "system-root-source.json"
+    report_path.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
+    checksums = [image_path, report_path]
+    (output_dir / "SHA256SUMS").write_text(
+        "".join(f"{sha256(path)}  {path.name}\n" for path in checksums)
+    )
+    return report
+
+
 def build_package(args) -> dict:
     config_path = args.config.resolve(strict=True)
     config = load_json(config_path)
@@ -543,6 +715,7 @@ def build_package(args) -> dict:
         work = Path(temporary)
         firmware_dir = work / "firmware"
         firmware_report = extract_inputs(args.ipsw.resolve(strict=True), firmware_dir, config_path)
+        full_system_root_source_report = None
 
         qcdt_path = work / "y35a.qcdt"
         dts = ROOT / config["board"]["dts_path"]
@@ -551,7 +724,10 @@ def build_package(args) -> dict:
         root_tree = work / "ios12-root"
         with mounted_firmware(
             firmware_dir / "system.dmg", firmware_dir / "restore-ramdisk.hfsx", work,
-        ) as (system_root, apple_ramdisk_root):
+        ) as (system_root, apple_ramdisk_root, system_volume_info, system_whole_info):
+            system_version, critical_system_files = inspect_full_system_volume(
+                system_root, firmware_report["identity"],
+            )
             subprocess.run(
                 ["sudo", sys.executable, str(ROOT / "scripts/stage-ios12-root.py"),
                  "--system-root", str(system_root),
@@ -559,6 +735,31 @@ def build_package(args) -> dict:
                  "--out", str(root_tree), "--hfs-image",
                  "--trustcache", str(firmware_dir / "static-trustcache.im4p")],
                 check=True,
+            )
+
+        system_root_output_dir = getattr(args, "system_root_output_dir", None)
+        if system_root_output_dir is not None:
+            system_dmg = firmware_dir / "system.dmg"
+            pmap = subprocess.run(
+                ["hdiutil", "pmap", "-simple", str(system_dmg)],
+                check=True, capture_output=True, text=True,
+            ).stdout
+            full_system_root_source_report = build_full_system_root_source(
+                system_dmg,
+                firmware_report,
+                system_version,
+                critical_system_files,
+                system_whole_info,
+                system_volume_info,
+                pmap,
+                Path(system_root_output_dir),
+                native_binding=native_binding,
+                package_source_sha=args.package_source_sha,
+                package_run_id=args.package_run_id,
+            )
+            shutil.copy2(
+                Path(system_root_output_dir) / "system-root-source.json",
+                output / "system-root-source.json",
             )
 
         root_work = root_tree.with_name(root_tree.name + ".work")
@@ -695,6 +896,17 @@ def build_package(args) -> dict:
             },
             "native_build_status": native_provenance["status"],
             "firmware": firmware_report,
+            "full_system_root_source": (
+                {
+                    "artifact_name": full_system_root_source_report["artifact_name"],
+                    "image_sha256": full_system_root_source_report["system_root_image"]["sha256"],
+                    "image_bytes": full_system_root_source_report["system_root_image"]["bytes"],
+                    "report_sha256": sha256(Path(system_root_output_dir) / "system-root-source.json"),
+                    "scope": full_system_root_source_report["scope"],
+                    "qualification": full_system_root_source_report["qualification"],
+                }
+                if full_system_root_source_report else None
+            ),
             "device_tree": qcdt_report,
             "package_source": {
                 "commit": args.package_source_sha,
@@ -763,6 +975,8 @@ def main() -> int:
     parser.add_argument("--package-source-sha", required=True)
     parser.add_argument("--package-run-id", required=True)
     parser.add_argument("--ipsw", required=True, type=Path)
+    parser.add_argument("--system-root-output-dir", type=Path,
+                        help="optional separate full pinned iOS System-volume source artifact directory")
     parser.add_argument("--dtc", required=True, type=Path)
     parser.add_argument("--dtc-revision", required=True)
     parser.add_argument("--compiler", required=True, type=Path)

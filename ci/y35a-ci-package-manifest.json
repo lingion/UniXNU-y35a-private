@@ -58,6 +58,16 @@
     "springboard_included": false,
     "touch_runtime_validated": false
   },
+  "system_root_source": {
+    "kind": "pinned-ios12-system-volume-source",
+    "artifact_name_pattern": "y35a-ios12-system-root-<package-run-id>",
+    "artifact_retention_days": 7,
+    "system_volume_complete": true,
+    "paired_data_volume_present": false,
+    "complete_ios_installation": false,
+    "target_board_qualified": false,
+    "device_run_allowed": false
+  },
   "dtc": {
     "repository": "https://github.com/dgibson/dtc.git",
     "commit": "2d10aa2afe35527728db30b35ec491ecb6959e5c"
