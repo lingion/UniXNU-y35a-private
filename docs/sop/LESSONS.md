@@ -541,6 +541,16 @@
 - 自动化入口：`docs/sop/UNIXNU-EXECUTION-SOP.md` and `docs/skills/unixnu-evidence-gate/SKILL.md` local command rules; `.github/workflows/unixnu-validation.yml` tracked-text step.
 - 下一次触发：Any local Git review or shell command batch for this CI-only repository.
 
+## L-2026-11-29-01 workflow_dispatch exceeds the 25-input schema limit before jobs exist
+
+- 现象：Package workflow run `46163203496` for commit `be4132e760ec81f6846c114f6d2900ff62aae261` failed with no jobs, no check runs and no downloadable run log; its workflow display name was the YAML path rather than the configured workflow name.
+- 根因：The `workflow_dispatch.inputs` block had 26 top-level inputs, exceeding GitHub's documented maximum of 25, so Actions did not create job execution.
+- 影响：No package validation, native artifact download or image build ran. The green `UniXNU validation` run `46163204775` is separate and cannot prove package workflow validity.
+- 正确做法：Keep only the root-tree run ID and canonical stock boot path as user inputs; resolve the unique root-tree artifact ID, digest and source SHA from the successful same-branch Actions run API record. Add an Actions contract test that fails if a workflow_dispatch schema exceeds 25 inputs.
+- 证据：Actions run `46163203496` API returned `jobs=[]`, `/actions/runs/46163203496/check-runs` returned `total_count=0`, and `gh run view --log-failed` returned `log not found`; the committed workflow input block had 26 top-level entries. The official GitHub Actions workflow syntax documentation states the workflow_dispatch input limit is 25.
+- 自动化入口：`.github/workflows/y35a-ci-package.yml` `workflow_dispatch.inputs`; `tests/test_y35a_tf_root_boot_package.py::test_package_workflow_consumes_exact_tf_artifact_and_uploads_unqualified_bundle`.
+- 下一次触发：Any new `workflow_dispatch` parameter added to a workflow input block.
+
 跟进 run `46130315528` 的证据：添加 `hdiutil -owners on` 后，UID/GID 改动从 159,082/171,044 条降到各 1 条，只剩 volume 根目录 UID/GID（来源 `0:0`、目标 `501:20`）；mtime 差异仍为 1,069 条，全部 bounded samples 落在目录/文件路径中，缺失项计数变为 0。修复须从原 source manifest 显式恢复 volume 根 UID/GID，并在复制完成后恢复记录的 nanosecond mtime（文件与目录，目录由深到浅、根目录最后）；最终仍以重扫全树 equality gate 作为验收。该 run 的 diagnostics artifact ID `15259816488`，digest `sha256:0be17f510b28adcc63f26c1aa1af6355f4a600a84fb43d15b8e540bcee39759c`。
 
 跟进 run `46135948784`：ownership/mTime restore 分支未进入树比较，失败为 `NameError: name 'sys' is not defined`，调用点在 mtime restore helper。没有产出 control 或 diagnostics artifact。修复加入生产模块 import 并新增 helper contract test，随后用同一个精确 System artifact 再跑；不能把该 run 计为 metadata gate 结果。

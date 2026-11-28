@@ -4,6 +4,7 @@ import hashlib
 import importlib.util
 import json
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -275,14 +276,17 @@ class TfRootBootPackageContractTest(unittest.TestCase):
 
     def test_package_workflow_consumes_exact_tf_artifact_and_uploads_unqualified_bundle(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
+        inputs_block = workflow.split("  workflow_dispatch:\n    inputs:\n", 1)[1].split(
+            "\n  workflow_run:", 1)[0]
+        input_names = re.findall(r"^      [a-zA-Z0-9_-]+:\s*$", inputs_block, re.MULTILINE)
+        self.assertLessEqual(len(input_names), 25)
         self.assertIn("Resolve exact TF/APFS intermediate artifact", workflow)
         self.assertIn('name: y35a-tf-apfs-intermediate-${{ needs.validate.outputs.tf_apfs_run_id }}', workflow)
         self.assertIn("--tf-apfs-artifact-digest", workflow)
         self.assertIn("--tf-apfs-head-sha", workflow)
         self.assertIn("--tf-bundle-output", workflow)
         self.assertNotIn("--root-kind", workflow)
-        self.assertIn("root_tree_artifact_id:", workflow)
-        self.assertIn("root_tree_artifact_digest:", workflow)
+        self.assertIn("Resolve exact root-tree package artifact", workflow)
         self.assertIn("EXPECTED_ROOT_TREE_ARTIFACT_DIGEST", workflow)
         self.assertIn('ROOT_TREE_DIR="$RUNNER_TEMP/root-tree/$ROOT_TREE_ARTIFACT"', workflow)
         self.assertIn(".workflow_run.head_branch == $branch", workflow)
