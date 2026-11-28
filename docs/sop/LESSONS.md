@@ -510,3 +510,13 @@
 - 证据：Local command output showed the three staged files and no reported whitespace issue; that output is explicitly not counted as a pass. CI result remains pending.
 - 自动化入口：`.github/workflows/unixnu-validation.yml` tracked-text job and `.github/workflows/y35a-ci-package.yml` package-contract job.
 - 下一次触发：Any local Git review command batch for this CI-only repository.
+
+## L-2026-11-28-29 APFS control volumes must attach with ownership enabled before metadata round-trip checks
+
+- 现象：System APFS control run `46124084058` verified the exact source artifact, created and copied the full System tree, then rejected the round-trip after 171,048 source entries became 171,050 target entries. The diff counted 159,082 UID changes, 171,044 GID changes, 1,069 mtime changes, two missing source entries, and no missing target entries. Examples show source UID/GID `0:0` or `0:80` becoming target `501:20`.
+- 根因：The target image was attached without `hdiutil -owners on`. The copy ran through `sudo ditto`, but the target APFS mount exposed all entries as runner UID/GID `501:20`, so the source ownership fields could not round-trip. The remaining mtime and two missing-entry paths are not yet identified by the bounded sidecar.
+- 影响：The APFS image failed its strict metadata/content equality gate and no control image artifact was uploaded. The source System artifact and its content hashes remained bound and validated; this does not qualify a Y35A root or device boot.
+- 正确做法：Use the same explicit `hdiutil attach -owners on` option as the validated TF/APFS image builder. Keep strict UID/GID/mtime comparisons. Sidecars must preserve bounded missing-path samples and per-field source/target examples so any remaining differences can be diagnosed from one run; do not normalize away ownership or timestamps. Re-run the exact artifact once, then fix only any residual differences named by its new sidecar.
+- 证据：GitHub Actions run `46124084058`, commit `76304d84a0f8b8eaf10b7fa72b1b75a194444535`, job `system-root-apfs-control`; exact source run `46100598017`, artifact ID `15245028918`, digest `sha256:3a06bb3c3bc0364dd0ab83e921bda45c89390f1e9226db3118fabb1d5e08ae06`. Diagnostic artifact ID `15257072285`, digest `sha256:927655a39dc1984f5d2cc1737ed51c3af85e40e91371727d8e24d0dbc2bc8a34`.
+- 自动化入口：`scripts/ci/build_y35a_system_apfs_control.py::control_image_attach_command`, `diff_tree_manifests`, `tests/test_y35a_system_apfs_control.py`, and the `system-root-apfs-control` job.
+- 下一次触发：Any APFS image copy where the target's POSIX owner/group or directory timestamps differ from the sealed source tree.

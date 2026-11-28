@@ -40,22 +40,36 @@ def diff_tree_manifests(source_manifest: dict, target_manifest: dict, *, limit: 
     paths = sorted(set(source_entries) | set(target_entries))
     changed = []
     field_counts: dict[str, int] = {}
+    field_examples: dict[str, list[dict]] = {}
+    missing_source_paths = []
+    missing_target_paths = []
     missing_source = missing_target = 0
     for path in paths:
         source = source_entries.get(path)
         target = target_entries.get(path)
         if source is None:
             missing_source += 1
+            if len(missing_source_paths) < limit:
+                missing_source_paths.append(path)
             changed.append({"path": path, "difference": "source-entry-missing"})
             continue
         if target is None:
             missing_target += 1
+            if len(missing_target_paths) < limit:
+                missing_target_paths.append(path)
             changed.append({"path": path, "difference": "target-entry-missing"})
             continue
         fields = sorted(key for key in (set(source) | set(target)) if source.get(key) != target.get(key))
         if fields:
             for field in fields:
                 field_counts[field] = field_counts.get(field, 0) + 1
+                examples = field_examples.setdefault(field, [])
+                if len(examples) < limit:
+                    examples.append({
+                        "path": path,
+                        "source": source.get(field),
+                        "target": target.get(field),
+                    })
             changed.append({
                 "path": path,
                 "difference": "entry-metadata-or-content",
@@ -71,10 +85,24 @@ def diff_tree_manifests(source_manifest: dict, target_manifest: dict, *, limit: 
         "changed_entry_count": len(changed),
         "missing_source_entry_count": missing_source,
         "missing_target_entry_count": missing_target,
+        "missing_source_paths": missing_source_paths,
+        "missing_source_paths_truncated": max(0, missing_source - len(missing_source_paths)),
+        "missing_target_paths": missing_target_paths,
+        "missing_target_paths_truncated": max(0, missing_target - len(missing_target_paths)),
         "changed_field_counts": dict(sorted(field_counts.items())),
+        "changed_field_examples": dict(sorted(field_examples.items())),
+        "changed_field_examples_truncated": {
+            field: max(0, count - len(field_examples.get(field, [])))
+            for field, count in sorted(field_counts.items())
+        },
         "examples": changed[:limit],
         "examples_truncated": max(0, len(changed) - limit),
     }
+
+
+def control_image_attach_command(image_path: Path) -> list[str]:
+    """Attach the target APFS image with POSIX ownership enabled."""
+    return ["hdiutil", "attach", "-nobrowse", "-owners", "on", "-plist", str(image_path)]
 
 
 def verify_source_checksums(image_path: Path, report_path: Path) -> None:
@@ -461,9 +489,7 @@ def build_control_image(
                 f"hdiutil reported success without creating image {create_path}; "
                 f"stdout={create_result.stdout}\nstderr={create_result.stderr}"
             )
-        target_attach = run_checked(
-            ["hdiutil", "attach", "-nobrowse", "-plist", str(create_path)], text=False,
-        )
+        target_attach = run_checked(control_image_attach_command(create_path), text=False)
         target_device = attached_device(target_attach.stdout)
         target_entities = plistlib.loads(target_attach.stdout).get("system-entities", [])
         target_volume = next((item for item in target_entities if item.get("mount-point")), None)

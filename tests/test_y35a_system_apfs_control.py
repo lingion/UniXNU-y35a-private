@@ -225,8 +225,12 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         self.assertEqual(report["changed_entry_count"], 2)
         self.assertEqual(report["changed_field_counts"], {"mode": 1})
         self.assertEqual(report["missing_source_entry_count"], 1)
+        self.assertEqual(report["missing_source_paths"], ["extra"])
         self.assertEqual(report["examples"][0]["path"], "extra")
         self.assertIn("mode", report["examples"][1]["fields"])
+        self.assertEqual(report["changed_field_examples"]["mode"][0], {
+            "path": "file", "source": 0o644, "target": 0o600,
+        })
 
     def test_tree_manifest_diff_limits_example_payload(self):
         source = {"entries": []}
@@ -237,6 +241,15 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         self.assertEqual(report["changed_entry_count"], 70)
         self.assertEqual(len(report["examples"]), 10)
         self.assertEqual(report["examples_truncated"], 60)
+        self.assertEqual(len(report["missing_source_paths"]), 10)
+        self.assertEqual(report["missing_source_paths_truncated"], 60)
+
+    def test_control_image_attach_explicitly_enables_posix_ownership(self):
+        command = MODULE.control_image_attach_command(Path("/tmp/control.dmg"))
+        self.assertEqual(command, [
+            "hdiutil", "attach", "-nobrowse", "-owners", "on", "-plist",
+            "/tmp/control.dmg",
+        ])
 
     def test_dispatch_workflow_binds_system_artifact_and_preserves_offline_scope(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
