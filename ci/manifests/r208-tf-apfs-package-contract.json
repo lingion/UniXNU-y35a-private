@@ -9,7 +9,7 @@
     "device_ready": false
   },
   "native": {
-    "manifest": "ci/native-build-manifest.r208.json",
+    "manifest": "ci/native-build-manifest.r208-fallback-v3.json",
     "kernel_artifact_schema": 2,
     "build_plan_required": true,
     "linked_gate_required": true
@@ -18,10 +18,10 @@
     "source_type_required": "stock-qcdt",
     "derived_qcdt_allowed_for": "offline-control-only",
     "stock_qcdt_input": {
-      "status": "unavailable",
-      "sha256": null,
+      "status": "available",
+      "sha256": "4e717950b65b1a65a3071d8935f9aa5e47e595ec6df9d80679d306a68342c010",
       "required_source_boot": {
-        "status": "historically-pinned-file-missing",
+        "status": "tracked-and-pinned",
         "bytes": 67108864,
         "sha256": "92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012",
         "user_input_path": "evidence/y35a-20261102/stock-boot.img",
@@ -30,13 +30,13 @@
         "qcdt_must_be_extracted_from_android_header_dt_range": true,
         "board_tuple": [206, 8, 23]
       },
-      "known_candidate_paths": [
-        "/Volumes/Mobile/unixnu-research/UniXNU-y35a/evidence/y35a-20261102/lk2nd-runtime.dtb",
-        "/Volumes/Mobile/unixnu-research/UniXNU-y35a/evidence/y35a-20261102/boot3-20261106/boot3.img",
-        "/Volumes/Mobile/unixnu-research/UniXNU-y35a/reboot-checkpoints/r326-r119-pre-bsd-split-paired-run-20261123-235/boot3.img",
-        "/Volumes/Mobile/unixnu-research/UniXNU-y35a/reboot-checkpoints/r326b-iokit-cursor-package-20261123-06/boot3.img"
-      ],
-      "read_error": "Input/output error on /Volumes/Mobile"
+      "verified_intermediate": {
+        "run_id": "46126630321",
+        "head_sha": "76304d84a0f8b8eaf10b7fa72b1b75a194444535",
+        "qcdt_bytes": 14835712,
+        "qcdt_offset": 11943936,
+        "source_boot_sha256": "92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012"
+      }
     },
     "status": "unverified",
     "sha256": null
@@ -57,16 +57,26 @@
     "sha256": null
   },
   "root_selection": {
-    "coordinator_symbol": "native_storage_select_root",
+    "coordinator_symbol": "IOFindBSDRoot",
     "linked_implementation_required": true,
     "tf_selector": "boot-uuid",
-    "emmc_selector": "boot-uuid",
+    "emmc_selector": "emmc-boot-uuid",
+    "tf_root_uuid": {
+      "status": "build-output",
+      "value": null,
+      "sha256": null
+    },
+    "emmc_root_uuid": {
+      "status": "unavailable",
+      "value": null,
+      "sha256": null
+    },
     "status": "unverified"
   },
   "fallback": {
     "patch": {
-      "path": "patches/xnu/native-y35a-tf-emmc-root-fallback.patch",
-      "sha256": "f886e829b94999e79af06964ee274992d975382827191912d2ab8c8a8bd291eb"
+      "path": "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch",
+      "sha256": "01c105678d3c959a868bafb774cbded77bde3e5b01b31fd4f34db845e7a5cf25"
     },
     "feature_macro": "XNU_Y35A_STORAGE_FALLBACK",
     "boot_arg": "emmc-boot-uuid",
@@ -90,10 +100,12 @@
     "fresh_baseline_required": true,
     "status": "unverified"
   },
-  "device_run_blockers": [
+    "device_run_blockers": [
     "native kernel artifact and build plan are not yet bound",
-    "stock QCDT provenance is not yet bound",
+    "stock QCDT provenance is proven in the TF intermediate but has not yet been consumed by an external-root boot package",
     "GPT/APFS TF image and exact card binding are not yet present",
+    "TF APFS root UUID is a build output and is not yet bound",
+    "eMMC APFS root UUID is unavailable and must not be fabricated",
     "linked root coordinator and first-read fallback implementation are not verified",
     "package and probe hashes are not yet bound"
   ]

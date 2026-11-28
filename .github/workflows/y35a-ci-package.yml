@@ -18,6 +18,7 @@ on:
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
       - 'evidence/y35a-20261102/stock-boot.img'
       - 'scripts/ci/build_y35a_ci_package.py'
+      - 'scripts/ci/build_y35a_tf_root_boot_package.py'
       - 'scripts/ci/build_y35a_tf_apfs_image.py'
       - 'scripts/ci/extract_y35a_stock_qcdt.py'
       - 'scripts/ci/build_y35a_system_apfs_control.py'
@@ -44,8 +45,9 @@ on:
       - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch'
       - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch'
       - 'scripts/y35a/verify_r208_tf_apfs_package_contract.py'
-      - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch'
       - 'tests/test_ci_y35a_package.py'
+      - 'tests/test_native_pack.py'
+      - 'tests/test_y35a_tf_root_boot_package.py'
       - 'tests/test_ci_native_input_prep.py'
       - 'tests/test_r208_storage_abi_contract.py'
       - 'tests/test_r208_tf_apfs_package_contract.py'
@@ -71,6 +73,7 @@ on:
       - 'evidence/y35a-20261102/boot3-20261106/touch-t02-20261109/dtb10-cache/dtb10.dts'
       - 'evidence/y35a-20261102/stock-boot.img'
       - 'scripts/ci/build_y35a_ci_package.py'
+      - 'scripts/ci/build_y35a_tf_root_boot_package.py'
       - 'scripts/ci/build_y35a_tf_apfs_image.py'
       - 'scripts/ci/extract_y35a_stock_qcdt.py'
       - 'scripts/ci/build_y35a_system_apfs_control.py'
@@ -97,8 +100,9 @@ on:
       - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch'
       - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch'
       - 'scripts/y35a/verify_r208_tf_apfs_package_contract.py'
-      - 'patches/xnu/native-y35a-tf-emmc-root-fallback-v2.patch'
       - 'tests/test_ci_y35a_package.py'
+      - 'tests/test_native_pack.py'
+      - 'tests/test_y35a_tf_root_boot_package.py'
       - 'tests/test_ci_native_input_prep.py'
       - 'tests/test_r208_storage_abi_contract.py'
       - 'tests/test_r208_tf_apfs_package_contract.py'
@@ -149,13 +153,28 @@ on:
         required: false
         default: ''
         type: string
+      root_tree_artifact_id:
+        description: Exact artifact ID from the selected root-tree package run
+        required: false
+        default: ''
+        type: string
+      root_tree_artifact_digest:
+        description: Exact artifact API digest including sha256 prefix
+        required: false
+        default: ''
+        type: string
+      root_tree_head_sha:
+        description: Full source commit SHA of the selected root-tree package run
+        required: false
+        default: ''
+        type: string
       root_tree_path:
         description: Metadata-preserving root-tree.tar path inside the root-tree artifact
         required: false
         default: ''
         type: string
       stock_boot_path:
-        description: Tracked repository-relative path to the original full PD1502A stock boot image (64 MiB, pinned SHA-256); leave empty until supplied
+        description: Canonical tracked PD1502A stock boot image path; CI verifies the exact 64 MiB historical SHA-256
         required: false
         default: ''
         type: string
@@ -171,6 +190,31 @@ on:
         type: string
       system_root_artifact_digest:
         description: Exact source artifact API digest including sha256 prefix
+        required: false
+        default: ''
+        type: string
+      tf_apfs_run_id:
+        description: Successful run that produced the exact stock-QCDT GPT/APFS TF intermediate
+        required: false
+        default: ''
+        type: string
+      tf_apfs_artifact_id:
+        description: Exact y35a-tf-apfs-intermediate artifact ID
+        required: false
+        default: ''
+        type: string
+      tf_apfs_artifact_digest:
+        description: Exact TF/APFS artifact API digest including sha256 prefix
+        required: false
+        default: ''
+        type: string
+      tf_apfs_head_branch:
+        description: Branch that produced the selected TF/APFS intermediate
+        required: false
+        default: ''
+        type: string
+      tf_apfs_head_sha:
+        description: Exact commit SHA that produced the selected TF/APFS intermediate
         required: false
         default: ''
         type: string
@@ -226,6 +270,11 @@ jobs:
       native_manifest_path: ${{ steps.native_manifest.outputs.path }}
       native_artifact_id: ${{ steps.native.outputs.artifact_id }}
       native_artifact_digest: ${{ steps.native.outputs.artifact_digest }}
+      tf_apfs_run_id: ${{ steps.tf_apfs.outputs.run_id }}
+      tf_apfs_artifact_id: ${{ steps.tf_apfs.outputs.artifact_id }}
+      tf_apfs_artifact_digest: ${{ steps.tf_apfs.outputs.artifact_digest }}
+      tf_apfs_head_branch: ${{ steps.tf_apfs.outputs.head_branch }}
+      tf_apfs_head_sha: ${{ steps.tf_apfs.outputs.head_sha }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -234,7 +283,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test package contracts
-        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_storage_abi_contract.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py tests/test_y35a_system_apfs_control.py tests/test_y35a_tf_emmc_root_fallback_v2_patch.py tests/test_y35a_tf_emmc_root_fallback_v3_patch.py tests/test_r208_native_kernel_gate.py
+        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_storage_abi_contract.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py tests/test_y35a_system_apfs_control.py tests/test_y35a_tf_emmc_root_fallback_v2_patch.py tests/test_y35a_tf_emmc_root_fallback_v3_patch.py tests/test_r208_native_kernel_gate.py tests/test_native_pack.py tests/test_y35a_tf_root_boot_package.py
       - name: Verify fallback v3 patch chain applies to exact XNU source
         run: python scripts/ci/verify_r208_fallback_v3_source.py --manifest ci/native-build-manifest.r208-fallback-v3.json --repo-root .
       - name: Validate R208 TF/APFS device-package design contract
@@ -249,6 +298,28 @@ jobs:
           set -euo pipefail
           [[ "$PACKAGE_SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]
           echo "sha=$PACKAGE_SOURCE_SHA" >> "$GITHUB_OUTPUT"
+      - name: Validate root-tree dispatch inputs
+        env:
+          ROOT_TREE_RUN_ID: ${{ inputs.root_tree_run_id }}
+          ROOT_TREE_ARTIFACT: ${{ inputs.root_tree_artifact }}
+          ROOT_TREE_ARTIFACT_ID: ${{ inputs.root_tree_artifact_id }}
+          ROOT_TREE_ARTIFACT_DIGEST: ${{ inputs.root_tree_artifact_digest }}
+          ROOT_TREE_HEAD_SHA: ${{ inputs.root_tree_head_sha }}
+          ROOT_TREE_PATH: ${{ inputs.root_tree_path }}
+          STOCK_BOOT_PATH: ${{ inputs.stock_boot_path }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$ROOT_TREE_RUN_ID" ]]; then
+            test -z "$ROOT_TREE_ARTIFACT$ROOT_TREE_ARTIFACT_ID$ROOT_TREE_ARTIFACT_DIGEST$ROOT_TREE_HEAD_SHA$ROOT_TREE_PATH$STOCK_BOOT_PATH"
+            exit 0
+          fi
+          [[ "$ROOT_TREE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$ROOT_TREE_ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          [[ "$ROOT_TREE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$ROOT_TREE_HEAD_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$ROOT_TREE_ARTIFACT" = "y35a-root-tree-$ROOT_TREE_RUN_ID"
+          test "$ROOT_TREE_PATH" = "root-tree.tar"
+          test "$STOCK_BOOT_PATH" = "evidence/y35a-20261102/stock-boot.img"
       - name: Resolve native manifest selection
         id: native_manifest
         env:
@@ -329,6 +400,52 @@ jobs:
           echo "head_sha=$(jq -r '.headSha' "$RUNNER_TEMP/native-run.json")" >> "$GITHUB_OUTPUT"
           echo "artifact_id=$ARTIFACT_ID" >> "$GITHUB_OUTPUT"
           echo "artifact_digest=$ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
+      - name: Resolve exact TF/APFS intermediate artifact
+        id: tf_apfs
+        if: github.event_name == 'workflow_dispatch' && inputs.tf_apfs_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TF_RUN_ID: ${{ inputs.tf_apfs_run_id }}
+          EXPECTED_ARTIFACT_ID: ${{ inputs.tf_apfs_artifact_id }}
+          EXPECTED_ARTIFACT_DIGEST: ${{ inputs.tf_apfs_artifact_digest }}
+          EXPECTED_TF_BRANCH: ${{ inputs.tf_apfs_head_branch }}
+          EXPECTED_TF_SHA: ${{ inputs.tf_apfs_head_sha }}
+          PACKAGE_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$TF_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$EXPECTED_ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          [[ "$EXPECTED_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_TF_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$EXPECTED_TF_BRANCH" = "$PACKAGE_BRANCH"
+          gh run view "$TF_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,conclusion,headBranch,headSha,jobs \
+            > "$RUNNER_TEMP/tf-apfs-run.json"
+          jq -e --arg id "$TF_RUN_ID" --arg branch "$EXPECTED_TF_BRANCH" \
+            --arg sha "$EXPECTED_TF_SHA" '
+            .databaseId == ($id | tonumber)
+            and .workflowName == "Y35A CI RAM-boot package"
+            and .conclusion == "success"
+            and .headBranch == $branch and .headSha == $sha
+            and ([.jobs[] | select(.name == "tf-apfs-intermediate" and .conclusion == "success")] | length == 1)
+          ' "$RUNNER_TEMP/tf-apfs-run.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$TF_RUN_ID/artifacts" \
+            > "$RUNNER_TEMP/tf-apfs-artifacts.json"
+          ARTIFACT_NAME="y35a-tf-apfs-intermediate-$TF_RUN_ID"
+          MATCHES=$(jq -c --arg name "$ARTIFACT_NAME" --arg run "$TF_RUN_ID" \
+            --arg id "$EXPECTED_ARTIFACT_ID" --arg digest "$EXPECTED_ARTIFACT_DIGEST" \
+            --arg sha "$EXPECTED_TF_SHA" '
+            [.artifacts[] | select(.name == $name and (.id|tostring) == $id
+              and .digest == $digest and .expired == false
+              and .workflow_run.id == ($run|tonumber)
+              and .workflow_run.head_sha == $sha)]' "$RUNNER_TEMP/tf-apfs-artifacts.json")
+          test "$(jq 'length' <<< "$MATCHES")" = 1
+          jq -c '.[0]' <<< "$MATCHES" > "$RUNNER_TEMP/tf-apfs-artifact.json"
+          echo "run_id=$TF_RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "artifact_id=$EXPECTED_ARTIFACT_ID" >> "$GITHUB_OUTPUT"
+          echo "artifact_digest=$EXPECTED_ARTIFACT_DIGEST" >> "$GITHUB_OUTPUT"
+          echo "head_branch=$EXPECTED_TF_BRANCH" >> "$GITHUB_OUTPUT"
+          echo "head_sha=$EXPECTED_TF_SHA" >> "$GITHUB_OUTPUT"
 
   package:
     needs: validate
@@ -360,6 +477,28 @@ jobs:
           run-id: ${{ needs.validate.outputs.native_run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/native-kernel
+      - name: Resolve exact TF/APFS artifact for the external-root bundle
+        if: needs.validate.outputs.tf_apfs_run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TF_RUN_ID: ${{ needs.validate.outputs.tf_apfs_run_id }}
+          TF_ARTIFACT_ID: ${{ needs.validate.outputs.tf_apfs_artifact_id }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tf-apfs-root"
+          gh run view "$TF_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,conclusion,headBranch,headSha,jobs \
+            > "$RUNNER_TEMP/tf-apfs-root/run.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$TF_ARTIFACT_ID" \
+            > "$RUNNER_TEMP/tf-apfs-root/artifact.json"
+      - name: Download exact TF/APFS intermediate image
+        if: needs.validate.outputs.tf_apfs_run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: y35a-tf-apfs-intermediate-${{ needs.validate.outputs.tf_apfs_run_id }}
+          run-id: ${{ needs.validate.outputs.tf_apfs_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/tf-apfs-root/input
       - name: Select and record cross tools
         run: |
           set -euo pipefail
@@ -457,9 +596,18 @@ jobs:
           PACKAGE_RUN_ID: ${{ github.run_id }}
           PACKAGE_TOOLCHAIN_MANIFEST: ${{ runner.temp }}/y35a-package-toolchain.json
           DTC_REVISION: 2d10aa2afe35527728db30b35ec491ecb6959e5c
+          TF_APFS_RUN_ID: ${{ needs.validate.outputs.tf_apfs_run_id }}
+          TF_APFS_ARTIFACT_ID: ${{ needs.validate.outputs.tf_apfs_artifact_id }}
+          TF_APFS_ARTIFACT_DIGEST: ${{ needs.validate.outputs.tf_apfs_artifact_digest }}
+          TF_APFS_HEAD_BRANCH: ${{ needs.validate.outputs.tf_apfs_head_branch }}
+          TF_APFS_HEAD_SHA: ${{ needs.validate.outputs.tf_apfs_head_sha }}
+          TF_APFS_RUN_JSON: ${{ runner.temp }}/tf-apfs-root/run.json
+          TF_APFS_ARTIFACT_JSON: ${{ runner.temp }}/tf-apfs-root/artifact.json
+          TF_APFS_ARTIFACT_DIR: ${{ runner.temp }}/tf-apfs-root/input
+          TF_BOOT_BUNDLE: ${{ runner.temp }}/y35a-tf-root-boot-bundle
         run: |
           set -euo pipefail
-          python3 scripts/ci/build_y35a_ci_package.py \
+          PACKAGE_ARGS=(
             --native-run-id "$NATIVE_RUN_ID" \
             --native-head-sha "$NATIVE_HEAD_SHA" \
             --native-artifact-id "$NATIVE_ARTIFACT_ID" \
@@ -477,6 +625,29 @@ jobs:
             --objcopy "$LLVM_OBJCOPY" \
             --toolchain-manifest "$PACKAGE_TOOLCHAIN_MANIFEST" \
             --output "$RUNNER_TEMP/y35a-ramboot-package"
+          )
+          if [[ -n "$TF_APFS_RUN_ID" ]]; then
+            [[ -f "$TF_APFS_RUN_JSON" && -f "$TF_APFS_ARTIFACT_JSON" ]]
+            test -s "$TF_APFS_ARTIFACT_DIR/y35a-tf-root.apfs.img"
+            PACKAGE_ARGS+=(
+              --tf-apfs-artifact-dir "$TF_APFS_ARTIFACT_DIR"
+              --tf-apfs-run-json "$TF_APFS_RUN_JSON"
+              --tf-apfs-artifact-json "$TF_APFS_ARTIFACT_JSON"
+              --tf-apfs-run-id "$TF_APFS_RUN_ID"
+              --tf-apfs-artifact-id "$TF_APFS_ARTIFACT_ID"
+              --tf-apfs-artifact-digest "$TF_APFS_ARTIFACT_DIGEST"
+              --tf-apfs-head-branch "$TF_APFS_HEAD_BRANCH"
+              --tf-apfs-head-sha "$TF_APFS_HEAD_SHA"
+              --tf-apfs-stock-boot "$GITHUB_WORKSPACE/evidence/y35a-20261102/stock-boot.img"
+              --tf-bundle-output "$TF_BOOT_BUNDLE"
+            )
+          fi
+          python3 scripts/ci/build_y35a_ci_package.py "${PACKAGE_ARGS[@]}"
+          if [[ -n "$TF_APFS_RUN_ID" ]]; then
+            (cd "$TF_BOOT_BUNDLE" && shasum -a 256 -c SHA256SUMS)
+            jq -e '.status == "offline-external-root-diagnostic-bundle-built" and .qualification.bootable == false and .qualification.device_run_allowed == false and .qualification.runtime_qualified == false and .fallback.status == "unavailable-no-eMMC-APFS-root-UUID"' "$TF_BOOT_BUNDLE/bundle-provenance.json" > /dev/null
+            echo "TF external-root diagnostic bundle SHA256SUMS passed; eMMC root UUID remains unavailable" >> "$GITHUB_STEP_SUMMARY"
+          fi
           cd "$RUNNER_TEMP/y35a-ramboot-package"
           shasum -a 256 -c SHA256SUMS
           jq -e '.status == "offline-package-complete" and .package.static_container_checks == "passed" and .native_build_status == "complete" and .trust_cache.combined.coverage.coverage == "complete" and .trust_cache.combined.coverage.staged_macho_count == 58' package-provenance.json > /dev/null
@@ -495,6 +666,14 @@ jobs:
         with:
           name: y35a-ramboot-${{ github.run_id }}
           path: ${{ runner.temp }}/y35a-ramboot-package
+          if-no-files-found: error
+          retention-days: 30
+      - name: Upload hash-bound TF external-root diagnostic bundle
+        if: needs.validate.outputs.tf_apfs_run_id != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: y35a-tf-root-diagnostic-${{ github.run_id }}
+          path: ${{ runner.temp }}/y35a-tf-root-boot-bundle
           if-no-files-found: error
           retention-days: 30
       - name: Verify complete iOS System-volume source handoff
@@ -570,6 +749,7 @@ jobs:
           retention-days: 30
 
   tf-apfs-intermediate:
+    needs: validate
     if: github.event_name == 'workflow_dispatch' && inputs.root_tree_run_id != '' && inputs.stock_boot_path != ''
     runs-on: macos-15
     timeout-minutes: 90
@@ -578,9 +758,59 @@ jobs:
         with:
           ref: ${{ github.sha }}
           persist-credentials: false
+      - name: Resolve exact root-tree package artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROOT_TREE_RUN_ID: ${{ inputs.root_tree_run_id }}
+          ROOT_TREE_ARTIFACT: ${{ inputs.root_tree_artifact }}
+          EXPECTED_ROOT_TREE_ARTIFACT_ID: ${{ inputs.root_tree_artifact_id }}
+          EXPECTED_ROOT_TREE_ARTIFACT_DIGEST: ${{ inputs.root_tree_artifact_digest }}
+          EXPECTED_ROOT_TREE_SHA: ${{ inputs.root_tree_head_sha }}
+          EXPECTED_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$ROOT_TREE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$EXPECTED_ROOT_TREE_ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          [[ "$EXPECTED_ROOT_TREE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          [[ "$EXPECTED_ROOT_TREE_SHA" =~ ^[0-9a-f]{40}$ ]]
+          test "$ROOT_TREE_ARTIFACT" = "y35a-root-tree-$ROOT_TREE_RUN_ID"
+          gh run view "$ROOT_TREE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,conclusion,headBranch,headSha,jobs \
+            > "$RUNNER_TEMP/root-tree-run.json"
+          jq -e --arg id "$ROOT_TREE_RUN_ID" --arg branch "$EXPECTED_BRANCH" \
+            --arg sha "$EXPECTED_ROOT_TREE_SHA" '
+            .databaseId == ($id | tonumber)
+            and .workflowName == "Y35A CI RAM-boot package"
+            and .conclusion == "success"
+            and .headBranch == $branch
+            and .headSha == $sha
+            and ([.jobs[] | select(.name == "package" and .conclusion == "success")] | length == 1)
+          ' "$RUNNER_TEMP/root-tree-run.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$ROOT_TREE_RUN_ID/artifacts" \
+            > "$RUNNER_TEMP/root-tree-artifacts.json"
+          jq -c --arg id "$EXPECTED_ROOT_TREE_ARTIFACT_ID" \
+            --arg digest "$EXPECTED_ROOT_TREE_ARTIFACT_DIGEST" \
+            --arg name "$ROOT_TREE_ARTIFACT" --arg run "$ROOT_TREE_RUN_ID" \
+            --arg sha "$EXPECTED_ROOT_TREE_SHA" --arg branch "$EXPECTED_BRANCH" '
+            [.artifacts[] | select((.id|tostring) == $id and .name == $name
+              and .digest == $digest and .expired == false
+              and .workflow_run.id == ($run|tonumber)
+              and .workflow_run.head_branch == $branch
+              and .workflow_run.head_sha == $sha)][0]
+          ' "$RUNNER_TEMP/root-tree-artifacts.json" > "$RUNNER_TEMP/root-tree-artifact.json"
+          jq -e --arg id "$EXPECTED_ROOT_TREE_ARTIFACT_ID" \
+            --arg digest "$EXPECTED_ROOT_TREE_ARTIFACT_DIGEST" \
+            --arg name "$ROOT_TREE_ARTIFACT" --arg run "$ROOT_TREE_RUN_ID" \
+            --arg sha "$EXPECTED_ROOT_TREE_SHA" --arg branch "$EXPECTED_BRANCH" '
+            [.artifacts[] | select((.id|tostring) == $id and .name == $name
+              and .digest == $digest and .expired == false
+              and .workflow_run.id == ($run|tonumber)
+              and .workflow_run.head_branch == $branch
+              and .workflow_run.head_sha == $sha)] | length == 1
+          ' "$RUNNER_TEMP/root-tree-artifacts.json" > /dev/null
       - uses: actions/download-artifact@v4
         with:
-          name: ${{ inputs.root_tree_artifact }}
+          artifact-ids: ${{ inputs.root_tree_artifact_id }}
           run-id: ${{ inputs.root_tree_run_id }}
           github-token: ${{ github.token }}
           path: ${{ runner.temp }}/root-tree
@@ -588,6 +818,11 @@ jobs:
         env:
           ROOT_TREE_RUN_ID: ${{ inputs.root_tree_run_id }}
           ROOT_TREE_ARTIFACT: ${{ inputs.root_tree_artifact }}
+          ROOT_TREE_HEAD_SHA: ${{ inputs.root_tree_head_sha }}
+          ROOT_TREE_ARTIFACT_ID: ${{ inputs.root_tree_artifact_id }}
+          ROOT_TREE_ARTIFACT_DIGEST: ${{ inputs.root_tree_artifact_digest }}
+          ROOT_TREE_HEAD_BRANCH: ${{ github.ref_name }}
+          ROOT_TREE_API_ARTIFACT: ${{ runner.temp }}/root-tree-artifact.json
           ROOT_TREE_PATH: ${{ inputs.root_tree_path }}
           STOCK_BOOT_PATH: ${{ inputs.stock_boot_path }}
           SOURCE_COMMIT: ${{ github.sha }}
@@ -596,10 +831,23 @@ jobs:
           [[ "$ROOT_TREE_RUN_ID" =~ ^[0-9]+$ ]]
           test "$ROOT_TREE_ARTIFACT" = "y35a-root-tree-$ROOT_TREE_RUN_ID"
           test "$ROOT_TREE_PATH" = "root-tree.tar"
-          ROOT_TREE_ARCHIVE="$RUNNER_TEMP/root-tree/$ROOT_TREE_PATH"
+          ROOT_TREE_DIR="$RUNNER_TEMP/root-tree/$ROOT_TREE_ARTIFACT"
+          ROOT_TREE_ARCHIVE="$ROOT_TREE_DIR/$ROOT_TREE_PATH"
+          test -f "$ROOT_TREE_ARCHIVE"
+          ROOT_TREE_ARCHIVE_BYTES="$(stat -f%z "$ROOT_TREE_ARCHIVE")"
+          ROOT_TREE_ARCHIVE_SHA="$(shasum -a 256 "$ROOT_TREE_ARCHIVE" | awk '{print $1}')"
+          jq -n --arg run "$ROOT_TREE_RUN_ID" --arg sha "$ROOT_TREE_HEAD_SHA" \
+            --arg branch "$ROOT_TREE_HEAD_BRANCH" --arg name "$ROOT_TREE_ARTIFACT" \
+            --arg digest "$ROOT_TREE_ARTIFACT_DIGEST" --arg path "$ROOT_TREE_PATH" \
+            --arg archive_sha "$ROOT_TREE_ARCHIVE_SHA" \
+            --argjson id "$ROOT_TREE_ARTIFACT_ID" \
+            --argjson bytes "$ROOT_TREE_ARCHIVE_BYTES" \
+            '{run_id:$run,head_sha:$sha,head_branch:$branch,artifact_id:$id,artifact_name:$name,artifact_digest:$digest,archive_path:$path,archive_bytes:$bytes,archive_sha256:$archive_sha}' \
+            > "$RUNNER_TEMP/root-tree-artifact-binding.json"
           case "$STOCK_BOOT_PATH" in
             /*|*..*) echo "stock boot path must be a safe repository-relative path" >&2; exit 1 ;;
           esac
+          test "$STOCK_BOOT_PATH" = "evidence/y35a-20261102/stock-boot.img"
           STOCK_BOOT="$GITHUB_WORKSPACE/$STOCK_BOOT_PATH"
           git ls-files --error-unmatch "$STOCK_BOOT_PATH" > /dev/null
           test ! -L "$STOCK_BOOT"
@@ -614,15 +862,18 @@ jobs:
           STOCK_QCDT="$STOCK_QCDT_DIR/y35a.qcdt"
           STOCK_PROVENANCE="$STOCK_QCDT_DIR/y35a.qcdt.json"
           jq -e --arg run "$ROOT_TREE_RUN_ID" \
-            '.package_source.workflow_run_id == $run and .rootfs.tree_archive.path == "root-tree.tar" and .rootfs.tree_sha256 == .rootfs.tree_archive.tree_sha256' \
-            "$RUNNER_TEMP/root-tree/package-provenance.json" > /dev/null
+            --arg sha "$ROOT_TREE_HEAD_SHA" \
+            '.package_source.workflow_run_id == $run and .package_source.commit == $sha and .rootfs.tree_archive.path == "root-tree.tar" and .rootfs.tree_sha256 == .rootfs.tree_archive.tree_sha256' \
+            "$ROOT_TREE_DIR/package-provenance.json" > /dev/null
           python3 scripts/ci/build_y35a_tf_apfs_image.py \
             --root-tree-archive "$ROOT_TREE_ARCHIVE" \
-            --root-tree-metadata "$RUNNER_TEMP/root-tree/root-tree.metadata.json" \
+            --root-tree-metadata "$ROOT_TREE_DIR/root-tree.metadata.json" \
+            --root-tree-artifact-binding "$RUNNER_TEMP/root-tree-artifact-binding.json" \
             --stock-qcdt "$STOCK_QCDT" \
             --stock-qcdt-provenance "$STOCK_PROVENANCE" \
             --stock-boot-image "$STOCK_BOOT" \
             --output "$RUNNER_TEMP/y35a-tf-root.apfs.img"
+          cp "$ROOT_TREE_ARCHIVE" "$RUNNER_TEMP/root-tree.tar"
       - name: Upload TF/APFS intermediate
         uses: actions/upload-artifact@v4
         with:
@@ -631,6 +882,8 @@ jobs:
             ${{ runner.temp }}/y35a-tf-root.apfs.img
             ${{ runner.temp }}/y35a-tf-root.apfs.img.json
             ${{ runner.temp }}/y35a-tf-root.apfs.img.json.binding.json
+            ${{ runner.temp }}/root-tree-artifact-binding.json
+            ${{ runner.temp }}/root-tree.tar
           if-no-files-found: error
           retention-days: 30
 

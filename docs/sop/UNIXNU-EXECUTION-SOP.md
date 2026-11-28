@@ -19,6 +19,8 @@ UniXNU 的编译、测试、静态门禁、diff 检查、package/image 验证只
 
 运行本机只读 Git 盘点前，先逐条审阅将执行的 shell 命令；`git diff --check` 无论单独执行还是附在 `git status`/`git diff --stat` 命令串后面都属于被禁止的静态验证。需要核对空白错误时，只使用 GitHub Actions 中的 `Check tracked text` 步骤。
 
+为避免 shell 批次意外混入静态门禁，本机 UniXNU 工作树盘点只允许独立执行 `git status --short --branch`、`git rev-parse`、`git log`、`git diff --stat` 和指定路径的只读 `git diff -- <path>`。每条命令在工具调用前单独核对参数；不得将多个命令用 `;`、`&&` 或其他 shell 控制符串联，不得将 `git diff --check` 与状态或 diff 命令串联，也不得使用汇总脚本或别名隐藏检查项。若误执行，立即把该结果排除为证据、记录精确命令和 lesson，再继续以 Actions 为准。
+
 ## 长任务
 
 长任务只启动一个明确的 run root。每 30 至 60 秒核对真实进程、退出码和产物。进程存在不等于成功。等待期间只做与当前输入不冲突的参考检索、日志分析或独立裁决。

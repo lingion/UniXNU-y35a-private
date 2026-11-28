@@ -629,6 +629,46 @@ def validate_control_package(root_tree: Path, qcdt_path: Path, qcdt_provenance_p
     }
 
 
+def validate_root_tree_artifact_binding(binding: dict, archive_path: Path | None = None) -> dict:
+    run_id = str(binding.get("run_id", ""))
+    head_sha = binding.get("head_sha")
+    artifact_id = binding.get("artifact_id")
+    artifact_name = binding.get("artifact_name")
+    artifact_digest = binding.get("artifact_digest")
+    head_branch = binding.get("head_branch")
+    if (not run_id.isdecimal()
+            or not isinstance(head_sha, str) or not re.fullmatch(r"[0-9a-f]{40}", head_sha)
+            or not isinstance(artifact_id, int) or isinstance(artifact_id, bool) or artifact_id <= 0
+            or artifact_name != f"y35a-root-tree-{run_id}"
+            or not isinstance(artifact_digest, str)
+            or not re.fullmatch(r"sha256:[0-9a-f]{64}", artifact_digest)
+            or not isinstance(head_branch, str) or not head_branch):
+        raise ValueError("root-tree source artifact binding is incomplete or malformed")
+    archive_name = archive_path.name if archive_path is not None else binding.get("archive_path")
+    archive_bytes = archive_path.stat().st_size if archive_path is not None else binding.get("archive_bytes")
+    archive_sha = sha256(archive_path) if archive_path is not None else binding.get("archive_sha256")
+    if (archive_name != "root-tree.tar"
+            or not isinstance(archive_bytes, int) or isinstance(archive_bytes, bool) or archive_bytes <= 0
+            or not isinstance(archive_sha, str) or not re.fullmatch(r"[0-9a-f]{64}", archive_sha)):
+        raise ValueError("root-tree source archive must be named root-tree.tar")
+    if (archive_path is not None
+            and (archive_name != archive_path.name
+                 or archive_bytes != archive_path.stat().st_size
+                 or archive_sha != sha256(archive_path))):
+        raise ValueError("root-tree artifact binding archive bytes do not match its SHA-256 and size")
+    return {
+        "run_id": run_id,
+        "head_sha": head_sha,
+        "artifact_id": artifact_id,
+        "artifact_name": artifact_name,
+        "artifact_digest": artifact_digest,
+        "head_branch": head_branch,
+        "archive_path": archive_name,
+        "archive_bytes": archive_bytes,
+        "archive_sha256": archive_sha,
+    }
+
+
 def plist_entities(value):
     if isinstance(value, dict):
         if "dev-entry" in value or "mount-point" in value:
@@ -752,7 +792,8 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
                 size: str, volume_name: str, *, offline_control_derived: bool = False,
                 stock_boot_image: Path | None = None,
                 control_package_binding: dict | None = None,
-                root_tree_transport: dict | None = None) -> dict:
+                root_tree_transport: dict | None = None,
+                root_tree_artifact_binding: dict | None = None) -> dict:
     root_tree = root_tree.resolve(strict=True)
     if not root_tree.is_dir():
         raise ValueError("root tree must be a directory")
@@ -835,6 +876,7 @@ def build_image(root_tree: Path, qcdt_path: Path, qcdt_provenance: Path, output:
                 "scope": "diagnostic-root-until-production-root-is-bound",
             },
             "root_tree_transport": root_tree_transport,
+            "root_tree_artifact": root_tree_artifact_binding,
             "device_tree_input": qcdt,
             "gpt_apfs": gpt_apfs,
             "apfs": {
@@ -867,6 +909,7 @@ def main() -> int:
     parser.add_argument("--root-tree", type=Path)
     parser.add_argument("--root-tree-archive", type=Path)
     parser.add_argument("--root-tree-metadata", type=Path)
+    parser.add_argument("--root-tree-artifact-binding", type=Path)
     parser.add_argument("--qcdt", "--stock-qcdt", dest="qcdt_path", type=Path, required=True)
     parser.add_argument("--qcdt-provenance", "--stock-qcdt-provenance", dest="qcdt_provenance", type=Path, required=True)
     parser.add_argument("--stock-boot-image", type=Path)
@@ -891,8 +934,13 @@ def main() -> int:
         raise SystemExit("provide exactly one of --root-tree or --root-tree-archive")
     if args.root_tree_archive and args.root_tree_metadata is None:
         raise SystemExit("--root-tree-archive requires its root-tree metadata manifest")
+    if (args.root_tree_archive and args.root_tree_artifact_binding is None
+            and not args.offline_control_derived_qcdt):
+        raise SystemExit("--root-tree-archive requires its Actions artifact binding")
     if args.root_tree and args.root_tree_metadata:
         raise SystemExit("--root-tree-metadata must accompany --root-tree-archive")
+    if args.root_tree_artifact_binding and args.root_tree_archive is None:
+        raise SystemExit("--root-tree-artifact-binding requires --root-tree-archive")
     if args.offline_control_derived_qcdt:
         if args.stock_boot_image:
             raise SystemExit("offline derived-QCDT control does not accept a stock boot image")
@@ -928,9 +976,17 @@ def main() -> int:
                 args.root_tree_archive.resolve(strict=True),
                 args.root_tree_metadata.resolve(strict=True), root_tree,
             )
+            root_tree_artifact_binding = (
+                validate_root_tree_artifact_binding(
+                    json.loads(args.root_tree_artifact_binding.read_text()),
+                    args.root_tree_archive.resolve(strict=True),
+                )
+                if args.root_tree_artifact_binding else None
+            )
         else:
             root_tree = args.root_tree.resolve(strict=True)
             restored_tree_binding = None
+            root_tree_artifact_binding = None
 
         qcdt_path = args.qcdt_path.resolve(strict=True)
         qcdt_provenance = args.qcdt_provenance.resolve(strict=True)
@@ -966,6 +1022,7 @@ def main() -> int:
             stock_boot_image=args.stock_boot_image,
             control_package_binding=control_binding,
             root_tree_transport=restored_tree_binding,
+            root_tree_artifact_binding=root_tree_artifact_binding,
         )
     print(json.dumps(report, indent=2, sort_keys=True))
     return 0

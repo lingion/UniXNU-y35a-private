@@ -521,6 +521,26 @@
 - 自动化入口：`scripts/ci/build_y35a_system_apfs_control.py::control_image_attach_command`, `diff_tree_manifests`, `tests/test_y35a_system_apfs_control.py`, and the `system-root-apfs-control` job.
 - 下一次触发：Any APFS image copy where the target's POSIX owner/group or directory timestamps differ from the sealed source tree.
 
+## L-2026-11-28-30 A local Git review batch must not contain a hidden static check
+
+- 现象：During local review of the external-root package diff, a passive status/diff command chain accidentally appended `git diff --check`.
+- 根因：The shell batch was treated as a single read-only inspection even though its final Git subcommand is a prohibited local static validation. The repository already had a prior occurrence recorded as L-2026-11-28-19; the previous warning did not prevent the same composition error.
+- 影响：The local `git diff --check` output is excluded as verification evidence. No tests, build, package command or device action was run locally.
+- 正确做法：Run passive Git inventory commands one at a time from the explicit allowlist in UNIXNU-EXECUTION-SOP and unixnu-evidence-gate. Review every shell token before invocation; use Actions `Check tracked text` for whitespace checks.
+- 证据：Tool invocation was `git status --short --branch && git diff --stat && git diff --check`; its output is not cited as a pass.
+- 自动化入口：`docs/sop/UNIXNU-EXECUTION-SOP.md` local-command allowlist; `docs/skills/unixnu-evidence-gate/SKILL.md` passive-review command rule; `.github/workflows/unixnu-validation.yml` `Check tracked text`.
+- 下一次触发：Any local Git inventory or patch review command batch for this repository.
+
+## L-2026-11-28-31 A semicolon-separated Git review still ran a prohibited local check
+
+- 现象：During this turn's package review, the tool invocation combined `git log -1 ...; git diff --check 2>/dev/null || true`.
+- 根因：The shell batch was treated as passive inspection even though its second command is a local static check; stderr redirection and `|| true` also concealed its status.
+- 影响：The command is excluded as verification evidence. No local UniXNU tests, build, package image validation, or device operation was performed.
+- 正确做法：Do not chain shell commands in the UniXNU worktree. Run one explicitly allowed read-only Git command per invocation; run whitespace and other static checks in GitHub Actions.
+- 证据：This turn's tool invocation was `git log -1 --format='%H%n%an <%ae>%n%B' HEAD; git diff --check 2>/dev/null || true`; its output is not used as a pass.
+- 自动化入口：`docs/sop/UNIXNU-EXECUTION-SOP.md` and `docs/skills/unixnu-evidence-gate/SKILL.md` local command rules; `.github/workflows/unixnu-validation.yml` tracked-text step.
+- 下一次触发：Any local Git review or shell command batch for this CI-only repository.
+
 跟进 run `46130315528` 的证据：添加 `hdiutil -owners on` 后，UID/GID 改动从 159,082/171,044 条降到各 1 条，只剩 volume 根目录 UID/GID（来源 `0:0`、目标 `501:20`）；mtime 差异仍为 1,069 条，全部 bounded samples 落在目录/文件路径中，缺失项计数变为 0。修复须从原 source manifest 显式恢复 volume 根 UID/GID，并在复制完成后恢复记录的 nanosecond mtime（文件与目录，目录由深到浅、根目录最后）；最终仍以重扫全树 equality gate 作为验收。该 run 的 diagnostics artifact ID `15259816488`，digest `sha256:0be17f510b28adcc63f26c1aa1af6355f4a600a84fb43d15b8e540bcee39759c`。
 
 跟进 run `46135948784`：ownership/mTime restore 分支未进入树比较，失败为 `NameError: name 'sys' is not defined`，调用点在 mtime restore helper。没有产出 control 或 diagnostics artifact。修复加入生产模块 import 并新增 helper contract test，随后用同一个精确 System artifact 再跑；不能把该 run 计为 metadata gate 结果。

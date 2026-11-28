@@ -4,12 +4,42 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 from pathlib import Path
 
 
-FALLBACK_SHA256 = "f886e829b94999e79af06964ee274992d975382827191912d2ab8c8a8bd291eb"
+FALLBACK_V3_SHA256 = "01c105678d3c959a868bafb774cbded77bde3e5b01b31fd4f34db845e7a5cf25"
 REQUIRED_TF_FAILURES = {"card_absent", "init_failed", "first_read_failed"}
+UUID_STATUSES = {"unavailable", "build-output", "bound"}
+
+
+def validate_uuid_slot(slot: dict, *, label: str) -> list[str]:
+    failures: list[str] = []
+    status = slot.get("status")
+    if status not in UUID_STATUSES:
+        failures.append(f"{label} status must be one of {sorted(UUID_STATUSES)}")
+        return failures
+    value = slot.get("value")
+    value_sha = slot.get("sha256")
+    if status == "unavailable":
+        if value is not None or value_sha is not None:
+            failures.append(f"unavailable {label} must not carry a fabricated UUID")
+    if status == "build-output":
+        if value is not None or value_sha is not None:
+            failures.append(f"unbound build-output {label} must not contain a UUID value")
+    if status == "bound":
+        if value is None or value_sha is None:
+            failures.append(f"{label} in bound status must bind both value and SHA-256")
+        if value is not None:
+            if not isinstance(value, str) or not re.fullmatch(
+                    r"[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}",
+                    value):
+                failures.append(f"{label} must be a canonical UUID string")
+            elif value_sha != hashlib.sha256(value.encode("utf-8")).hexdigest():
+                failures.append(f"{label} SHA-256 must match its bound value")
+    return failures
 
 
 def validate_contract(contract: dict) -> list[str]:
@@ -30,6 +60,8 @@ def validate_contract(contract: dict) -> list[str]:
         failures.append("device_ready must remain false")
 
     native = contract.get("native", {})
+    if native.get("manifest") != "ci/native-build-manifest.r208-fallback-v3.json":
+        failures.append("native manifest must be the fallback-v3 candidate manifest")
     if native.get("kernel_artifact_schema") != 2:
         failures.append("native kernel artifact schema 2 is required")
     if native.get("build_plan_required") is not True:
@@ -50,8 +82,8 @@ def validate_contract(contract: dict) -> list[str]:
     if stock.get("status") == "unavailable" and stock.get("sha256") is not None:
         failures.append("unavailable stock-qcdt input cannot have a SHA-256")
     required_boot = stock.get("required_source_boot", {})
-    if required_boot.get("status") != "historically-pinned-file-missing":
-        failures.append("stock-QCDT source-boot availability status must be explicit")
+    if required_boot.get("status") != "tracked-and-pinned":
+        failures.append("stock-QCDT source boot must be tracked and hash pinned")
     if required_boot.get("bytes") != 67108864:
         failures.append("stock PD1502A boot source must bind the historical full-partition size")
     if required_boot.get("sha256") != "92611f876a022fb5af1138f0591f5dafe2b359a226b2f0b28d292211f2fec012":
@@ -66,6 +98,18 @@ def validate_contract(contract: dict) -> list[str]:
         failures.append("stock QCDT must be byte-matched to the Android header dt range")
     if required_boot.get("board_tuple") != [206, 8, 23]:
         failures.append("stock QCDT intake must bind the PD1502A board tuple")
+    if stock.get("status") == "available":
+        verified_intermediate = stock.get("verified_intermediate", {})
+        if stock.get("sha256") != "4e717950b65b1a65a3071d8935f9aa5e47e595ec6df9d80679d306a68342c010":
+            failures.append("available stock QCDT SHA must match the verified TF/APFS intermediate")
+        if verified_intermediate.get("run_id") != "46126630321":
+            failures.append("available stock QCDT must bind its successful intermediate run")
+        if verified_intermediate.get("head_sha") != "76304d84a0f8b8eaf10b7fa72b1b75a194444535":
+            failures.append("stock QCDT intermediate must bind the exact source commit")
+        if (verified_intermediate.get("qcdt_bytes") != 14835712
+                or verified_intermediate.get("qcdt_offset") != 11943936
+                or verified_intermediate.get("source_boot_sha256") != required_boot.get("sha256")):
+            failures.append("stock QCDT extraction provenance differs from the verified boot intake")
 
     root_layout = contract.get("root_layout", {})
     if (root_layout.get("target_product_version") != "12.4.1"
@@ -89,17 +133,25 @@ def validate_contract(contract: dict) -> list[str]:
         failures.append("TF image status must remain unverified")
 
     root = contract.get("root_selection", {})
-    if root.get("coordinator_symbol") != "native_storage_select_root":
-        failures.append("root coordinator symbol is not fixed")
+    if root.get("coordinator_symbol") != "IOFindBSDRoot":
+        failures.append("root coordinator symbol must name the linked XNU IOFindBSDRoot path")
     if root.get("linked_implementation_required") is not True:
         failures.append("linked root implementation is required")
+    if root.get("tf_selector") != "boot-uuid":
+        failures.append("TF root selector must remain boot-uuid")
+    if root.get("emmc_selector") != "emmc-boot-uuid":
+        failures.append("eMMC root selector must be the fallback-v3 emmc-boot-uuid")
+    failures.extend(validate_uuid_slot(root.get("tf_root_uuid", {}), label="tf_root_uuid"))
+    failures.extend(validate_uuid_slot(root.get("emmc_root_uuid", {}), label="emmc_root_uuid"))
     if root.get("status") not in {"unverified", "pending"}:
         failures.append("root-selection status must remain unverified")
 
     fallback = contract.get("fallback", {})
     patch = fallback.get("patch", {})
-    if patch.get("sha256") != FALLBACK_SHA256:
-        failures.append("fallback patch SHA does not match the audited candidate")
+    if patch.get("path") != "patches/xnu/native-y35a-tf-emmc-root-fallback-v3.patch":
+        failures.append("device-package fallback must be the fallback-v3 candidate patch")
+    if patch.get("sha256") != FALLBACK_V3_SHA256:
+        failures.append("fallback-v3 patch SHA does not match the audited successful native candidate")
     if fallback.get("feature_macro") != "XNU_Y35A_STORAGE_FALLBACK":
         failures.append("fallback feature macro is not fixed")
     if fallback.get("boot_arg") != "emmc-boot-uuid":

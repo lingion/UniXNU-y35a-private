@@ -28,6 +28,52 @@ import extract_y35a_stock_qcdt as stock_qcdt_intake
 
 
 class TfApfsImageInputTest(unittest.TestCase):
+    def test_root_tree_artifact_binding_matches_actual_archive_bytes(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "root-tree.tar"
+            archive.write_bytes(b"root tree archive")
+            binding = {
+                "run_id": "123", "head_sha": "a" * 40,
+                "head_branch": "codex/test", "artifact_id": 456,
+                "artifact_name": "y35a-root-tree-123",
+                "artifact_digest": "sha256:" + "b" * 64,
+                "archive_path": "root-tree.tar", "archive_bytes": archive.stat().st_size,
+                "archive_sha256": MODULE.sha256(archive),
+            }
+            result = MODULE.validate_root_tree_artifact_binding(binding, archive)
+            self.assertEqual(result["run_id"], "123")
+            self.assertEqual(result["archive_sha256"], MODULE.sha256(archive))
+
+    def test_root_tree_artifact_binding_rejects_changed_archive(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "root-tree.tar"
+            archive.write_bytes(b"changed bytes")
+            binding = {
+                "run_id": "123", "head_sha": "a" * 40,
+                "head_branch": "codex/test", "artifact_id": 456,
+                "artifact_name": "y35a-root-tree-123",
+                "artifact_digest": "sha256:" + "b" * 64,
+                "archive_path": "root-tree.tar", "archive_bytes": len(b"old bytes"),
+                "archive_sha256": hashlib.sha256(b"old bytes").hexdigest(),
+            }
+            with self.assertRaisesRegex(ValueError, "archive bytes do not match"):
+                MODULE.validate_root_tree_artifact_binding(binding, archive)
+
+    def test_root_tree_artifact_binding_rejects_changed_archive_same_size(self):
+        with tempfile.TemporaryDirectory() as directory:
+            archive = Path(directory) / "root-tree.tar"
+            archive.write_bytes(b"new bytes")
+            binding = {
+                "run_id": "123", "head_sha": "a" * 40,
+                "head_branch": "codex/test", "artifact_id": 456,
+                "artifact_name": "y35a-root-tree-123",
+                "artifact_digest": "sha256:" + "b" * 64,
+                "archive_path": "root-tree.tar", "archive_bytes": archive.stat().st_size,
+                "archive_sha256": hashlib.sha256(b"old bytes").hexdigest(),
+            }
+            with self.assertRaisesRegex(ValueError, "archive bytes do not match"):
+                MODULE.validate_root_tree_artifact_binding(binding, archive)
+
     def test_checked_command_preserves_captured_failure_output(self):
         error = subprocess.CalledProcessError(1, ["hdiutil", "create"], output="out", stderr="disk image error")
         with mock.patch.object(MODULE.subprocess, "run", side_effect=error):

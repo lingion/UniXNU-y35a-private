@@ -6,7 +6,7 @@ is not evidence of kernel execution. The shim reproduces the owned-memory and
 boot_args handoff ABI in DarwinBoot, without claiming full UEFI implementation.
 """
 from pathlib import Path
-import argparse,struct,hashlib,subprocess,json
+import argparse,struct,hashlib,subprocess,json,re,uuid
 from boot_layout import parse_macho,make_boot_args,validate_window,physical_base_for
 from make_adt import make_tree
 PAGE=2048
@@ -40,6 +40,26 @@ def select_device_dt(table):
 SCRATCH=0x90000000  # lk2nd download buffer base (target/msm8916 iomap/SCRATCH_ADDR)
 PIN_KERNEL_MAX=0x3180000  # aboot.c:412 fork-pin kernel_size budget
 CMDLINE=b'y35a-native-xnu-experimental'
+RAMDISK_COMMAND_LINE='-v serial=3 cpus=1 debug=0x8 rd=md0'
+
+def _canonical_apfs_uuid(value, label):
+    if not isinstance(value, str) or not re.fullmatch(
+            r'[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}',
+            value):
+        raise ValueError(f'{label} must be a canonical 8-4-4-4-12 UUID string')
+    canonical=str(uuid.UUID(value)).upper()
+    if canonical == '00000000-0000-0000-0000-000000000000':
+        raise ValueError(f'{label} must not be the nil UUID')
+    return canonical
+
+def make_external_root_command_line(tf_uuid, emmc_uuid=None):
+    tf=_canonical_apfs_uuid(tf_uuid, 'TF APFS root UUID')
+    command=f'-v serial=3 cpus=1 debug=0x8 rd=uuid boot-uuid={tf}'
+    if emmc_uuid is not None:
+        command+=' emmc-boot-uuid='+_canonical_apfs_uuid(emmc_uuid, 'eMMC APFS root UUID')
+    if len(command.encode('ascii')) >= 256:
+        raise ValueError('External-root boot arguments exceed BOOT_LINE_LENGTH')
+    return command
 
 def second_off_for(entry_len):
     # cmd_boot geometry: page + ROUND(kernel) + ROUND(ramdisk=1B) before second.
@@ -310,6 +330,37 @@ def build(args):
     physical_base=physical_base_for(layout['base'],OWNED_BASE)
     owned_size=args.owned_memory_size
     validate_window(physical_base,owned_size)
+    if args.external_root_uuid is not None:
+        if args.ramdisk is not None:
+            raise ValueError('External APFS root mode cannot include a RAMDisk')
+        if args.stock_boot is None:
+            raise ValueError('External APFS root mode requires the pinned stock boot image')
+        if args.command_line is not None:
+            raise ValueError('External APFS root mode generates its own root-selection boot arguments')
+        if args.external_root_reference is None:
+            raise ValueError('External APFS root mode requires a hash-bound TF root reference')
+        root_reference=json.loads(args.external_root_reference.read_text())
+        if root_reference.get('status')!='verified-nonbootable-tf-apfs-input':
+            raise ValueError('External APFS root reference status is not verified')
+        artifact=root_reference.get('artifact',{})
+        if (not re.fullmatch(r'[0-9a-f]{40}',str(artifact.get('head_sha','')))
+                or not str(artifact.get('run_id','')).isdecimal()
+                or not isinstance(artifact.get('artifact_id'),int)
+                or not re.fullmatch(r'sha256:[0-9a-f]{64}',str(artifact.get('artifact_digest','')))):
+            raise ValueError('External APFS root reference does not bind a valid Actions artifact identity')
+        for field in ('image_sha256','report_sha256'):
+            if not re.fullmatch(r'[0-9a-f]{64}',str(root_reference.get(field,''))):
+                raise ValueError(f'External APFS root reference is missing a valid {field}')
+        if root_reference.get('apfs_volume_uuid')!=_canonical_apfs_uuid(args.external_root_uuid,'TF APFS root UUID'):
+            raise ValueError('External APFS root UUID differs from the root reference')
+        if root_reference.get('device_run_allowed') is not False or root_reference.get('bootable') is not False:
+            raise ValueError('External APFS root reference cannot claim device or boot qualification')
+        command_line=make_external_root_command_line(args.external_root_uuid,args.emmc_root_uuid)
+    else:
+        if args.emmc_root_uuid is not None or args.external_root_reference is not None:
+            raise ValueError('eMMC UUID and external-root reference require external APFS root mode')
+        root_reference=None
+        command_line=args.command_line or RAMDISK_COMMAND_LINE
     if args.directory.exists() and any(args.directory.iterdir()):raise ValueError('Use an empty output directory')
     args.directory.mkdir(parents=True,exist_ok=True)
     memory_end=layout['end']-layout['base']
@@ -348,7 +399,7 @@ def build(args):
     if len(tree)>16384:raise ValueError('Device tree exceeds its reserved allocation')
     top=cursor if placements else align(tree_pa+len(tree),16384)
     bootargs=make_boot_args(virtual_base=layout['base'],physical_base=physical_base,memory_size=owned_size,
-        top=top,tree_physical=tree_pa,tree_size=len(tree),command_line=args.command_line)
+        top=top,tree_physical=tree_pa,tree_size=len(tree),command_line=command_line)
     (args.directory/'kernel-packed.macho').write_bytes(image)
     (args.directory/'boot-args.bin').write_bytes(bootargs)
     (args.directory/'board.adt').write_bytes(tree)
@@ -389,7 +440,7 @@ def build(args):
     dt_source['selected_qcdt_sha256']=hashlib.sha256(dt).hexdigest()
     packed=android_container(entry_bin,dt,second=rootfs['bytes'] if rootfs else b'',ramdisk=b'\0')
     output=args.directory/'experimental-native-xnu.img';output.write_bytes(packed)
-    if rootfs:(args.directory/'boot3.img').write_bytes(packed)
+    if rootfs or root_reference:(args.directory/'boot3.img').write_bytes(packed)
     sidecars=[dict(name=p['name'],physical=hex(p['physical']),size=p['size'],sha256=p['sha256'],
                    scratch=(hex(p['scratch']) if p.get('scratch') else None)) for p in placements]
     record={'kernel_sha256':hashlib.sha256(image).hexdigest(),'boot_image_sha256':hashlib.sha256(packed).hexdigest(),
@@ -410,7 +461,17 @@ def build(args):
         'diagnostic_carrier_bytes':512,
         'second_offset':hex(second_off) if rootfs else None,
         'entry_bytes':len(entry_bin),
+        'boot_arguments':command_line,
         'sidecars':sidecars,'device_tree':dt_source,
+        'root_selection':({
+            'mode':'external-apfs-diagnostic',
+            'selector':'rd=uuid',
+            'tf_volume_uuid':root_reference['apfs_volume_uuid'],
+            'tf_root_reference_sha256':hashlib.sha256(args.external_root_reference.read_bytes()).hexdigest(),
+            'emmc_fallback':({'selector':'emmc-boot-uuid','volume_uuid':_canonical_apfs_uuid(args.emmc_root_uuid,'eMMC APFS root UUID'),'status':'configured-unverified'} if args.emmc_root_uuid is not None else {'selector':'emmc-boot-uuid','volume_uuid':None,'status':'unavailable'}),
+            'runtime_selection_status':'unverified',
+        } if root_reference else {'mode':'ramdisk-diagnostic','selector':'rd=md0','runtime_selection_status':'unverified'}),
+        'external_root_reference':root_reference,
         'warm_reset_prepared_required':args.warm_reset_prepared,
         'status':'offline-built experimental image; not device-boot validated'}
     component_names = ['entry.S', 'entry.bin', 'boot-args.bin', 'board.adt', 'kernel-packed.macho']
@@ -435,7 +496,10 @@ def main():
     dt_input.add_argument('--stock-boot',type=Path)
     dt_input.add_argument('--qcdt',type=Path,help='QCDT v3 input, for CI-derived board DT packaging')
     p.add_argument('--directory',required=True,type=Path);p.add_argument('--compiler',default='clang');p.add_argument('--objcopy',default='llvm-objcopy')
-    p.add_argument('--command-line',default='-v serial=3 cpus=1 debug=0x8 rd=md0')
+    p.add_argument('--command-line',default=None)
+    p.add_argument('--external-root-uuid')
+    p.add_argument('--emmc-root-uuid')
+    p.add_argument('--external-root-reference',type=Path)
     p.add_argument('--owned-memory-size',type=lambda x:int(x,0),default=DEFAULT_OWNED_SIZE, help='Contiguous measured RAM span exposed to XNU')
     p.add_argument('--ramdisk',type=Path,help='Explicit RAM root bytes; copied into reserved owned memory')
     p.add_argument('--trust-cache',type=Path,help='Explicit boot-owner trust cache bundle for the supplied code')

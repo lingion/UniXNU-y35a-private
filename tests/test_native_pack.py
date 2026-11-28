@@ -382,5 +382,117 @@ class RealQCDTGateTest(unittest.TestCase):
                              'stock FDT plus LK growth must fit the reserved window')
 
 
+class ExternalRootBootModeContractTest(unittest.TestCase):
+    # CI-only contract for the TF/APFS external-root boot mode. Red until
+    # package_native.make_external_root_command_line exists.
+    #
+    #   make_external_root_command_line(tf_uuid, emmc_uuid=None) -> str
+    #
+    # The helper returns one command-line string and nothing else. Fallback
+    # availability is not part of the return value; the candidate manifest
+    # records it separately.
+    #
+    # tf_uuid is mandatory. emmc_uuid defaults to None, meaning absent.
+    # UUIDs must be strict 8-4-4-4-12 hex, case-insensitive; the emitted text
+    # uses the uppercase canonical form. Whitespace, braces, urn prefixes,
+    # empty or non-hex strings, wrong lengths, the literal string none and the
+    # nil UUID raise ValueError. A malformed eMMC value is rejected, never
+    # silently dropped. The helper takes no ramdisk input and never emits an
+    # rd=md* root.
+
+    TF_LOWER = '0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b'
+    TF_MIXED = '0F1e2D3c-4b5A-6978-8a9B-0C1d2E3f4a5B'
+    TF_CANON = '0F1E2D3C-4B5A-6978-8A9B-0C1D2E3F4A5B'
+    EMMC_LOWER = '1a2b3c4d-5e6f-4071-8293-a4b5c6d7e8f9'
+    EMMC_CANON = '1A2B3C4D-5E6F-4071-8293-A4B5C6D7E8F9'
+    NIL = '00000000-0000-0000-0000-000000000000'
+    BASE = '-v serial=3 cpus=1 debug=0x8 rd=uuid boot-uuid='
+
+    def test_tf_uuid_normalized_to_uppercase_canonical_text(self):
+        for tf in (self.TF_LOWER, self.TF_MIXED, self.TF_CANON):
+            with self.subTest(tf=tf):
+                cmd = pkg.make_external_root_command_line(tf)
+                self.assertIsInstance(cmd, str)
+                self.assertEqual(cmd, self.BASE + self.TF_CANON)
+
+    def test_missing_emmc_uuid_emits_only_tf_token(self):
+        for args in ((self.TF_LOWER,), (self.TF_LOWER, None)):
+            with self.subTest(args=args):
+                cmd = pkg.make_external_root_command_line(*args)
+                self.assertIsInstance(cmd, str)
+                self.assertEqual(cmd, self.BASE + self.TF_CANON)
+                self.assertNotIn('emmc-boot-uuid', cmd)
+
+    def test_legal_emmc_uuid_is_appended_after_tf_uuid(self):
+        for emmc in (self.EMMC_LOWER, self.EMMC_CANON):
+            with self.subTest(emmc=emmc):
+                cmd = pkg.make_external_root_command_line(self.TF_LOWER, emmc)
+                self.assertIsInstance(cmd, str)
+                self.assertEqual(
+                    cmd, self.BASE + self.TF_CANON + ' emmc-boot-uuid=' + self.EMMC_CANON)
+
+    def test_malformed_tf_uuid_is_rejected(self):
+        bad = [
+            '',
+            'none',
+            ' ' + self.TF_LOWER,
+            self.TF_LOWER + ' ',
+            '{' + self.TF_LOWER + '}',
+            'urn:uuid:' + self.TF_LOWER,
+            self.TF_LOWER.replace('-', ''),
+            self.TF_LOWER[:-1],
+            self.TF_LOWER + '0',
+            self.TF_LOWER[:-2] + 'zz',
+            self.NIL,
+        ]
+        for tf in bad:
+            with self.subTest(tf=tf):
+                with self.assertRaises(ValueError):
+                    pkg.make_external_root_command_line(tf)
+
+    def test_missing_tf_uuid_is_rejected(self):
+        with self.assertRaises(ValueError):
+            pkg.make_external_root_command_line(None)
+
+    def test_malformed_emmc_uuid_is_rejected_not_dropped(self):
+        bad = [
+            '',
+            'none',
+            self.EMMC_LOWER[:-1],
+            'g' + self.EMMC_LOWER[1:],
+            self.EMMC_LOWER.replace('-', ''),
+            self.EMMC_LOWER + ' ',
+            self.NIL,
+        ]
+        for emmc in bad:
+            with self.subTest(emmc=emmc):
+                with self.assertRaises(ValueError):
+                    pkg.make_external_root_command_line(self.TF_LOWER, emmc)
+
+    def test_helper_signature_takes_no_ramdisk_input(self):
+        import inspect
+        sig = inspect.signature(pkg.make_external_root_command_line)
+        self.assertEqual(list(sig.parameters), ['tf_uuid', 'emmc_uuid'])
+        self.assertIs(sig.parameters['tf_uuid'].default, inspect.Parameter.empty)
+        self.assertIsNone(sig.parameters['emmc_uuid'].default)
+
+    def test_external_root_command_line_never_selects_ramdisk_root(self):
+        cmd = pkg.make_external_root_command_line(self.TF_LOWER, self.EMMC_LOWER)
+        self.assertNotIn('rd=md', cmd)
+        self.assertNotIn('ramdisk', cmd.lower())
+        self.assertIn(' rd=uuid ', cmd)
+
+    def test_boot3_container_emitted_with_empty_second_domain(self):
+        img = pkg.android_container(arm64_image_kernel(8192), synthetic_qcdt(),
+                                    second=b'', ramdisk=bytes(1))
+        m = gate_model(img)
+        self.assertGreater(len(img), 0)
+        self.assertEqual(len(img) % 2048, 0)
+        self.assertEqual(m['second_size'], 0)
+        self.assertEqual(m['ramdisk_size'], 1)
+        self.assertTrue(m['dt_copied'])
+        self.assertEqual(m['actual'], len(img))
+
+
 if __name__ == '__main__':
     unittest.main()

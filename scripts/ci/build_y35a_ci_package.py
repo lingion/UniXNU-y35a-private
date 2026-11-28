@@ -70,6 +70,7 @@ PACKAGE_SOURCE_FILES = (
     "ci/y35a-ci-package-manifest.json",
     "ci/manifests/r208-tf-apfs-package-contract.json",
     "scripts/ci/build_y35a_ci_package.py",
+    "scripts/ci/build_y35a_tf_root_boot_package.py",
     "scripts/ci/build_y35a_tf_apfs_image.py",
     "scripts/ci/extract_y35a_stock_qcdt.py",
     "scripts/ci/build_y35a_system_apfs_control.py",
@@ -422,6 +423,8 @@ def verify_android_container(
     expected_qcdt_sha256: str,
     expected_entry_sha256: str,
     expected_second_sha256: str,
+    *,
+    allow_empty_second: bool = False,
 ) -> dict:
     image = image_path.read_bytes()
     if image[:8] != b"ANDROID!":
@@ -452,8 +455,8 @@ def verify_android_container(
         raise ValueError("Android second domain does not match the generated rootfs")
     if image[kernel_offset + 56:kernel_offset + 60] != b"ARMd":
         raise ValueError("kernel domain is not an AArch64 Image handoff shim")
-    if second_size == 0 or dt_size == 0:
-        raise ValueError("Y35A boot package requires second-domain rootfs and QCDT")
+    if (second_size == 0 and not allow_empty_second) or dt_size == 0:
+        raise ValueError("Y35A boot package requires a second-domain rootfs unless external-root mode is enabled, and always requires QCDT")
     qcdt = image[qcdt_offset:qcdt_offset + dt_size]
     if hashlib.sha256(qcdt).hexdigest() != expected_qcdt_sha256:
         raise ValueError("embedded QCDT SHA-256 differs from the generated input")
@@ -461,7 +464,10 @@ def verify_android_container(
     entry = struct.unpack_from("<10I", selected, 12)
     if entry[:3] != (206, 8, 23):
         raise ValueError("embedded QCDT does not select the measured Y35A board tuple")
-    if second_addr != SCRATCH + second_offset:
+    if second_size == 0:
+        if second_addr != 0:
+            raise ValueError("empty second domain must have a zero address")
+    elif second_addr != SCRATCH + second_offset:
         raise ValueError("second-domain address does not match the shim copy source")
     return {
         "image_sha256": hashlib.sha256(image).hexdigest(),
@@ -1123,10 +1129,57 @@ def main() -> int:
     parser.add_argument("--objcopy", required=True, type=Path)
     parser.add_argument("--toolchain-manifest", required=True, type=Path)
     parser.add_argument("--output", required=True, type=Path)
+    parser.add_argument("--tf-apfs-artifact-dir", type=Path)
+    parser.add_argument("--tf-apfs-run-json", type=Path)
+    parser.add_argument("--tf-apfs-artifact-json", type=Path)
+    parser.add_argument("--tf-apfs-run-id")
+    parser.add_argument("--tf-apfs-artifact-id", type=int)
+    parser.add_argument("--tf-apfs-artifact-digest")
+    parser.add_argument("--tf-apfs-head-branch")
+    parser.add_argument("--tf-apfs-head-sha")
+    parser.add_argument("--tf-apfs-stock-boot", type=Path)
+    parser.add_argument("--tf-bundle-output", type=Path)
+    parser.add_argument("--emmc-root-uuid")
     parser.add_argument("--config", type=Path,
                         default=ROOT / "ci/y35a-ci-package-manifest.json")
     args = parser.parse_args()
-    print(json.dumps(build_package(args), indent=2))
+    tf_arguments = (
+        args.tf_apfs_artifact_dir, args.tf_apfs_run_json, args.tf_apfs_artifact_json,
+        args.tf_apfs_run_id, args.tf_apfs_artifact_id, args.tf_apfs_artifact_digest,
+        args.tf_apfs_head_branch, args.tf_apfs_head_sha, args.tf_apfs_stock_boot,
+        args.tf_bundle_output,
+    )
+    if any(value is not None for value in tf_arguments) and not all(
+            value is not None for value in tf_arguments):
+        raise ValueError("TF/APFS boot bundle inputs must be supplied as a complete set")
+    report = build_package(args)
+    if all(value is not None for value in tf_arguments):
+        from build_y35a_tf_root_boot_package import build_bundle
+        tf_bundle = build_bundle(
+            package_dir=args.output,
+            tf_artifact_dir=args.tf_apfs_artifact_dir,
+            run_json=args.tf_apfs_run_json,
+            artifact_json=args.tf_apfs_artifact_json,
+            run_id=args.tf_apfs_run_id,
+            artifact_id=args.tf_apfs_artifact_id,
+            artifact_digest=args.tf_apfs_artifact_digest,
+            expected_branch=args.tf_apfs_head_branch,
+            expected_sha=args.tf_apfs_head_sha,
+            package_source_sha=args.package_source_sha,
+            stock_boot=args.tf_apfs_stock_boot,
+            compiler=args.compiler,
+            objcopy=args.objcopy,
+            output=args.tf_bundle_output,
+            emmc_root_uuid=args.emmc_root_uuid,
+        )
+        report["tf_apfs_boot_bundle"] = {
+            "path": args.tf_bundle_output.name,
+            "candidate_kind": tf_bundle["candidate_kind"],
+            "status": tf_bundle["status"],
+            "bootable": tf_bundle["qualification"]["bootable"],
+            "device_run_allowed": tf_bundle["qualification"]["device_run_allowed"],
+        }
+    print(json.dumps(report, indent=2))
     return 0
 
 
