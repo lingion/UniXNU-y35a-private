@@ -20,6 +20,7 @@ on:
       - 'scripts/ci/build_y35a_ci_package.py'
       - 'scripts/ci/build_y35a_tf_apfs_image.py'
       - 'scripts/ci/extract_y35a_stock_qcdt.py'
+      - 'scripts/ci/build_y35a_system_apfs_control.py'
       - 'scripts/ci/verify_r208_fallback_v2_source.py'
       - 'scripts/ci/verify_r208_fallback_v3_source.py'
       - 'scripts/ci/build_y35a_qcdt.py'
@@ -52,6 +53,7 @@ on:
       - 'tests/test_y35a_tf_emmc_root_fallback_v2_patch.py'
       - 'tests/test_y35a_tf_emmc_root_fallback_v3_patch.py'
       - 'tests/test_r208_native_kernel_gate.py'
+      - 'tests/test_y35a_system_apfs_control.py'
   pull_request:
     paths:
       - '.github/workflows/y35a-ci-package.yml'
@@ -71,6 +73,7 @@ on:
       - 'scripts/ci/build_y35a_ci_package.py'
       - 'scripts/ci/build_y35a_tf_apfs_image.py'
       - 'scripts/ci/extract_y35a_stock_qcdt.py'
+      - 'scripts/ci/build_y35a_system_apfs_control.py'
       - 'scripts/ci/verify_r208_fallback_v2_source.py'
       - 'scripts/ci/verify_r208_fallback_v3_source.py'
       - 'scripts/ci/build_y35a_qcdt.py'
@@ -103,6 +106,7 @@ on:
       - 'tests/test_y35a_tf_emmc_root_fallback_v2_patch.py'
       - 'tests/test_y35a_tf_emmc_root_fallback_v3_patch.py'
       - 'tests/test_r208_native_kernel_gate.py'
+      - 'tests/test_y35a_system_apfs_control.py'
   workflow_dispatch:
     inputs:
       native_run_id:
@@ -152,6 +156,21 @@ on:
         type: string
       stock_boot_path:
         description: Tracked repository-relative path to the original full PD1502A stock boot image (64 MiB, pinned SHA-256); leave empty until supplied
+        required: false
+        default: ''
+        type: string
+      system_root_run_id:
+        description: Successful package Actions run that produced the exact pinned System-volume source artifact
+        required: false
+        default: ''
+        type: string
+      system_root_artifact_id:
+        description: Exact ID of y35a-ios12-system-root-<run_id>
+        required: false
+        default: ''
+        type: string
+      system_root_artifact_digest:
+        description: Exact source artifact API digest including sha256 prefix
         required: false
         default: ''
         type: string
@@ -215,7 +234,7 @@ jobs:
         with:
           python-version: '3.12'
       - name: Test package contracts
-        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_storage_abi_contract.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py tests/test_y35a_tf_emmc_root_fallback_v2_patch.py tests/test_y35a_tf_emmc_root_fallback_v3_patch.py tests/test_r208_native_kernel_gate.py
+        run: python -m unittest -v tests/test_ci_y35a_package.py tests/test_ci_native_input_prep.py tests/test_r208_storage_abi_contract.py tests/test_r208_tf_apfs_package_contract.py tests/test_y35a_tf_apfs_image.py tests/test_y35a_system_apfs_control.py tests/test_y35a_tf_emmc_root_fallback_v2_patch.py tests/test_y35a_tf_emmc_root_fallback_v3_patch.py tests/test_r208_native_kernel_gate.py
       - name: Verify fallback v3 patch chain applies to exact XNU source
         run: python scripts/ci/verify_r208_fallback_v3_source.py --manifest ci/native-build-manifest.r208-fallback-v3.json --repo-root .
       - name: Validate R208 TF/APFS device-package design contract
@@ -730,3 +749,117 @@ jobs:
             ${{ runner.temp }}/y35a-tf-offline-control.apfs.img.json.binding.json
           if-no-files-found: error
           retention-days: 30
+
+  system-root-apfs-control:
+    needs: validate
+    if: github.event_name == 'workflow_dispatch' && inputs.system_root_run_id != ''
+    runs-on: macos-15
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.validate.outputs.package_source_sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Resolve exact System-source run and artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_RUN_ID: ${{ inputs.system_root_run_id }}
+          SOURCE_ARTIFACT_ID: ${{ inputs.system_root_artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ inputs.system_root_artifact_digest }}
+          EXPECTED_BRANCH: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          [[ "$SOURCE_RUN_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_ARTIFACT_ID" =~ ^[0-9]+$ ]]
+          [[ "$SOURCE_ARTIFACT_DIGEST" =~ ^sha256:[0-9a-f]{64}$ ]]
+          gh run view "$SOURCE_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+            --json databaseId,workflowName,conclusion,headBranch,headSha \
+            > "$RUNNER_TEMP/system-source-run.json"
+          jq -e --arg id "$SOURCE_RUN_ID" --arg branch "$EXPECTED_BRANCH" '
+            .databaseId == ($id | tonumber)
+            and .workflowName == "Y35A CI RAM-boot package"
+            and .conclusion == "success"
+            and .headBranch == $branch
+            and (.headSha | test("^[0-9a-f]{40}$"))
+          ' "$RUNNER_TEMP/system-source-run.json" > /dev/null
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID/artifacts" \
+            > "$RUNNER_TEMP/system-source-artifacts.json"
+          SOURCE_ARTIFACT_NAME="y35a-ios12-system-root-$SOURCE_RUN_ID"
+          jq -e --arg id "$SOURCE_ARTIFACT_ID" --arg digest "$SOURCE_ARTIFACT_DIGEST" \
+            --arg name "$SOURCE_ARTIFACT_NAME" --arg run "$SOURCE_RUN_ID" '
+            [.artifacts[] | select((.id|tostring) == $id and .name == $name
+              and .digest == $digest and .expired == false
+              and .workflow_run.id == ($run|tonumber))] | length == 1
+          ' "$RUNNER_TEMP/system-source-artifacts.json" > /dev/null
+          jq -c --arg id "$SOURCE_ARTIFACT_ID" \
+            '[.artifacts[] | select((.id|tostring) == $id)][0]' \
+            "$RUNNER_TEMP/system-source-artifacts.json" > "$RUNNER_TEMP/system-source-artifact.json"
+      - name: Download exact System-source artifact
+        uses: actions/download-artifact@v4
+        with:
+          artifact-ids: ${{ inputs.system_root_artifact_id }}
+          run-id: ${{ inputs.system_root_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/system-source
+      - name: Build full-System GPT/APFS offline control
+        env:
+          SOURCE_RUN_ID: ${{ inputs.system_root_run_id }}
+          SOURCE_ARTIFACT_ID: ${{ inputs.system_root_artifact_id }}
+          SOURCE_ARTIFACT_DIGEST: ${{ inputs.system_root_artifact_digest }}
+          SOURCE_BRANCH: ${{ github.ref_name }}
+          BUILDER_COMMIT: ${{ needs.validate.outputs.package_source_sha }}
+        run: |
+          set -euo pipefail
+          SOURCE="$RUNNER_TEMP/system-source"
+          (cd "$SOURCE" && shasum -a 256 -c SHA256SUMS)
+          python3 scripts/ci/build_y35a_system_apfs_control.py \
+            --system-image "$SOURCE/system-root.dmg" \
+            --system-source-report "$SOURCE/system-root-source.json" \
+            --system-run-json "$RUNNER_TEMP/system-source-run.json" \
+            --system-artifact-json "$RUNNER_TEMP/system-source-artifact.json" \
+            --system-run-id "$SOURCE_RUN_ID" \
+            --system-artifact-id "$SOURCE_ARTIFACT_ID" \
+            --system-artifact-digest "$SOURCE_ARTIFACT_DIGEST" \
+            --expected-branch "$SOURCE_BRANCH" \
+            --builder-commit "$BUILDER_COMMIT" \
+            --manifest ci/y35a-ci-package-manifest.json \
+            --output "$RUNNER_TEMP/y35a-system-root-apfs-control.dmg"
+          OUT="$RUNNER_TEMP/y35a-system-root-apfs-control.dmg"
+          (cd "$RUNNER_TEMP" && shasum -a 256 -c SHA256SUMS)
+          jq -e '
+            .status == "offline-system-root-apfs-control-built"
+            and .candidate_kind == "pinned-j96ap-system-root-apfs-control"
+            and .metadata_round_trip == "passed"
+            and .gpt_apfs.partition_map_source == "hdiutil-pmap:SCHEME"
+            and .qualification.offline_control_only == true
+            and .qualification.bootable == false
+            and .qualification.device_run_allowed == false
+            and .qualification.y35a_board_qualified == false
+            and .qualification.stock_pd1502a_qcdt_bound == false
+            and .qualification.root_selection_bound == false
+            and .qualification.emmc_fallback_bound == false
+          ' "$OUT.json" > /dev/null
+          {
+            echo "## Full-System APFS offline control"
+            echo
+            echo "Source package run: $SOURCE_RUN_ID"
+            echo "Source artifact ID: $SOURCE_ARTIFACT_ID"
+            echo "Image SHA-256: $(shasum -a 256 "$OUT" | awk '{print $1}')"
+            echo "Qualification: non-bootable; no Y35A, stock-QCDT, root-selection, or card qualification"
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload full-System APFS offline control
+        uses: actions/upload-artifact@v4
+        with:
+          name: y35a-system-root-apfs-control-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/y35a-system-root-apfs-control.dmg
+            ${{ runner.temp }}/y35a-system-root-apfs-control.dmg.json
+            ${{ runner.temp }}/y35a-system-root-apfs-control.dmg.json.binding.json
+            ${{ runner.temp }}/y35a-system-root-apfs-control.dmg.tree-metadata.json
+            ${{ runner.temp }}/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0

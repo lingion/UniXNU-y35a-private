@@ -74,6 +74,20 @@
     "target_board_qualified": false,
     "device_run_allowed": false
   },
+  "system_root_apfs_control": {
+    "kind": "offline-system-root-apfs-control",
+    "source_artifact_kind": "pinned-ios12-system-volume-source",
+    "target_image_size": "4g",
+    "partition_layout": "GPTSPUD",
+    "filesystem": "APFS",
+    "volume_name": "IOS12-SYSTEM-CONTROL",
+    "metadata_round_trip_required": true,
+    "bootable": false,
+    "device_ready": false,
+    "device_run_allowed": false,
+    "runtime_qualified": false,
+    "y35a_board_qualified": false
+  },
   "dtc": {
     "repository": "https://github.com/dgibson/dtc.git",
     "commit": "2d10aa2afe35527728db30b35ec491ecb6959e5c"
