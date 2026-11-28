@@ -411,3 +411,23 @@
 - 证据：Run `46084535928`, commit `edcaa37a9f2dc90b6e2c3998c0b7332f0bb5780b`; candidate artifact ID `15238194552`, digest `sha256:9a31f8fe0f4cd588f3dbcc27bacec34f878a3fb13d0d6cb076733d55b701928c`; build artifact ID `15238029833`, digest `sha256:8e463b250a2415be36f1a08cf0d65515f28baaa99aaa75736123c192d07ca07f`; static verifier log reports `fallback build macro is enabled without the fallback-v3 source patch`.
 - 自动化入口：`scripts/ci/verify_r208_native_kernel.py`, `tests/test_r208_native_kernel_gate.py`, and `.github/workflows/y35a-ci-package.yml` / `.github/workflows/unixnu-native-build.yml`.
 - 下一次触发：Any native build where link completes but a later static or artifact-contract gate fails.
+
+## L-2026-11-28-19 local diff-check remains excluded even in a read-only command batch
+
+- 现象：本轮在只读工作树盘点命令串中误执行了 `git diff --check -- .`。
+- 根因：将该检查附加到 `git status` 和 `git diff --stat` 的盘点命令，误把 shell 命令串整体视为只读。
+- 影响：该命令输出不作为本轮代码或格式验证证据；UniXNU CI-only 约束仍适用。
+- 正确做法：执行任何本机 Git 命令前逐条审阅参数；本机只运行状态和内容读取，不附 `--check`、测试、lint 或 gate。格式校验只看 GitHub Actions 的 `Check tracked text` 步骤。
+- 证据：2026-11-28 本机命令历史中的 `git diff --check -- .`；输出未被用于任何通过结论。
+- 自动化入口：`.github/workflows/unixnu-validation.yml` 的 `Check tracked text`，以及 `docs/sop/UNIXNU-EXECUTION-SOP.md`、`docs/skills/unixnu-evidence-gate/SKILL.md`。
+- 下一次触发：任何 UniXNU 仓库的本机盘点或 shell 命令批次。
+
+## L-2026-11-28-20 stock-QCDT gate changes require exact-source CI tests before package dispatch
+
+- 现象：Package validation run `46100187403` failed in `Test package contracts` with 4 errors and 2 assertion failures. After the first fixes, run `46100345930` still failed one test with `NameError: struct is not defined`; no package job or TF/APFS job ran.
+- 根因：The new stock-boot parser path referenced `PurePosixPath` and `struct` without importing both into the production module; two workflow/inventory tests also expected a different predicate/message than the implementation.
+- 影响：No artifact was produced by either failed run. These runs validate neither the stock boot input nor the APFS intermediate.
+- 正确做法：Read the first failing Actions traceback, fix only the missing imports and exact assertion contract, then dispatch once on the corrected SHA. The production QCDT path remains fail-closed and requires the original pinned stock boot bytes.
+- 证据：Actions run `46100187403` on `4f9cc20ed8a6c61aede1906f59aa9bcedcebcb99`; run `46100345930` on `4e77093b42e2707349fee94c5e77ee72709577d9`, failing step `Test package contracts`, final error at `extract_qcdt_from_pd1502a_boot_image` due to missing `struct` import.
+- 自动化入口：`scripts/ci/build_y35a_tf_apfs_image.py`, `scripts/ci/extract_y35a_stock_qcdt.py`, `tests/test_y35a_tf_apfs_image.py`, and `.github/workflows/y35a-ci-package.yml`.
+- 下一次触发：Any change to stock boot parsing, source provenance, or its package workflow inputs.
