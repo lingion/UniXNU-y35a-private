@@ -526,3 +526,5 @@
 跟进 run `46135948784`：ownership/mTime restore 分支未进入树比较，失败为 `NameError: name 'sys' is not defined`，调用点在 mtime restore helper。没有产出 control 或 diagnostics artifact。修复加入生产模块 import 并新增 helper contract test，随后用同一个精确 System artifact 再跑；不能把该 run 计为 metadata gate 结果。
 
 跟进 validation run `46138718740`：123 项合同测试中仅 `test_mtime_restore_runs_privileged_script_with_source_manifest_records` 失败。修复代码路径不是失败点；测试误把嵌入 Python `-c` 脚本中的 `os.utime` 当成独立 argv 元素。应按 subprocess argv 契约检查 `command[3] == "-c"`，并在 `command[4]` 脚本文本中查 `os.utime`。APFS image control job skipped，因此该 run 没有给 metadata restore 提供运行证据。
+
+跟进 run `46139115066`：helper contract 已进入实际 System-control job，但 restore 在首个未记录路径上收到 `EPERM`，且当时 stderr 未输出 entry path，无法确定是哪类 APFS 条目受保护。下一个候选对 `EACCES/EPERM` 逐条收集 path/type/mtime/errno 后继续剩余恢复；所有非权限错误仍直接失败，随后全树 hash equality gate 仍为强制条件。该 run 没到 tree comparison，也没有 control artifact；只有下一次 CI 的 field samples 才能裁决剩余限制。

@@ -287,8 +287,17 @@ class SystemApfsControlBindingTest(unittest.TestCase):
             {"path": ".", "type": "directory", "mtime_ns": 10},
             {"path": "file", "type": "file", "mtime_ns": 20},
         ]}
-        with mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(stdout="")) as run:
-            MODULE.restore_target_directory_and_entry_mtimes(Path("/tmp/control-volume"), manifest)
+        permission_error = [{
+            "path": "file", "type": "file", "mtime_ns": 20,
+            "errno": MODULE.errno.EPERM, "errno_name": "EPERM",
+            "error": "Operation not permitted", "absolute_path": "/tmp/control-volume/file",
+        }]
+        with mock.patch.object(
+                MODULE.subprocess, "run",
+                return_value=mock.Mock(stdout=json.dumps(permission_error))) as run:
+            denied = MODULE.restore_target_directory_and_entry_mtimes(
+                Path("/tmp/control-volume"), manifest,
+            )
         command = run.call_args.args[0]
         self.assertEqual(command[:3], ["/usr/bin/sudo", "-n", MODULE.sys.executable])
         self.assertEqual(command[3], "-c")
@@ -297,6 +306,15 @@ class SystemApfsControlBindingTest(unittest.TestCase):
         self.assertTrue(run.call_args.kwargs["check"])
         records = json.loads(run.call_args.kwargs["input"])
         self.assertEqual([record["path"] for record in records], ["file", "."])
+        self.assertEqual(denied, permission_error)
+        self.assertIn("error.errno in {errno.EACCES, errno.EPERM}", command[4])
+        self.assertIn("permission_denied.append(diagnostic)", command[4])
+
+    def test_mtime_restore_rejects_malformed_diagnostics(self):
+        manifest = {"entries": [{"path": ".", "type": "directory", "mtime_ns": 10}]}
+        with mock.patch.object(MODULE.subprocess, "run", return_value=mock.Mock(stdout="not-json")):
+            with self.assertRaisesRegex(RuntimeError, "malformed diagnostics"):
+                MODULE.restore_target_directory_and_entry_mtimes(Path("/tmp/control-volume"), manifest)
 
     def test_dispatch_workflow_binds_system_artifact_and_preserves_offline_scope(self):
         workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()

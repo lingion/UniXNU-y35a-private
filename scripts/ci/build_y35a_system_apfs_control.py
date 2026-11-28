@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import errno
 import hashlib
 import json
 import os
@@ -140,18 +141,36 @@ def target_root_chown_command(target_root: Path, source_manifest: dict) -> list[
             f"{root['uid']}:{root['gid']}", str(target_root)]
 
 
-def restore_target_directory_and_entry_mtimes(target_root: Path, source_manifest: dict) -> None:
+def restore_target_directory_and_entry_mtimes(target_root: Path, source_manifest: dict) -> list[dict]:
     """Restore recorded nanosecond mtimes after copy; preserve strict re-scan verification."""
     records = metadata_restore_records(source_manifest)
-    script = r'''import json, os, sys
+    script = r'''import errno, json, os, sys
 root = sys.argv[1]
 records = json.load(sys.stdin)
+permission_denied = []
 for record in records:
     relative = record["path"]
     path = root if relative == "." else os.path.join(root, *relative.split("/"))
     info = os.lstat(path)
-    os.utime(path, ns=(info.st_atime_ns, record["mtime_ns"]),
-             follow_symlinks=(record["type"] != "symlink"))
+    try:
+        os.utime(path, ns=(info.st_atime_ns, record["mtime_ns"]),
+                 follow_symlinks=(record["type"] != "symlink"))
+    except OSError as error:
+        diagnostic = {
+            "path": relative,
+            "absolute_path": path,
+            "type": record["type"],
+            "mtime_ns": record["mtime_ns"],
+            "errno": error.errno,
+            "errno_name": errno.errorcode.get(error.errno),
+            "error": str(error),
+        }
+        if error.errno in {errno.EACCES, errno.EPERM}:
+            permission_denied.append(diagnostic)
+            continue
+        print(json.dumps(diagnostic, sort_keys=True), file=sys.stderr)
+        raise
+print(json.dumps(permission_denied, sort_keys=True))
 '''
     command = ["/usr/bin/sudo", "-n", sys.executable, "-c", script, str(target_root)]
     payload = json.dumps(records, sort_keys=True, separators=(",", ":"))
@@ -162,6 +181,13 @@ for record in records:
             f"privileged APFS mtime restore failed with exit {error.returncode}: {command!r}\n"
             f"stdout:\n{error.stdout or ''}\nstderr:\n{error.stderr or ''}"
         ) from error
+    try:
+        permission_denied = json.loads(result.stdout)
+    except (TypeError, json.JSONDecodeError) as error:
+        raise RuntimeError("privileged APFS mtime restore returned malformed diagnostics") from error
+    if not isinstance(permission_denied, list):
+        raise RuntimeError("privileged APFS mtime restore diagnostics must be a list")
+    return permission_denied
 
 
 def verify_source_checksums(image_path: Path, report_path: Path) -> None:
@@ -560,12 +586,15 @@ def build_control_image(
                      str(source_mount), str(target_mount)])
         run_checked(["sync"])
         run_checked(target_root_chown_command(target_mount, source_tree))
-        restore_target_directory_and_entry_mtimes(target_mount, source_tree)
+        mtime_restore_permission_denied = restore_target_directory_and_entry_mtimes(
+            target_mount, source_tree,
+        )
 
         target_inspection = inspect_critical_system(target_mount, source_report)
         target_tree = tree_metadata_manifest(target_mount)
         if target_tree["tree_sha256"] != source_tree["tree_sha256"]:
             tree_diff = diff_tree_manifests(source_tree, target_tree)
+            tree_diff["mtime_restore_permission_denied"] = mtime_restore_permission_denied
             tree_diff["image_capacity_plan"] = capacity_plan
             tree_diff["runner_free_space_bytes_at_preflight"] = available_bytes
             diagnostic_path = output_path.parent / "y35a-system-root-apfs-control-diff.json"
