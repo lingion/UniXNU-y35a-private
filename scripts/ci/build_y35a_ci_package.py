@@ -13,6 +13,7 @@ import plistlib
 import platform
 import re
 import shutil
+import stat
 import struct
 import subprocess
 import sys
@@ -528,7 +529,7 @@ def build_metadata_preserving_root_tree_archive(root_tree: Path, archive_path: P
     }
 
 
-def inspect_full_system_volume(system_root: Path, expected_identity: dict) -> tuple[dict, dict]:
+def inspect_full_system_volume(system_root: Path, expected_identity: dict) -> tuple[dict, dict, dict]:
     """Capture version and critical-file hashes while the source APFS volume is mounted."""
     system_root = system_root.resolve(strict=True)
     version_path = system_root / "System/Library/CoreServices/SystemVersion.plist"
@@ -548,8 +549,31 @@ def inspect_full_system_volume(system_root: Path, expected_identity: dict) -> tu
         if not path.is_file():
             raise ValueError(f"complete System volume is missing required system binary: {relative}")
         critical_files[relative] = {"bytes": path.stat().st_size, "sha256": sha256(path)}
+    writable_state_paths = {}
+    for relative in ("private/var", "private/var/db", "private/var/mobile"):
+        path = system_root / relative
+        try:
+            entry_mode = path.lstat().st_mode
+        except FileNotFoundError:
+            writable_state_paths[relative] = {
+                "present": False,
+                "entry_type": "missing",
+                "symlink_target": None,
+                "resolved_target_exists": False,
+                "resolved_target_is_directory": False,
+            }
+            continue
+        is_symlink = stat.S_ISLNK(entry_mode)
+        writable_state_paths[relative] = {
+            "present": True,
+            "entry_type": "symlink" if is_symlink else "directory" if stat.S_ISDIR(entry_mode)
+            else "file" if stat.S_ISREG(entry_mode) else "other",
+            "symlink_target": os.readlink(path) if is_symlink else None,
+            "resolved_target_exists": path.exists(),
+            "resolved_target_is_directory": path.is_dir(),
+        }
     return ({"product_version": version["ProductVersion"],
-             "build": version["ProductBuildVersion"]}, critical_files)
+             "build": version["ProductBuildVersion"]}, critical_files, writable_state_paths)
 
 
 def build_full_system_root_source(
@@ -557,6 +581,7 @@ def build_full_system_root_source(
     firmware_report: dict,
     system_version: dict,
     critical_files: dict,
+    writable_state_paths: dict,
     whole_info: dict,
     volume_info: dict,
     partition_map_output: str,
@@ -647,6 +672,8 @@ def build_full_system_root_source(
         },
         "system_version": system_version,
         "critical_system_files": critical_files,
+        "writable_state_path_observation": "path metadata only; does not establish writability or a mounted Data volume",
+        "writable_state_paths": writable_state_paths,
         "gpt_apfs": gpt_apfs,
         "apfs_volume": {
             "name": volume_info.get("VolumeName"),
@@ -725,7 +752,7 @@ def build_package(args) -> dict:
         with mounted_firmware(
             firmware_dir / "system.dmg", firmware_dir / "restore-ramdisk.hfsx", work,
         ) as (system_root, apple_ramdisk_root, system_volume_info, system_whole_info):
-            system_version, critical_system_files = inspect_full_system_volume(
+            system_version, critical_system_files, writable_state_paths = inspect_full_system_volume(
                 system_root, firmware_report["identity"],
             )
             subprocess.run(
@@ -749,6 +776,7 @@ def build_package(args) -> dict:
                 firmware_report,
                 system_version,
                 critical_system_files,
+                writable_state_paths,
                 system_whole_info,
                 system_volume_info,
                 pmap,

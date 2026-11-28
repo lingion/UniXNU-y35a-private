@@ -191,11 +191,11 @@ class FullSystemRootSourceTest(unittest.TestCase):
             root = Path(temporary)
             image, system_root, firmware, whole, volume = self.make_inputs(root)
             output = root / "full-system-artifact"
-            version, critical = package_ci.inspect_full_system_volume(
+            version, critical, writable_state_paths = package_ci.inspect_full_system_volume(
                 system_root, firmware["identity"],
             )
             report = package_ci.build_full_system_root_source(
-                image, firmware, version, critical, whole, volume,
+                image, firmware, version, critical, writable_state_paths, whole, volume,
                 'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n', output,
                 native_binding={"run_id": "native-1", "head_sha": "b" * 40,
                                 "kernel_sha256": "c" * 64},
@@ -208,11 +208,80 @@ class FullSystemRootSourceTest(unittest.TestCase):
             self.assertEqual(report["source_component"]["member"], "048-78033-095.dmg")
             self.assertIn("System/Library/CoreServices/SpringBoard.app/SpringBoard",
                           report["critical_system_files"])
+            self.assertEqual(
+                report["writable_state_path_observation"],
+                "path metadata only; does not establish writability or a mounted Data volume",
+            )
+            self.assertEqual(
+                set(report["writable_state_paths"]),
+                {"private/var", "private/var/db", "private/var/mobile"},
+            )
+            self.assertTrue(all(
+                item == {
+                    "present": False,
+                    "entry_type": "missing",
+                    "symlink_target": None,
+                    "resolved_target_exists": False,
+                    "resolved_target_is_directory": False,
+                }
+                for item in report["writable_state_paths"].values()
+            ))
             self.assertFalse(report["scope"]["paired_data_volume_present"])
             self.assertFalse(report["qualification"]["device_ready"])
             self.assertFalse(report["qualification"]["runtime_qualified"])
             self.assertFalse(report["qualification"]["device_run_allowed"])
             self.assertTrue((output / "SHA256SUMS").is_file())
+
+    def test_full_system_source_reports_writable_state_path_presence(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            image, system_root, firmware, whole, volume = self.make_inputs(root)
+            (system_root / "private/var/db").mkdir(parents=True)
+            (system_root / "private/var/mobile").mkdir(parents=True)
+            version, critical, writable_state_paths = package_ci.inspect_full_system_volume(
+                system_root, firmware["identity"],
+            )
+            self.assertEqual(writable_state_paths, {
+                "private/var": {
+                    "present": True, "entry_type": "directory", "symlink_target": None,
+                    "resolved_target_exists": True, "resolved_target_is_directory": True,
+                },
+                "private/var/db": {
+                    "present": True, "entry_type": "directory", "symlink_target": None,
+                    "resolved_target_exists": True, "resolved_target_is_directory": True,
+                },
+                "private/var/mobile": {
+                    "present": True, "entry_type": "directory", "symlink_target": None,
+                    "resolved_target_exists": True, "resolved_target_is_directory": True,
+                },
+            })
+
+    def test_full_system_source_reports_symlinked_var_target(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            _, system_root, firmware, _, _ = self.make_inputs(root)
+            (system_root / "var/db").mkdir(parents=True)
+            (system_root / "var/mobile").mkdir(parents=True)
+            (system_root / "private").mkdir()
+            (system_root / "private/var").symlink_to("../var")
+            _, _, writable_state_paths = package_ci.inspect_full_system_volume(
+                system_root, firmware["identity"],
+            )
+            self.assertEqual(writable_state_paths["private/var"]["entry_type"], "symlink")
+            self.assertEqual(writable_state_paths["private/var"]["symlink_target"], "../var")
+            self.assertTrue(writable_state_paths["private/var"]["resolved_target_is_directory"])
+            self.assertTrue(writable_state_paths["private/var/db"]["resolved_target_is_directory"])
+
+    def test_workflow_rejects_missing_writable_state_path_inventory(self):
+        workflow = (ROOT / ".github/workflows/y35a-ci-package.yml").read_text()
+        verification = workflow.split(
+            "- name: Verify complete iOS System-volume source handoff", 1,
+        )[1].split("- name: Upload pinned iOS System-volume source", 1)[0]
+        self.assertIn('(.writable_state_paths | keys == ["private/var", "private/var/db", "private/var/mobile"])',
+                      verification)
+        self.assertIn('(.entry_type | type) == "string"', verification)
+        self.assertIn('(.resolved_target_exists | type) == "boolean"', verification)
+        self.assertIn("does not establish writability or a mounted Data volume", verification)
 
     def test_full_system_source_rejects_component_hash_mismatch(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -220,11 +289,11 @@ class FullSystemRootSourceTest(unittest.TestCase):
             image, system_root, firmware, whole, volume = self.make_inputs(root)
             firmware["components"]["OS"]["sha256"] = "0" * 64
             with self.assertRaisesRegex(ValueError, "does not match the pinned IPSW component size/hash"):
-                version, critical = package_ci.inspect_full_system_volume(
+                version, critical, writable_state_paths = package_ci.inspect_full_system_volume(
                     system_root, firmware["identity"],
                 )
                 package_ci.build_full_system_root_source(
-                    image, firmware, version, critical, whole, volume,
+                    image, firmware, version, critical, writable_state_paths, whole, volume,
                     'SCHEME: 1 GPT, "GPT Partition Scheme" [16]\n', root / "artifact",
                     native_binding={"run_id": "native-1", "head_sha": "b" * 40,
                                     "kernel_sha256": "c" * 64},

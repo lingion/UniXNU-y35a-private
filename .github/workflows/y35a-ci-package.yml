@@ -507,6 +507,15 @@ jobs:
             and .qualification.device_ready == false
             and .qualification.runtime_qualified == false
             and .qualification.device_run_allowed == false
+            and .writable_state_path_observation == "path metadata only; does not establish writability or a mounted Data volume"
+            and (.writable_state_paths | keys == ["private/var", "private/var/db", "private/var/mobile"])
+            and ([.writable_state_paths[] |
+              ((.present | type) == "boolean"
+               and (.entry_type | type) == "string"
+               and (.resolved_target_exists | type) == "boolean"
+               and (.resolved_target_is_directory | type) == "boolean"
+               and ((.symlink_target == null) or (.symlink_target | type) == "string"))
+            ] | all)
           ' "$ROOT/system-root-source.json" > /dev/null
           {
             echo "## Pinned iOS System-volume source"
